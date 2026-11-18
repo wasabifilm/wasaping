@@ -58,3 +58,29 @@ func TestStoreNewGoneHistory(t *testing.T) {
 		t.Errorf("expected IP change warning, got %v", w.Warnings)
 	}
 }
+
+func TestParsePlan(t *testing.T) {
+	excel := "\xef\xbb\xbfNome;IP;Ruolo;MAC\r\ngrandMA3 FOH;10.0.0.10;Console;00-0C-29-4A-10-01\r\n;;;\r\nNodo SX;10.0.0.21;;\r\n"
+	p, err := parsePlan([]byte(excel))
+	if err != nil || len(p) != 2 || p[0].Name != "grandMA3 FOH" || p[0].MAC != "00:0c:29:4a:10:01" || p[1].IP != "10.0.0.21" {
+		t.Fatalf("excel: %v %+v", err, p)
+	}
+	plain := "Console,10.0.0.10,FOH\nNodo,10.0.0.21\n"
+	if p, err := parsePlan([]byte(plain)); err != nil || len(p) != 2 || p[0].Role != "FOH" {
+		t.Fatalf("plain: %v %+v", err, p)
+	}
+	if _, err := parsePlan([]byte("solo testo\n")); err == nil {
+		t.Error("expected an error without IPs")
+	}
+}
+
+func TestNewerVersion(t *testing.T) {
+	for _, c := range []struct {
+		tag, cur string
+		want     bool
+	}{{"v0.4.0", "v0.3.0", true}, {"v0.3.0", "v0.3.0", false}, {"v0.3.1", "v0.3.0-rc", true}, {"v0.10.0", "v0.9.9", true}, {"v0.2.0", "v0.3.0", false}, {"", "v0.3.0", false}, {"v1.0.0", "dev", false}} {
+		if got := newerVersion(c.tag, c.cur); got != c.want {
+			t.Errorf("%s vs %s: got %v", c.tag, c.cur, got)
+		}
+	}
+}

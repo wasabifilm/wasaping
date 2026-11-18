@@ -257,6 +257,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -270,6 +271,7 @@ const hasNativeWindow = true
 // the main goroutine.
 func nativeWindow(url string, hidden bool) {
 	onScanDone = updateMenuBar
+	onMonitorChange = updateMenuMonitor
 	cu, cb := C.CString(url), C.CString(url)
 	defer C.free(unsafe.Pointer(cu))
 	defer C.free(unsafe.Pointer(cb))
@@ -287,21 +289,56 @@ func nativeWindow(url string, hidden bool) {
 	C.runWindow(cu, cb, C.int(h), C.int(login))
 }
 
+var (
+	menuMu   sync.Mutex
+	menuScan *ScanResult
+	menuDown []string // critical devices down, from the monitor
+	menuMon  bool     // the monitor has reported at least once
+)
+
 // updateMenuBar shows the latest scan in the menu bar icon's menu.
 func updateMenuBar(r *ScanResult) {
-	l1 := fmt.Sprintf("Ultima scansione: %s · %d dispositivi", r.At.Format("15:04"), r.Count)
+	menuMu.Lock()
+	menuScan = r
+	menuMu.Unlock()
+	drawMenuBar()
+}
+
+// updateMenuMonitor follows the show monitor: red dot while something is down.
+func updateMenuMonitor(down int, names []string) {
+	menuMu.Lock()
+	menuDown, menuMon = names, true
+	menuMu.Unlock()
+	drawMenuBar()
+}
+
+func drawMenuBar() {
+	menuMu.Lock()
+	defer menuMu.Unlock()
+	l1 := "Nessuna scansione ancora"
 	var bits []string
-	if r.New > 0 {
-		bits = append(bits, fmt.Sprintf("%d nuovi", r.New))
-	}
-	down := 0
-	for _, g := range r.Gone {
-		if g.Critical {
-			down++
+	downScan := 0
+	if r := menuScan; r != nil {
+		l1 = fmt.Sprintf("Ultima scansione: %s · %d dispositivi", r.At.Format("15:04"), r.Count)
+		if r.New > 0 {
+			bits = append(bits, fmt.Sprintf("%d nuovi", r.New))
+		}
+		for _, g := range r.Gone {
+			if g.Critical {
+				downScan++
+			}
 		}
 	}
+	down := downScan
+	if menuMon {
+		down = len(menuDown) // the monitor is fresher than the last scan
+	}
 	if down > 0 {
-		bits = append(bits, fmt.Sprintf("⚠️ %d critici non rispondono", down))
+		if menuMon && len(menuDown) > 0 {
+			bits = append(bits, "⚠️ non risponde: "+strings.Join(menuDown, ", "))
+		} else {
+			bits = append(bits, fmt.Sprintf("⚠️ %d critici non rispondono", down))
+		}
 	}
 	alert := 0
 	if down > 0 {

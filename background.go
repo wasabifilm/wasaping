@@ -80,7 +80,18 @@ func runCollect(ctx context.Context, target string, ips []net.IP, opt scanner.Op
 // ---- Settings ----
 
 type settings struct {
-	Repeat int `json:"repeat_minutes"` // 0 = no background scans
+	Repeat        int       `json:"repeat_minutes"` // 0 = no background scans
+	MonitorOn     bool      `json:"monitor_on,omitempty"`
+	MonitorEvery  int       `json:"monitor_every,omitempty"` // seconds
+	RemoteOn      bool      `json:"remote_on,omitempty"`
+	RemotePIN     string    `json:"remote_pin,omitempty"`
+	RemotePort    int       `json:"remote_port,omitempty"`
+	SNMPCommunity string    `json:"snmp_community,omitempty"`
+	NoUpdateCheck bool      `json:"no_update_check,omitempty"`
+	UpdateChecked time.Time `json:"update_checked,omitempty"`
+	LatestVersion string    `json:"latest_version,omitempty"`
+	LatestURL     string    `json:"latest_url,omitempty"`
+	Lang          string    `json:"lang,omitempty"`
 }
 
 var (
@@ -174,7 +185,7 @@ func backgroundScan(ctx context.Context) {
 		return
 	}
 	if len(res.Fresh) > 0 {
-		notify("wasaping: nuovi dispositivi", strings.Join(res.Fresh, ", "))
+		notify(T("wasaping: nuovi dispositivi", "wasaping: new devices"), strings.Join(res.Fresh, ", "))
 	}
 	var lost []string
 	for _, g := range res.Gone {
@@ -183,7 +194,7 @@ func backgroundScan(ctx context.Context) {
 		}
 	}
 	if len(lost) > 0 {
-		notify("⚠️ wasaping: non risponde", strings.Join(lost, ", "))
+		notify(T("⚠️ wasaping: non risponde", "⚠️ wasaping: not responding"), strings.Join(lost, ", "))
 	}
 }
 

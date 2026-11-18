@@ -171,6 +171,9 @@ func u32ToIP(v uint32) net.IP {
 	return ip
 }
 
+// NormalizeMAC turns any common MAC notation into "aa:bb:cc:dd:ee:ff" ("" if invalid).
+func NormalizeMAC(s string) string { return normalizeMAC(s) }
+
 // normalizeMAC turns "a4-2b-8-1-..." or "A4:2B:08:01:..." into "a4:2b:08:01:...".
 func normalizeMAC(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))

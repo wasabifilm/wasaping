@@ -44,7 +44,14 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - più master PTP;
   - lo stesso universo sACN inviato da più sorgenti;
   - rete senza router.
-- **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere.
+- **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere. Continua anche a finestra chiusa.
+- **Registro degli eventi:** ogni caduta viene annotata con ora e durata ("Rio3224-Palco: non risponde 21:43:10, di nuovo in linea dopo 12 s"). Si esporta in CSV a fine serata, e tutto finisce anche in `monitor-log.csv`.
+- **Monitor su iPad o telefono:** lo vedi da un altro dispositivo della stessa rete (l'iPad in FOH, il telefono sul palco), protetto da un PIN di 6 cifre e in sola lettura. Da lì non si cambia niente.
+- **Piano IP:** importi il patch previsto da un foglio di calcolo (CSV con Nome, IP, Ruolo, MAC) e wasaping lo confronta con la rete. Ti dice chi manca, chi ha l'IP sbagliato, chi occupa l'IP di un altro e chi non era previsto. Con un clic dà ai dispositivi i nomi e i ruoli del piano.
+- **Universi DMX dal vivo:** quali universi Art-Net e sACN arrivano, da quale sorgente, a quanti frame al secondo e quanti canali attivi. Con un clic vedi i 512 canali di un universo.
+- **Porta dello switch:** chiede agli switch gestiti (via SNMP in sola lettura) su quale porta è collegato ogni dispositivo, con la descrizione della porta.
+- **IP liberi** nell'intervallo, per dare un IP fisso a un nuovo apparecchio.
+- **Condividi il locale:** esporti nomi, ruoli, note, dispositivi critici e piano IP in un file `.wasaping` da passare ai colleghi o al prossimo tour.
 - **Un elenco per ogni locale:** ogni rete ha i suoi dispositivi, con nome, ruolo e note. La riconosce dal router, o dalla sottorete sulle reti show senza router. Le dai un nome ("Arena Verona") e la volta dopo vedi cosa c'è di nuovo e cosa manca.
 - **Elenco IP da stampare** o salvare in PDF per la crew e il rider: dispositivo, ruolo, IP, MAC, modello, protocolli, universi e note.
 - **Qualità del collegamento:** 20 ping con perdite, tempi e jitter. Serve per capire se un cavo, uno switch o il Wi-Fi fanno i capricci. C'è anche il traceroute.
@@ -70,6 +77,8 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   Col **tasto destro** copi indirizzo e porta.
 - **Wake-on-LAN**, controllo di tutte le porte 1–1024, avvisi sulle porte rischiose (Telnet, FTP sul router…).
 - Scorciatoie **⌘R** scansiona, **⌘F** cerca, **⇧⌘M** Monitor (Ctrl su Windows e Linux). Tema automatico, chiaro o scuro.
+- **Italiano e inglese:** la lingua segue quella del sistema e si cambia col pulsante in alto. La riga di comando segue `LANG`.
+- **Avviso di nuova versione:** una volta al giorno chiede a GitHub l'ultima versione, senza inviare nessun dato tuo o della rete. Si spegne con «Non controllare più».
 - Esporta in **CSV**, **JSON** o elenco stampabile.
 
 ### Come trova i dispositivi senza permessi di amministratore
@@ -132,21 +141,26 @@ main.go              riga di comando
 web.go               server locale e API per l'interfaccia
 background.go        scansioni (anche in background) e impostazioni
 devices.go           archivio per rete/locale: nomi, ruoli, note, critici, storico
+monitor.go           monitor dei dispositivi critici e registro degli eventi
+remote.go, web/m.html  monitor su iPad/telefono (PIN, sola lettura)
+plan.go              piano IP da CSV, condivisione del locale, porte switch
+dmx.go               universi DMX dal vivo
+update.go, lang.go   avviso di nuova versione, lingua
 tools.go             ping con qualità del collegamento, traceroute
 window.go            finestra di Edge/Chrome, salvataggio delle esportazioni
 native_darwin.go     finestra nativa e barra dei menu macOS (Cocoa + WebKit, cgo)
 arphelper_darwin.go  aiuto di sistema per leggere la tabella ARP (macOS)
 login_darwin.go      apertura al login (macOS)
 web/index.html       interfaccia grafica (incorporata nell'eseguibile)
-scanner/             motore: sonde, ARP, nomi (DNS, mDNS, NetBIOS, UPnP),
-                     protocolli show (Art-Net, sACN, PTP, PJLink), tipi, avvisi
+scanner/             motore: sonde, ARP, nomi (DNS, mDNS, NetBIOS, UPnP), protocolli
+                     show (Art-Net, sACN, PTP, PJLink), DMX, SNMP, tipi, avvisi
 scripts/             build dell'app macOS, icone, database produttori
 ```
 
 ## Idee per le prossime versioni
 
 - [ ] Firma e notarizzazione Apple (serve un account Apple Developer): toglie l'avviso di Gatekeeper e restituisce i MAC senza aiuto
-- [ ] Finestra nativa anche su Windows (WebView2)
+- [ ] Finestra nativa e icona vicino all'orologio anche su Windows (WebView2), da provare su un PC
 - [ ] IPv6
 
 ## Licenza

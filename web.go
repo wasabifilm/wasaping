@@ -65,6 +65,14 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/pingtest", handlePingTest)
 	mux.HandleFunc("/api/bg", handleBackground)
 	mux.HandleFunc("/api/login", handleLogin)
+	mux.HandleFunc("/api/monitor", handleMonitor)
+	mux.HandleFunc("/api/remote", handleRemote)
+	mux.HandleFunc("/api/plan", handlePlan)
+	mux.HandleFunc("/api/venue", handleVenue)
+	mux.HandleFunc("/api/dmx", handleDMX)
+	mux.HandleFunc("/api/switchports", handleSwitchPorts)
+	mux.HandleFunc("/api/update", handleUpdate)
+	mux.HandleFunc("/api/lang", handleLang)
 	mux.HandleFunc("/api/last", handleLast)
 	mux.HandleFunc("/api/trace", handleTrace)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +129,11 @@ func runWeb(ctx context.Context, args []string) error {
 	// (password) is the user's choice, from the page.
 	helperState.Store(setupARP(false))
 	go backgroundLoop(ctx)
+	go mon.loop(ctx)
+	go updateLoop(ctx)
+	if err := remote.apply(); err != nil {
+		fmt.Fprintln(os.Stderr, "Accesso da iPad/telefono non attivo:", err)
+	}
 	switch {
 	case *appMode && hasNativeWindow:
 		uiMode.Store("native")
@@ -164,7 +177,7 @@ func runWeb(ctx context.Context, args []string) error {
 // the network.
 var localOnly = map[string]bool{
 	"/api/save": true, "/api/helper": true, "/api/quit": true, "/api/notify": true,
-	"/api/device": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true,
+	"/api/device": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/venue": true, "/api/switchports": true, "/api/update": true, "/api/lang": true,
 }
 
 func fromLoopback(r *http.Request) bool {
@@ -253,6 +266,7 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 		"app":           appModeOn,
 		"ui":            uiMode.Load(),
 		"helper":        helperState.Load(),
+		"snmp":          firstNonEmpty(loadSettings().SNMPCommunity, "public"),
 	})
 }
 

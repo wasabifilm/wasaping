@@ -40,6 +40,7 @@ type Network struct {
 	Auto      string             `json:"auto"`           // description wasaping made
 	Devices   map[string]*Device `json:"devices"`
 	Scans     []time.Time        `json:"scans,omitempty"` // latest maxHistory scans
+	Plan      []PlanItem         `json:"plan,omitempty"`  // imported IP plan
 	FirstSeen time.Time          `json:"first_seen"`
 	LastSeen  time.Time          `json:"last_seen"`
 }
@@ -358,6 +359,117 @@ func (s *Store) Forget(key string) {
 		delete(n.Devices, key)
 		s.saveLocked()
 	}
+}
+
+// SetPlan stores the IP plan of the current network (nil removes it).
+func (s *Store) SetPlan(p []PlanItem) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.Networks[s.current]
+	if n == nil {
+		return false
+	}
+	n.Plan = p
+	s.saveLocked()
+	return true
+}
+
+// Plan returns the IP plan of the current network.
+func (s *Store) Plan() []PlanItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n := s.Networks[s.current]; n != nil && n.Plan != nil {
+		return n.Plan
+	}
+	return []PlanItem{}
+}
+
+// Venue is a network's archive in a file to share with colleagues: names,
+// roles, notes, critical devices and the IP plan.
+type Venue struct {
+	Format  string        `json:"format"` // "wasaping-venue"
+	Version int           `json:"version"`
+	Name    string        `json:"name,omitempty"`
+	Auto    string        `json:"auto,omitempty"`
+	Devices []VenueDevice `json:"devices"`
+	Plan    []PlanItem    `json:"plan,omitempty"`
+}
+
+type VenueDevice struct {
+	Key      string `json:"key"`
+	Name     string `json:"name,omitempty"`
+	Role     string `json:"role,omitempty"`
+	Note     string `json:"note,omitempty"`
+	Critical bool   `json:"critical,omitempty"`
+	MAC      string `json:"mac,omitempty"`
+	IP       string `json:"ip"`
+	Kind     string `json:"kind,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Friendly string `json:"friendly,omitempty"`
+	Hostname string `json:"hostname,omitempty"`
+}
+
+// ExportVenue returns the current network as a Venue.
+func (s *Store) ExportVenue() (Venue, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.Networks[s.current]
+	if n == nil {
+		return Venue{}, false
+	}
+	v := Venue{Format: "wasaping-venue", Version: 1, Name: n.Name, Auto: n.Auto, Plan: n.Plan}
+	for k, d := range n.Devices {
+		v.Devices = append(v.Devices, VenueDevice{Key: k, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
+			MAC: d.MAC, IP: d.IP, Kind: d.Kind, Model: d.Model, Friendly: d.Friendly, Hostname: d.Hostname})
+	}
+	sort.Slice(v.Devices, func(i, j int) bool { return ipLess(v.Devices[i].IP, v.Devices[j].IP) })
+	return v, true
+}
+
+// ImportVenue merges a shared venue into the current network: what the
+// file says about a device wins, devices it knows and we do not are added,
+// and its plan and name are used when this network has none.
+func (s *Store) ImportVenue(v Venue) (int, error) {
+	if v.Format != "wasaping-venue" {
+		return 0, fmt.Errorf("non è un file di locale di wasaping")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.Networks[s.current]
+	if n == nil {
+		return 0, fmt.Errorf("fai prima una scansione di questa rete")
+	}
+	count := 0
+	for _, vd := range v.Devices {
+		key := vd.Key
+		if mac := scanner.NormalizeMAC(vd.MAC); mac != "" {
+			key = mac
+		} else if net.ParseIP(vd.IP).To4() == nil {
+			continue
+		} else if !strings.HasPrefix(key, "ip:") {
+			key = "ip:" + vd.IP
+		}
+		d := n.Devices[key]
+		if d == nil {
+			d = &Device{MAC: scanner.NormalizeMAC(vd.MAC), IP: vd.IP, Kind: vd.Kind, Model: vd.Model, Friendly: vd.Friendly, Hostname: vd.Hostname}
+			n.Devices[key] = d
+		}
+		for _, kv := range [][2]*string{{&d.Name, &vd.Name}, {&d.Role, &vd.Role}, {&d.Note, &vd.Note}} {
+			if *kv[1] != "" {
+				*kv[0] = *kv[1]
+			}
+		}
+		d.Critical = d.Critical || vd.Critical
+		count++
+	}
+	if len(n.Plan) == 0 && len(v.Plan) > 0 {
+		n.Plan = v.Plan
+	}
+	if n.Name == "" && v.Name != "" {
+		n.Name = v.Name
+	}
+	s.saveLocked()
+	return count, nil
 }
 
 // CriticalDevices lists the devices marked critical on the current network.

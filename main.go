@@ -19,7 +19,8 @@ import (
 
 var version = "dev"
 
-const macHiddenNote = "Nota: macOS nasconde gli indirizzi MAC dei dispositivi ai programmi non firmati da uno sviluppatore registrato, quindi MAC e produttore restano vuoti."
+var macHiddenNote = TC("Nota: macOS nasconde gli indirizzi MAC dei dispositivi ai programmi non firmati da uno sviluppatore registrato, quindi MAC e produttore restano vuoti.",
+	"Note: macOS hides devices' MAC addresses from apps not signed by a registered developer, so MAC and maker stay empty.")
 
 const usage = `wasaping %s — a spicy little IP scanner 🟢
 
@@ -201,7 +202,7 @@ func runScan(ctx context.Context, args []string) error {
 	}
 	helper := setupARP(false)
 	tty := c.format == "table" && isTerminal(os.Stderr)
-	fmt.Fprintf(os.Stderr, "🟢 wasaping: scansiono %s (%d indirizzi)...\n", target, len(ips))
+	fmt.Fprintf(os.Stderr, TC("🟢 wasaping: scansiono %s (%d indirizzi)...\n", "🟢 wasaping: scanning %s (%d addresses)...\n"), target, len(ips))
 	start := time.Now()
 	hosts, err := scanner.Scan(ctx, scanner.Options{
 		Targets:    ips,
@@ -247,47 +248,69 @@ func runScan(ctx context.Context, args []string) error {
 		return w.Error()
 	default:
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "IP\tNOME\tTIPO\tMAC\tMODELLO/PRODUTTORE\tPROTOCOLLI\tPORTE APERTE")
+		fmt.Fprintln(tw, TC("IP\tNOME\tTIPO\tMAC\tMODELLO/PRODUTTORE\tPROTOCOLLI\tPORTE APERTE", "IP\tNAME\tTYPE\tMAC\tMODEL/MAKER\tPROTOCOLS\tOPEN PORTS"))
 		for _, v := range views {
 			ip := v.IP
 			if v.Self {
-				ip += " (tu)"
+				ip += TC(" (tu)", " (you)")
 			}
 			if v.New {
 				ip += " ★"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", ip, dash(firstNonEmpty(v.Name, v.Friendly, v.Hostname)), dash(kindNames[v.Kind]), dash(v.MAC), dash(firstNonEmpty(v.Model, v.Vendor)), dash(strings.Join(v.Protocols, ", ")), dash(joinPorts(v.Ports)))
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", ip, dash(firstNonEmpty(v.Name, v.Friendly, v.Hostname)), dash(kindName(v.Kind)), dash(v.MAC), dash(firstNonEmpty(v.Model, vendorCLI(v.Vendor))), dash(strings.Join(v.Protocols, ", ")), dash(joinPorts(v.Ports)))
 		}
 		tw.Flush()
-		fmt.Fprintf(os.Stderr, "\n%d dispositivi trovati in %s\n", len(hosts), time.Since(start).Round(100*time.Millisecond))
+		fmt.Fprintf(os.Stderr, TC("\n%d dispositivi trovati in %s\n", "\n%d devices found in %s\n"), len(hosts), time.Since(start).Round(100*time.Millisecond))
 		if len(fresh) > 0 {
-			fmt.Fprintf(os.Stderr, "★ Nuovi dall'ultima scansione: %s\n", strings.Join(fresh, ", "))
+			fmt.Fprintf(os.Stderr, TC("★ Nuovi dall'ultima scansione: %s\n", "★ New since the last scan: %s\n"), strings.Join(fresh, ", "))
 		}
 		for _, v := range views {
 			for _, w := range v.Warnings {
-				fmt.Fprintf(os.Stderr, "⚠️  %s: %s\n", firstNonEmpty(v.Name, v.Friendly, v.Hostname, v.IP), w)
+				fmt.Fprintf(os.Stderr, "⚠️  %s: %s\n", firstNonEmpty(v.Name, v.Friendly, v.Hostname, v.IP), msgCLI(w))
 			}
 		}
 		for _, w := range scanner.NetworkIssues(hosts) {
-			fmt.Fprintln(os.Stderr, "⚠️ ", w)
+			fmt.Fprintln(os.Stderr, "⚠️ ", msgCLI(w))
 		}
 		if len(gone) > 0 {
 			var g []string
 			for _, d := range gone {
 				g = append(g, fmt.Sprintf("%s (%s)", firstNonEmpty(d.Name, d.Hostname, d.MAC, d.IP), d.IP))
 			}
-			fmt.Fprintf(os.Stderr, "Non rispondono più: %s\n", strings.Join(g, ", "))
+			fmt.Fprintf(os.Stderr, TC("Non rispondono più: %s\n", "No longer responding: %s\n"), strings.Join(g, ", "))
 		}
 		if scanner.MACsHidden(hosts) {
 			fmt.Fprintln(os.Stderr, macHiddenNote)
 			if helper == "missing" {
-				fmt.Fprintln(os.Stderr, "Per vederli: wasaping helper install (chiede la password una sola volta).")
+				fmt.Fprintln(os.Stderr, TC("Per vederli: wasaping helper install (chiede la password una sola volta).", "To see them: wasaping helper install (asks for the password only once)."))
 			}
 		} else if !scanner.HasOUI() {
-			fmt.Fprintln(os.Stderr, "Suggerimento: esegui `wasaping update-oui` per vedere i produttori dei dispositivi.")
+			fmt.Fprintln(os.Stderr, TC("Suggerimento: esegui `wasaping update-oui` per vedere i produttori dei dispositivi.", "Tip: run `wasaping update-oui` to see the devices' makers."))
 		}
 	}
 	return nil
+}
+
+func vendorCLI(v string) string {
+	if v == "(MAC privato/casuale)" {
+		return TC(v, "(private/random MAC)")
+	}
+	return v
+}
+
+func kindName(k string) string {
+	if cliLang == "en" {
+		return kindNamesEN[k]
+	}
+	return kindNames[k]
+}
+
+var kindNamesEN = map[string]string{
+	scanner.KindRouter: "router", scanner.KindComputer: "computer", scanner.KindPhone: "phone",
+	scanner.KindTablet: "tablet", scanner.KindPrinter: "printer", scanner.KindTV: "TV/media",
+	scanner.KindSpeaker: "speaker", scanner.KindNAS: "NAS", scanner.KindCamera: "camera",
+	scanner.KindIoT: "home automation", scanner.KindLightDesk: "lighting console", scanner.KindLighting: "lighting (node)",
+	scanner.KindAudio: "audio", scanner.KindVideo: "video", scanner.KindProjector: "projector", scanner.KindSwitch: "switch",
 }
 
 var kindNames = map[string]string{

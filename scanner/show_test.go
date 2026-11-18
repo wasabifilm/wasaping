@@ -124,3 +124,28 @@ func TestUPnPFilters(t *testing.T) {
 		}
 	}
 }
+
+func TestDMXParsers(t *testing.T) {
+	art := make([]byte, 18+512)
+	copy(art, "Art-Net\x00")
+	binary.LittleEndian.PutUint16(art[8:], 0x5000)
+	art[14], art[15] = 0x12, 0x00 // sub-net 1, universe 2 -> port-address 18
+	binary.BigEndian.PutUint16(art[16:], 512)
+	art[18], art[19] = 255, 128
+	u, data, ok := parseArtDmx(art)
+	if !ok || u != 18 || len(data) != 512 || data[0] != 255 || data[1] != 128 {
+		t.Errorf("artdmx: %v %d %d", ok, u, len(data))
+	}
+	s := make([]byte, 638)
+	copy(s[4:], "ASC-E1.17\x00\x00\x00")
+	binary.BigEndian.PutUint32(s[18:], 4)
+	copy(s[44:], "FOH")
+	s[108] = 100
+	binary.BigEndian.PutUint16(s[113:], 3)
+	binary.BigEndian.PutUint16(s[123:], 513)
+	s[126], s[637] = 10, 20
+	u, name, prio, data, ok := parseSACNData(s)
+	if !ok || u != 3 || name != "FOH" || prio != 100 || len(data) != 512 || data[0] != 10 || data[511] != 20 {
+		t.Errorf("sacn: %v %d %q %d %d", ok, u, name, prio, len(data))
+	}
+}

@@ -20,7 +20,9 @@
   :root[data-theme="dark"] { --bg: #171717; --panel: #1f1f1f; --ink: #fafaff; --muted: #8a8a8d; --line: #333335;
           --wasabi-text: #81d742; --wasabi-soft: #24301b; --shadow: 0 8px 30px rgba(0,0,0,.5); color-scheme: dark; }
   :root[data-theme="light"] { color-scheme: light; }
-  #theme { margin-left: auto; border: none; background: none; color: var(--muted); font-size: 13px; padding: 4px 8px; }
+  .langbtn { margin-left: auto; border: none; background: none; color: var(--muted); font-size: 13px; padding: 4px 8px; }
+  .langbtn:hover { color: var(--ink); }
+  #theme { border: none; background: none; color: var(--muted); font-size: 13px; padding: 4px 8px; }
   #theme:hover { color: var(--ink); }
   .tool { margin-top: 14px; }
   .tool .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -112,6 +114,18 @@
   #monitor .state.bad { background: var(--warn); color: #fff; animation: blink 1s steps(2) infinite; }
   @keyframes blink { 50% { opacity: .55; } }
   #monitor .spacer { flex: 1; }
+  .mbody { flex: 1; display: flex; min-height: 0; }
+  .mlog { width: 320px; border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: 14px 16px; gap: 8px; overflow: hidden; }
+  .remote { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .remote .tag a { color: var(--wasabi-text); cursor: pointer; }
+  .mlog-h { display: flex; align-items: center; gap: 8px; }
+  .mlog-h .spacer { flex: 1; }
+  #mEvents { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; font-size: 13px; }
+  #mEvents li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  #mEvents li .t { color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; margin-right: 6px; }
+  #mEvents li.down b { color: var(--warn); }
+  #mEvents li.up b { color: var(--wasabi-text); }
+  @media (max-width: 800px) { .mbody { flex-direction: column; } .mlog { width: auto; border-left: none; border-top: 1px solid var(--line); max-height: 40vh; } }
   #tiles { flex: 1; overflow: auto; padding: 20px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; align-content: start; }
   .tile { border-radius: 12px; padding: 14px 16px; border: 2px solid var(--wasabi); background: var(--panel); }
   .tile.down { border-color: var(--warn); background: rgba(214,63,63,.12); }
@@ -122,6 +136,28 @@
   .tile.down .s b { color: var(--warn); }
   .mhint { grid-column: 1 / -1; color: var(--muted); padding: 40px; text-align: center; }
   @media print { body > *:not(#printable) { display: none !important; } }
+  #sheet { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 15; display: none; align-items: flex-start; justify-content: center; padding: 6vh 16px; overflow: auto; }
+  #sheet.open { display: flex; }
+  #sheet .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); width: min(860px, 100%); padding: 18px 22px 22px; }
+  #sheet .box > header { padding: 0 0 10px; }
+  #sheet h2 { font-size: 18px; margin: 0; flex: 1; }
+  #sheet .close { border: none; background: none; font-size: 22px; color: var(--muted); }
+  #sheet .sum { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  #sheet .pill { border-radius: 999px; padding: 3px 10px; font-size: 13px; border: 1px solid var(--line); }
+  #sheet .pill.ok { border-color: var(--wasabi); color: var(--wasabi-text); }
+  #sheet .pill.bad { border-color: var(--warn); color: var(--warn); }
+  #sheet .pill.warn { border-color: #f2994a; color: #f2994a; }
+  #sheet table td, #sheet table th { padding: 6px 8px; }
+  #sheet .st-ok { color: var(--wasabi-text); font-weight: 600; }
+  #sheet .st-bad { color: var(--warn); font-weight: 600; }
+  #sheet .st-warn { color: #f2994a; font-weight: 600; }
+  #sheet .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  #sheet .free { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.9; }
+  #sheet .free a { color: var(--wasabi-text); cursor: pointer; margin-right: 10px; white-space: nowrap; }
+  .dmxgrid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; margin-top: 12px; }
+  .dmxgrid i { aspect-ratio: 1; border-radius: 2px; background: var(--line); font-style: normal; font-size: 0; }
+  #sheet tr.pick { cursor: pointer; }
+  #sheet tr.pick.sel td { background: var(--wasabi-soft); }
   .foot { margin: -12px 24px 24px; font-size: 12px; color: var(--muted); }
   .foot a { color: var(--wasabi-text); cursor: pointer; }
   .empty { padding: 48px; text-align: center; color: var(--muted); cursor: default; }
@@ -148,6 +184,7 @@
   <div class="logo"></div>
   <h1>wasa<b>ping</b></h1>
   <span class="tag">a spicy little IP scanner</span>
+  <button id="langBtn" class="langbtn" title="Lingua / Language">English</button>
   <button id="theme" title="Tema chiaro o scuro">Tema: automatico</button>
 </header>
 
@@ -185,6 +222,9 @@
 <div class="notice" id="oui">
   <span>Scarica il database dei produttori (IEEE) per vedere chi ha fatto ogni dispositivo.</span>
   <button id="ouiBtn">Scarica</button>
+</div>
+<div class="notice" id="updBar">
+  <span id="updText"></span><a id="updGet" target="_blank" rel="noopener"><button class="primary">Scarica</button></a><button id="updOff">Non controllare più</button>
 </div>
 <div class="notice info" id="machidden">
   <span><b>macOS nasconde gli indirizzi MAC</b> ai programmi non firmati da uno sviluppatore Apple registrato, quindi MAC e produttori restano vuoti.
@@ -247,16 +287,210 @@
       <option value="3">ogni 3 s</option><option value="5" selected>ogni 5 s</option><option value="10">ogni 10 s</option><option value="30">ogni 30 s</option>
     </select>
     <label class="check" style="margin:0"><input type="checkbox" id="mSound" checked> Allarme sonoro</label>
-    <button id="mClose">Chiudi monitor</button>
+    <button id="mToggle" class="primary">Avvia</button>
+    <button id="mClose" title="Il monitor continua a controllare anche a finestra chiusa">Torna all'elenco</button>
   </header>
-  <div id="tiles"></div>
+  <div class="mbody">
+    <div id="tiles"></div>
+    <aside class="mlog">
+      <div class="mlog-h"><b>Registro</b><span class="spacer"></span><button id="mExport" title="Salva il registro in CSV">Esporta</button></div>
+      <ol id="mEvents"></ol>
+      <div class="remote">
+        <label class="check" style="margin:0"><input type="checkbox" id="rOn"> Accesso da iPad o telefono</label>
+        <div class="tag" id="mRemote"></div>
+      </div>
+    </aside>
+  </div>
 </section>
+
+<section id="sheet" aria-hidden="true">
+  <div class="box">
+    <header><h2 id="shTitle"></h2><button class="close" id="shClose" title="Chiudi">×</button></header>
+    <div id="shBody"></div>
+  </div>
+</section>
+<input type="file" id="fileIn" hidden>
 
 <div id="ctx"></div>
 <div id="toast"></div>
 
 <script>
 const $ = id => document.getElementById(id);
+// ---- English: the page is written in Italian; when the language is English
+// a translator rewrites interface texts (exact strings and patterns) after
+// every update. Device names, notes and other user data are left alone.
+const LANG = (() => {
+  try { const v = localStorage.getItem("wasaping.lang"); if (v === "it" || v === "en") return v; } catch {}
+  return (navigator.language || "it").toLowerCase().startsWith("it") ? "it" : "en";
+})();
+const EN = new Map(Object.entries({
+  "a spicy little IP scanner": "a spicy little IP scanner", "Tema: automatico": "Theme: automatic", "Tema: chiaro": "Theme: light", "Tema: scuro": "Theme: dark",
+  "Interfaccia di rete": "Network interface", "Personalizzato…": "Custom…", "Porte comuni": "Common ports", "Nessuna porta (più veloce)": "No ports (faster)",
+  "Porte personalizzate…": "Custom ports…", "Porte da controllare": "Ports to check", "22,80,443 o 1-1024": "22,80,443 or 1-1024", "Scansiona": "Scan", "Stop": "Stop",
+  "Filtra per IP, nome, produttore…": "Filter by IP, name, maker…", "Ripeti: mai": "Repeat: never", "Ogni 5 min": "Every 5 min", "Ogni 15 min": "Every 15 min", "Ogni ora": "Every hour",
+  "Ripeti la scansione da sola e avvisa se arriva un dispositivo nuovo": "Scan again by itself and notify when a new device shows up",
+  "Monitor": "Monitor", "Tiene d'occhio i dispositivi critici e suona se uno sparisce": "Watches the critical devices and sounds an alarm if one disappears",
+  "Stampa": "Print", "Elenco IP da stampare o salvare in PDF": "IP list to print or save as PDF", "Esci": "Quit", "Chiude wasaping": "Quits wasaping",
+  "Pronto.": "Ready.", "Scansione interrotta.": "Scan stopped.", "Connessione interrotta: il target è valido?": "Connection lost: is the target valid?",
+  "Scarica il database dei produttori (IEEE) per vedere chi ha fatto ogni dispositivo.": "Download the vendor database (IEEE) to see who made each device.", "Scarica": "Download",
+  "Mostra i MAC": "Show MACs", "Non ora": "Not now", "macOS nasconde gli indirizzi MAC": "macOS hides MAC addresses",
+  "ai programmi non firmati da uno sviluppatore Apple registrato, quindi MAC e produttori restano vuoti.\n  wasaping può installare un piccolo aiuto di sistema che li legge: serve la password di amministratore":
+    "from apps not signed by a registered Apple developer, so MACs and makers stay empty.\n  wasaping can install a small system helper that reads them: it needs the administrator password",
+  "una sola volta": "only once",
+  ", la inserisci nella finestra di macOS (wasaping non la vede) e l'aiuto lavora solo mentre wasaping è aperto. Lo togli quando vuoi con «Disinstalla» in fondo alla pagina.":
+    ", typed in the macOS window (wasaping never sees it), and the helper only works while wasaping is open. Remove it any time with “Uninstall” at the bottom of the page.",
+  "Dispositivo": "Device", "IP": "IP", "MAC": "MAC", "Modello / produttore": "Model / maker", "Protocolli": "Protocols", "Porte aperte": "Open ports", "Risposta": "Response",
+  "Premi": "Press", "per vedere chi c'è sulla tua rete.": "to see who is on your network.", "Cerco dispositivi…": "Looking for devices…", "Nessun risultato per il filtro.": "Nothing matches the filter.",
+  "Nessun dispositivo trovato.": "No devices found.", "tu": "you", "nuovo": "new", "non risponde": "not responding", "critico": "critical", "rete nuova": "new network",
+  "Nome personalizzato": "Custom name", "Ruolo": "Role", "Note": "Notes", "es. Console FOH": "e.g. FOH console", "es. luci palco SX, universi 1–4": "e.g. stage left lights, universes 1–4",
+  "es. patch su switch 2 porta 14": "e.g. patched on switch 2 port 14", "Critico: tienilo d'occhio nel Monitor": "Critical: keep an eye on it in the Monitor", "Salva": "Save",
+  "Sveglia (Wake-on-LAN)": "Wake (Wake-on-LAN)", "Accende il dispositivo, se la sua scheda di rete lo supporta": "Turns the device on, if its network card supports it",
+  "Controlla porte 1–1024": "Check ports 1–1024", "Controlla le porte da 1 a 1024": "Checks ports 1 to 1024", "Dimentica": "Forget", "Toglie il dispositivo dall'elenco dei conosciuti": "Removes the device from the known ones",
+  "Strumenti di rete": "Network tools", "Qualità del collegamento": "Link quality", "20 ping: perdite, tempi e stabilità del collegamento": "20 pings: loss, times and stability of the link",
+  "Traceroute": "Traceroute", "Il percorso dei pacchetti fino al dispositivo": "The path of packets to the device", "IP o nome: anche un indirizzo internet, es. 8.8.8.8": "IP or name, internet addresses too, e.g. 8.8.8.8",
+  "Produttore": "Maker", "Modello": "Model", "Nome del dispositivo": "Device name", "Nome in rete": "Network name", "Pagina web": "Web page", "Servizi": "Services",
+  "nessuna tra quelle controllate": "none of those checked", "solo tabella ARP": "ARP table only", "Visto la prima volta": "First seen", "Visto l'ultima volta": "Last seen", "Presenza": "Presence",
+  "ultime scansioni, la più recente a destra": "latest scans, most recent on the right", "Universi in uscita": "Output universes", "Universi in ingresso": "Input universes", "Stato del nodo": "Node status",
+  "Firmware": "Firmware", "Sorgente sACN": "sACN source", "Universi sACN": "sACN universes", "Priorità sACN": "sACN priority", "Clock PTP": "PTP clock", "Sorgenti NDI": "NDI sources",
+  "Stato proiettore": "Projector state", "Ore lampada": "Lamp hours", "Errori": "Errors", "protetto da password": "password protected", "(port-address)": "(port-address)", "(Dante)": "(Dante)",
+  "Switch": "Switch", "Router": "Router", "Computer": "Computer", "Telefono": "Phone", "Tablet": "Tablet", "Stampante": "Printer", "TV / media": "TV / media", "Altoparlante": "Speaker",
+  "NAS / archivio": "NAS / storage", "Videocamera": "Camera", "Domotica / IoT": "Home automation / IoT", "Console luci": "Lighting console", "Luci (nodo / proiettore)": "Lighting (node / fixture)",
+  "Audio": "Audio", "Video": "Video", "Proiettore": "Projector", "Switch di rete": "Network switch", "Condivisione file": "File sharing", "Condivisione file (AFP)": "File sharing (AFP)",
+  "Condivisione schermo": "Screen sharing", "Dispositivo Apple": "Apple device", "Sincronizzazione Apple": "Apple sync", "Scanner": "Scanner",
+  "nodo": "node", "console": "console", "media server": "media server", "router": "router", "backup": "backup", "configuratore": "configurator", "visualizzatore": "visualiser",
+  "spento": "off", "acceso": "on", "in raffreddamento": "cooling down", "in accensione": "warming up",
+  "TUTTO OK": "ALL OK", "FERMO": "STOPPED", "NON RISPONDE": "NOT RESPONDING", "controllo…": "checking…", "Avvia": "Start", "Ferma": "Stop",
+  "Allarme sonoro": "Sound alarm", "Torna all'elenco": "Back to the list", "Il monitor continua a controllare anche a finestra chiusa": "The monitor keeps checking with the window closed",
+  "Ogni quanto controllare": "How often to check", "ogni 3 s": "every 3 s", "ogni 5 s": "every 5 s", "ogni 10 s": "every 10 s", "ogni 30 s": "every 30 s",
+  "Registro": "Log", "Esporta": "Export", "Salva il registro in CSV": "Save the log as CSV", "Nessun evento.": "No events.", "Accesso da iPad o telefono": "Access from iPad or phone",
+  "Mostra questo Monitor su un iPad o un telefono della stessa rete, protetto da un PIN.": "Show this Monitor on an iPad or a phone on the same network, protected by a PIN.",
+  "Nuovo PIN": "New PIN", "Chiudi": "Close", "rinomina": "rename", "dai un nome a questo locale": "name this venue", "Piano IP": "IP plan", "IP liberi": "Free IPs",
+  "Esporta locale": "Export venue", "Importa locale": "Import venue", "Universi DMX": "DMX universes", "Porte switch": "Switch ports", "Rete:": "Network:",
+  "Importa CSV": "Import CSV", "Scarica un modello": "Download a template", "Crea il piano da questa scansione": "Make the plan from this scan", "Importa un altro CSV": "Import another CSV",
+  "Usa nomi e ruoli del piano": "Use names and roles from the plan", "Togli il piano": "Remove the plan", "Stato": "Status", "Previsto": "Planned", "Trovato": "Found", "manca": "missing",
+  "non previsto": "not planned", "IP doppio nel piano": "duplicate IP in the plan", "✓ ok": "✓ ok", "Fai una scansione per il confronto": "Scan to compare",
+  "Dà ai dispositivi trovati il nome e il ruolo del piano, se non ne hanno già uno": "Gives the devices found the plan's name and role, if they have none yet",
+  "Universo": "Universe", "Protocollo": "Protocol", "Sorgente": "Source", "Frame/s": "Frames/s", "Canali attivi": "Active channels", "In ascolto…": "Listening…", "Ascolto interrotto.": "Listening stopped.",
+  "più sorgenti": "several sources", "Porta": "Port", "Descrizione porta": "Port description", "Cerca": "Search", "Community SNMP di lettura": "Read-only SNMP community",
+  "Chiedo agli switch…": "Asking the switches…", "Fai prima una scansione.": "Scan first.", "Nessun evento": "No events", "Non controllare più": "Don't check again",
+  "Inserisci la password nella finestra di macOS…": "Type the password in the macOS window…", "Rimuovo l'aiuto…": "Removing the helper…", "Disinstalla": "Uninstall",
+  "Indirizzi MAC: aiuto di sistema attivo ·": "MAC addresses: system helper active ·", "Indirizzi MAC nascosti da macOS ·": "MAC addresses hidden by macOS ·", "Installa l'aiuto": "Install the helper",
+  "(password una sola volta)": "(password only once)", "✓ Salvato.": "✓ Saved.", "Controllo 1024 porte…": "Checking 1024 ports…", "Copia URL": "Copy URL",
+  "✗ Non risponde al ping.": "✗ Does not answer ping.", "✓ Collegamento stabile.": "✓ Stable link.", "Interrotto.": "Stopped.",
+  "⚠ Collegamento instabile: pacchetti persi o tempi che variano molto (cavo, Wi-Fi, switch?).": "⚠ Unstable link: lost packets or very variable times (cable, Wi-Fi, switch?).",
+  "✓ Pacchetto di risveglio inviato. Rifai la scansione tra qualche secondo.": "✓ Wake-up packet sent. Scan again in a few seconds.",
+  "✓ Aiuto installato: rifai la scansione per vedere i MAC.": "✓ Helper installed: scan again to see the MACs.", "Ripetizione automatica spenta.": "Automatic repeat off.",
+  "wasaping ripeterà la scansione da solo, anche a finestra chiusa.": "wasaping will scan again by itself, with the window closed too.", "Non controllerò più le nuove versioni.": "I won't check for new versions any more.",
+  "Nessun dispositivo critico su questa rete.": "No critical devices on this network.", "Apri un dispositivo dall'elenco e spunta": "Open a device from the list and tick",
+  "Critico": "Critical", ": console, switch principale, stagebox Dante, media server…": ": console, main switch, Dante stagebox, media server…",
+  "Nessuno switch ha risposto. Controlla che SNMP sia attivo e la community giusta.": "No switch answered. Check that SNMP is on and the community is right.",
+  "Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.": "No universes arriving. There is no DMX on the network, or the console sends Art-Net straight to the nodes (unicast), not to this computer.",
+  "Scrivi una rete (es. 10.0.0.0/24) o un intervallo nel campo in alto.": "Type a network (e.g. 10.0.0.0/24) or a range in the field at the top.",
+  "Controlla comunque l'intervallo del DHCP, se sulla rete c'è un router.": "Still check the DHCP range, if there is a router on the network.", "Nessuno.": "None.",
+  "Sullo switch deve essere attivo SNMP v2c con una community di lettura (spesso": "The switch needs SNMP v2c on, with a read community (often",
+  "In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Clic su un universo per vedere i 512 canali.": "Listening to Art-Net (broadcast packets or sent to this computer) and sACN (universes 1–64). Click a universe to see its 512 channels.",
+  "wasaping chiede agli switch gestiti (Luminex, Cisco, Netgear, Ubiquiti, MikroTik…) su quale porta si trova ogni dispositivo, via SNMP in sola lettura.": "wasaping asks the managed switches (Luminex, Cisco, Netgear, Ubiquiti, MikroTik…) which port each device is on, over read-only SNMP.",
+  "Importa l'elenco dei dispositivi previsti (il patch o il piano IP preparato per lo show) e wasaping lo confronta con la rete: chi manca, chi ha l'IP sbagliato, chi non era previsto.": "Import the list of planned devices (the patch or IP plan made for the show) and wasaping compares it with the network: who is missing, who has the wrong IP, who was not planned.",
+  "Un file CSV da Excel, Numbers o Fogli Google, con le colonne": "A CSV file from Excel, Numbers or Google Sheets, with the columns", "e, se vuoi,": "and, if you like,",
+  ". Va bene sia la virgola sia il punto e virgola.": ". Both comma and semicolon work.", "Nome": "Name", "Da lì si guarda soltanto, non si cambia niente.": "From there you can only look, not change anything.",
+  "Accesso da iPad/telefono non attivo:": "Access from iPad/phone not active:", "fai prima una scansione": "scan first", "fai prima una scansione di questa rete": "scan this network first",
+  "dispositivo sconosciuto": "unknown device", "richiesta non valida": "invalid request", "nessuna riga con un indirizzo IP valido": "no rows with a valid IP address",
+  "non è un file di locale di wasaping": "not a wasaping venue file", "file non valido": "invalid file", "nome file non valido": "invalid file name", "annullato": "cancelled",
+  "Nessuna scansione ancora": "No scans yet", "(MAC privato/casuale)": "(private/random MAC)", "Stampa": "Print",
+  "Il monitor è fermo": "The monitor is stopped", "Tema chiaro o scuro": "Light or dark theme",
+  // server warnings and network problems
+  "Fuori dalla sottorete di questo computer: chi è sulla rete normale non lo raggiunge. Controlla IP e maschera di rete.": "Outside this computer's subnet: devices on the normal network cannot reach it. Check its IP and netmask.",
+  "Telnet aperto (porta 23): accesso senza cifratura, spesso con password di fabbrica.": "Telnet open (port 23): unencrypted access, often with the factory password.",
+  "FTP aperto sul router (porta 21): meglio disattivarlo.": "FTP open on the router (port 21): better switch it off.",
+  "Pannello del router solo in HTTP: la password viaggia in chiaro.": "Router panel on HTTP only: the password travels in clear text.",
+  "Desktop remoto di Windows aperto (porta 3389).": "Windows Remote Desktop open (port 3389).",
+  "PJLink senza password: chiunque sulla rete può spegnere il proiettore.": "PJLink without password: anyone on the network can switch the projector off.",
+  "Nessun router su questa rete: normale per una rete show isolata, ma niente internet e niente DHCP dal router.": "No router on this network: normal for an isolated show network, but no internet and no DHCP from a router.",
+}));
+const PAT = [
+  [/^(\d+) dispositivi trovati in ([\d.,]+) s\.$/, "$1 devices found in $2 s."],
+  [/^(\d+) dispositivi · scansione automatica delle (.+)$/, "$1 devices · automatic scan at $2"], [/^(\d+) dispositivi · scansione delle (.+)$/, "$1 devices · scan at $2"],
+  [/^Sondaggio (\d+)\/(\d+)… ?(raccolgo i dettagli)?$/, (m, a, b, c) => `Probing ${a}/${b}…${c ? " collecting details" : ""}`],
+  [/^Scansione di (.+)…$/, "Scanning $1…"], [/^(\d+) nuov[oi]$/, "$1 new"],
+  [/^(\d+) non rispond(?:e|ono) \((nascondi|mostra)\)$/, (m, n, a) => `${n} not responding (${a === "nascondi" ? "hide" : "show"})`],
+  [/^visto (.+)$/, (m, w) => "seen " + tr(w)], [/^oggi alle (.+)$/, "today at $1"], [/^ieri alle (.+)$/, "yesterday at $1"], [/^(.+) alle (\d+:\d+)$/, "$1 at $2"],
+  [/^(\d+) su (\d+) scansioni$/, "$1 of $2 scans"], [/^(\d+) (NON RISPONDE|NON RISPONDONO)$/, "$1 NOT RESPONDING"], [/^da (.+)$/, "since $1"],
+  [/^di nuovo in linea dopo (.+)$/, (m, d) => "back online after " + d.replace(" min ", " min ")],
+  [/^Rete (\S+) senza router$/, "Network $1 without router"], [/^Rete (\S+), router (.+)$/, "Network $1, router $2"],
+  [/^ · (Rete \S+.*)$/, (m, r) => " · " + tr(r)], [/^ · attivo, anche a finestra chiusa$/, " · on, with the window closed too"], [/^ · fermo$/, " · stopped"],
+  [/^(.+) · attivo, anche a finestra chiusa$/, "$1 · on, with the window closed too"], [/^(.+) · fermo$/, "$1 · stopped"],
+  [/^(.+) · non risponde$/, (m, k) => tr(k) + " · not responding"],
+  [/^Ping (\d+)\/(\d+) · (.+)$/, (m, a, b, c) => `Ping ${a}/${b} · ${c === "perso" ? "lost" : c}`], [/^Ping di (.+)…$/, "Pinging $1…"],
+  [/^Ricevuti (\d+)\/(\d+) · persi (\d+)%$/, "Received $1/$2 · lost $3%"], [/^min (.+) · media (.+) · max (.+) ms · jitter (.+) ms$/, "min $1 · avg $2 · max $3 ms · jitter $4 ms"],
+  [/^✓ (\d+) porte aperte su (\d+) controllate\.$/, "✓ $1 open ports out of $2 checked."], [/^✓ (\d+) a posto$/, "✓ $1 OK"],
+  [/^✗ (\d+) mancanti o in conflitto$/, "✗ $1 missing or in conflict"], [/^⚠ (\d+) da controllare$/, "⚠ $1 to check"], [/^(\d+) non previsti$/, "$1 not planned"],
+  [/^IP sbagliato: è a (.+)$/, "wrong IP: it is at $1"], [/^IP occupato da (.+)$/, "IP taken by $1"], [/^(\d+) dispositivi aggiornati dal piano\.$/, "$1 devices updated from the plan."],
+  [/^(\d+) indirizzi liberi in (.+): non rispondono ora, non sono di dispositivi conosciuti \(anche spenti\) e non sono nel piano IP\. Clic per copiare\.$/, "$1 free addresses in $2: not answering now, not used by known devices (even switched off) and not in the IP plan. Click to copy."],
+  [/^in uso: (.*)$/, "in use: $1"], [/^previsto nel piano: (.*)$/, "planned: $1"], [/^conosciuto, ora spento: (.*)$/, "known, now off: $1"],
+  [/^(Art-Net|sACN) universo (\d+)$/, "$1 universe $2"], [/^canale (\d+): (\d+) \((\d+)%\)$/, "channel $1: $2 ($3%)"], [/^prio (\d+)$/, "prio $1"],
+  [/^· (\d+) indirizzi$/, "· $1 addresses"], [/^(.+) · (\d+) indirizzi$/, "$1 · $2 addresses"], [/^Su questa porta ci sono (\d+) indirizzi: probabilmente un altro switch o un collegamento tra switch$/, "There are $1 addresses on this port: probably another switch or a link between switches"],
+  [/^ · porta $/, " · port "], [/^Apri con (.+)$/, (m, a) => "Open with " + tr(a)], [/^Copia (.+)$/, "Copy $1"], [/^Copiato: (.+)$/, "Copied: $1"], [/^Porta (\d+)(.*)$/, "Port $1$2"],
+  [/^(.*)clic: apri con (.+) · tasto destro: copia$/, (m, n, a) => `${n}click: open with ${tr(a)} · right click: copy`], [/^(.*)clic: copia (.+)$/, "$1click: copy $2"],
+  [/^Salvato: (.+)$/, "Saved: $1"], [/^Elenco aperto nel browser: (.+)$/, "List opened in the browser: $1"], [/^Locale importato: (\d+) dispositivi\. Rifaccio la scansione\.$/, "Venue imported: $1 devices. Scanning again."],
+  [/^Non risponde: (.+)$/, "Not responding: $1"], [/^È uscita (.+) \(hai la (.+)\)\.$/, "$1 is out (you have $2)."],
+  [/^(Non salvato|Errore|Non inviato|Non esportato|Non importato|Piano non importato|Non attivato|Aiuto non installato|Aiuto non rimosso|Download non riuscito|Salvataggio non riuscito): (.*)$/,
+    (m, p, rest) => ({"Non salvato": "Not saved", "Errore": "Error", "Non inviato": "Not sent", "Non esportato": "Not exported", "Non importato": "Not imported", "Piano non importato": "Plan not imported", "Non attivato": "Not turned on", "Aiuto non installato": "Helper not installed", "Aiuto non rimosso": "Helper not removed", "Download non riuscito": "Download failed", "Salvataggio non riuscito": "Saving failed"}[p]) + ": " + tr(rest)],
+  [/^Conflitto di IP: su Art-Net rispondono più dispositivi con questo indirizzo \((.+)\)\.$/, "IP conflict: several devices answer on Art-Net with this address ($1)."],
+  [/^Alla scansione precedente questo IP era di (.+) \((.+)\): dispositivo sostituito o conflitto di IP\.$/, "At the previous scan this IP belonged to $1 ($2): device replaced, or an IP conflict."],
+  [/^Il proiettore segnala: (.+)\.$/, "The projector reports: $1."], [/^Il nodo Art-Net segnala un problema: (.+)$/, "The Art-Net node reports a problem: $1"],
+  [/^Più master di clock (.+): (.+)\. Dante e AES67 vogliono un solo master per dominio\.$/, "Several $1 clock masters: $2. Dante and AES67 want a single master per domain."],
+  [/^Universo sACN (\d+) inviato da più sorgenti \((.+)\): controlla le priorità o il merge\.$/, "sACN universe $1 sent by several sources ($2): check priorities or merging."],
+  [/^master (.+)$/, "master $1"], [/^Apri (.+) sul dispositivo/, null],
+];
+function tr(s) {
+  if (LANG !== "en" || !s) return s;
+  const lead = s.match(/^\s*/)[0], trail = s.match(/\s*$/)[0], core = s.trim();
+  if (!core) return s;
+  if (EN.has(core)) return lead + EN.get(core) + trail;
+  for (const [re, rep] of PAT) {
+    if (!rep) continue;
+    const m = core.match(re);
+    if (m) return lead + (typeof rep === "function" ? rep(...m) : core.replace(re, rep)) + trail;
+  }
+  return s;
+}
+const SKIP = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT"]);
+function translateTree(root) {
+  if (LANG !== "en") return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  for (let n = root; n; n = w.nextNode()) {
+    if (n.nodeType === 3) {
+      const p = n.parentElement;
+      if (p && !SKIP.has(p.tagName) && !p.closest(".nt")) { const t = tr(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; }
+    } else if (n.nodeType === 1) {
+      for (const a of ["title", "placeholder"]) if (n.hasAttribute && n.hasAttribute(a)) { const v = n.getAttribute(a), t = tr(v); if (t !== v) n.setAttribute(a, t); }
+      if (n.tagName === "OPTION") { const t = tr(n.textContent); if (t !== n.textContent) n.textContent = t; }
+    }
+  }
+}
+// The remote-access hint has a link inside a sentence: translate it whole.
+function translateRemoteHint() {
+  const el = $("mRemote");
+  if (LANG !== "en" || !el || !el.querySelector("b")) return;
+  const b = el.querySelectorAll("b");
+  if (b.length >= 2 && el.textContent.startsWith("Apri ")) {
+    el.innerHTML = `Open <b>${b[0].textContent}</b> on the device (same network) and type the PIN <b style="font-size:16px;letter-spacing:2px">${b[1].textContent}</b>. From there you can only look, not change anything. <a id="rNew">New PIN</a>`;
+    $("rNew").onclick = () => post("api/remote", {on: true, new_pin: true}).then(r => r.json()).then(showRemoteHint).catch(e => toast(e.message));
+  }
+}
+if (LANG === "en") {
+  document.documentElement.lang = "en";
+  translateTree(document.body);
+  let pending = false;
+  new MutationObserver(muts => {
+    if (pending) return;
+    pending = true;
+    setTimeout(() => { pending = false; translateTree(document.body); translateRemoteHint(); }, 0); // not rAF: it stops in background windows
+  }).observe(document.body, {childList: true, subtree: true, characterData: true});
+}
+$("langBtn").textContent = LANG === "en" ? "Italiano" : "English";
+$("langBtn").onclick = () => { try { localStorage.setItem("wasaping.lang", LANG === "en" ? "it" : "en"); } catch {} location.reload(); };
+fetch("api/lang", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({lang: LANG})}).catch(() => {});
 const PORT_NAMES = {21:"FTP",22:"SSH",23:"Telnet",53:"DNS",80:"HTTP",139:"NetBIOS",443:"HTTPS",445:"SMB",548:"AFP",554:"RTSP",631:"IPP",1883:"MQTT",3389:"RDP",5000:"UPnP",5900:"VNC",8000:"HTTP",8080:"HTTP",8443:"HTTPS",9100:"Stampante",32400:"Plex",62078:"iPhone"};
 // Ports that the system knows how to open, and the program it uses.
 const OPEN = {
@@ -297,7 +531,7 @@ const KIND = {
 const SERVICES = {"netaudio-arc":"Dante", "netaudio-cmc":"Dante", "netaudio-dbc":"Dante", "netaudio-chan":"Dante", ndi:"NDI", blackmagic:"Blackmagic", videohub:"Videohub", qlab:"QLab", osc:"OSC", workstation:"", airplay:"AirPlay", raop:"AirPlay audio", ipp:"Stampa", ipps:"Stampa", printer:"Stampa", "pdl-datastream":"Stampa", scanner:"Scanner", uscan:"Scanner", smb:"Condivisione file", afpovertcp:"Condivisione file (AFP)", ssh:"SSH", "sftp-ssh":"SFTP", rfb:"Condivisione schermo", googlecast:"Chromecast", http:"Pagina web", https:"Pagina web", hap:"HomeKit", homekit:"HomeKit", matter:"Matter", matterc:"Matter", "companion-link":"Dispositivo Apple", "spotify-connect":"Spotify", sonos:"Sonos", "device-info":"", "sleep-proxy":"Sleep proxy", "apple-mobdev2":"Sincronizzazione Apple"};
 
 let hosts = [], gone = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser", showGone = true;
-let repeatTimer = null, selected = null, autoRun = false, network = null, issues = [];
+let repeatTimer = null, selected = null, autoRun = false, network = null, issues = [], snmpCommunity = "public", swPorts = {};
 
 const ipNum = ip => ip.split(".").reduce((a, b) => a * 256 + +b, 0);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -352,6 +586,8 @@ async function init() {
   try { const last = await fetch("api/last").then(r => r.json()); if (last && !hosts.length) applyResult(last); } catch {}
   setInterval(pollLast, 15000);
   showHelper(info.helper);
+  snmpCommunity = info.snmp || "public";
+  checkUpdate(); setInterval(checkUpdate, 3600000);
   let dismissed = false;
   try { dismissed = localStorage.getItem("wasaping.helperNo") === "1"; } catch {}
   if (info.helper === "missing" && !dismissed) $("machidden").style.display = "flex";
@@ -433,9 +669,10 @@ document.addEventListener("keydown", e => {
 
 // Theme: automatic (follows the system), light, dark.
 const THEMES = ["", "light", "dark"], THEME_NAMES = {"": "automatico", light: "chiaro", dark: "scuro"};
+const themeLabel = t => LANG === "en" ? "Theme: " + {"": "automatic", light: "light", dark: "dark"}[t] : "Tema: " + THEME_NAMES[t];
 function applyTheme(t) {
   if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
-  $("theme").textContent = "Tema: " + THEME_NAMES[t];
+  $("theme").textContent = themeLabel(t);
 }
 let theme = "";
 try { theme = localStorage.getItem("wasaping.theme") || ""; } catch {}
@@ -467,7 +704,7 @@ function start(auto = false) {
     $("prog").style.width = (100 * p.done / p.total) + "%";
     $("status").textContent = `Sondaggio ${p.done}/${p.total}… ${p.done === p.total ? "raccolgo i dettagli" : ""}`;
   });
-  es.addEventListener("host", e => { hosts.push(JSON.parse(e.data)); render(); });
+  es.addEventListener("host", e => { const h = JSON.parse(e.data); if (h.mac && swPorts[h.mac]) h.swport = swPorts[h.mac]; hosts.push(h); render(); });
   es.addEventListener("done", e => finish(JSON.parse(e.data)));
   es.addEventListener("failure", e => stop("Errore: " + JSON.parse(e.data).error));
   es.onerror = () => { if (es) stop("Connessione interrotta: il target è valido?"); };
@@ -506,7 +743,14 @@ function showNetwork() {
   const nb = $("netbar");
   if (!network) { nb.innerHTML = ""; } else {
     const name = network.name || network.auto;
-    nb.innerHTML = `Rete: <b>${esc(name)}</b>${network.name ? ` <span class="muted">· ${esc(network.auto)}</span>` : ""}${network.is_new ? ' <span class="badge new">rete nuova</span>' : ""} <a id="netRename">${network.name ? "rinomina" : "dai un nome a questo locale"}</a>`;
+    nb.innerHTML = `Rete: <b>${esc(name)}</b>${network.name ? ` <span class="muted">· ${esc(network.auto)}</span>` : ""}${network.is_new ? ' <span class="badge new">rete nuova</span>' : ""} <a id="netRename">${network.name ? "rinomina" : "dai un nome a questo locale"}</a>
+      <span class="muted">·</span> <a id="netPlan">Piano IP</a> <a id="netFree">IP liberi</a> <a id="netExport">Esporta locale</a> <a id="netImport">Importa locale</a> <a id="netDMX">Universi DMX</a> <a id="netSwitch">Porte switch</a>`;
+    $("netSwitch").onclick = switchView;
+    $("netDMX").onclick = dmxView;
+    $("netPlan").onclick = planView;
+    $("netFree").onclick = freeView;
+    $("netExport").onclick = exportVenue;
+    $("netImport").onclick = () => pickFile(".wasaping,.json", importVenue);
     $("netRename").onclick = async () => {
       nb.innerHTML = `Rete: <input id="netName" maxlength="200" value="${esc(network.name || "")}" placeholder="es. Arena Verona, tour 2027" style="width:260px"> <button id="netSave">Salva</button>`;
       $("netName").focus();
@@ -522,6 +766,204 @@ function showNetwork() {
   box.style.display = issues.length ? "flex" : "none";
   box.innerHTML = issues.map(i => `<span>⚠️ ${esc(i)}</span>`).join("");
 }
+
+// New version on GitHub (the program checks once a day).
+async function checkUpdate() {
+  try {
+    const u = await fetch("api/update").then(r => r.json());
+    if (!u.newer) { $("updBar").style.display = "none"; return; }
+    $("updText").innerHTML = `È uscita <b>wasaping ${esc(u.latest)}</b> (hai la ${esc(u.current)}).`;
+    $("updGet").href = u.url;
+    $("updBar").style.display = "flex";
+  } catch {}
+}
+$("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updBar").style.display = "none"; toast("Non controllerò più le nuove versioni."); });
+
+// ---- Sheet: IP plan, free IPs, venue sharing ----
+function openSheet(title, html) {
+  $("shTitle").textContent = title; $("shBody").innerHTML = html;
+  $("sheet").classList.add("open"); $("sheet").setAttribute("aria-hidden", "false");
+}
+function closeSheet() {
+  $("sheet").classList.remove("open"); $("sheet").setAttribute("aria-hidden", "true");
+  if (dmxES) { dmxES.close(); dmxES = null; }
+}
+$("shClose").onclick = closeSheet;
+$("sheet").onclick = e => { if (e.target === $("sheet")) closeSheet(); };
+function pickFile(accept, then) {
+  const f = $("fileIn"); f.accept = accept; f.value = "";
+  f.onchange = () => { const file = f.files[0]; if (!file) return; const r = new FileReader(); r.onload = () => then(String(r.result), file.name); r.readAsText(file); };
+  f.click();
+}
+const normMAC = m => (m || "").toLowerCase().replace(/-/g, ":").split(":").map(x => x.padStart(2, "0")).join(":");
+
+async function planView() {
+  let plan = [];
+  try { plan = await fetch("api/plan").then(r => r.json()) || []; } catch {}
+  if (!plan.length) {
+    openSheet("Piano IP", `<p>Importa l'elenco dei dispositivi previsti (il patch o il piano IP preparato per lo show) e wasaping lo confronta con la rete: chi manca, chi ha l'IP sbagliato, chi non era previsto.</p>
+      <p class="muted">Un file CSV da Excel, Numbers o Fogli Google, con le colonne <b>Nome</b>, <b>IP</b> e, se vuoi, <b>Ruolo</b> e <b>MAC</b>. Va bene sia la virgola sia il punto e virgola.</p>
+      <div class="row"><button class="primary" id="plImport">Importa CSV</button><button id="plTemplate">Scarica un modello</button><button id="plFromNet" ${hosts.length ? "" : "disabled"}>Crea il piano da questa scansione</button></div>`);
+  } else {
+    openSheet("Piano IP", planHTML(plan));
+    $("plApply") && ($("plApply").onclick = () => applyPlanNames(plan));
+    $("plClear").onclick = async () => { await post("api/plan", {clear: true}); planView(); };
+  }
+  $("plImport").onclick = () => pickFile(".csv,.txt", async text => {
+    try { await post("api/plan", {csv: text}); planView(); } catch (e) { toast("Piano non importato: " + e.message); }
+  });
+  if ($("plTemplate")) $("plTemplate").onclick = () => download(`wasaping-piano-modello.csv`, "Nome;IP;Ruolo;MAC\ngrandMA3 FOH;10.0.0.10;Console luci;\nLuminode Palco SX;10.0.0.21;Universi 1-4;\n", "text/csv");
+  if ($("plFromNet")) $("plFromNet").onclick = async () => {
+    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = ["Nome;IP;Ruolo;MAC"].concat([...hosts].filter(h => !h.self).sort((a, b) => ipNum(a.ip) - ipNum(b.ip)).map(h => [q(label(h) || h.ip), h.ip, q(h.role || ""), h.mac || ""].join(";"))).join("\n");
+    try { await post("api/plan", {csv}); planView(); } catch (e) { toast(e.message); }
+  };
+}
+function comparePlan(plan) {
+  const live = hosts.filter(h => !h.self);
+  const byIP = new Map(live.map(h => [h.ip, h])), byMAC = new Map(live.filter(h => h.mac).map(h => [h.mac, h]));
+  const byName = new Map(live.map(h => [(label(h) || "").toLowerCase(), h]));
+  const ipCount = {}; plan.forEach(p => ipCount[p.ip] = (ipCount[p.ip] || 0) + 1);
+  const used = new Set();
+  const rows = plan.map(p => {
+    const mac = p.mac ? normMAC(p.mac) : "";
+    const atIP = byIP.get(p.ip), byM = mac ? byMAC.get(mac) : null;
+    const named = p.name ? byName.get(p.name.toLowerCase()) : null;
+    let st, cls, h = null;
+    if (ipCount[p.ip] > 1) { st = "IP doppio nel piano"; cls = "warn"; h = atIP; }
+    else if (byM && byM.ip === p.ip) { st = "ok"; cls = "ok"; h = byM; }
+    else if (byM) { st = `IP sbagliato: è a ${byM.ip}`; cls = "warn"; h = byM; }
+    else if (atIP && mac && atIP.mac && atIP.mac !== mac) { st = `IP occupato da ${label(atIP) || atIP.mac}`; cls = "bad"; h = atIP; }
+    else if (atIP) { st = "ok"; cls = "ok"; h = atIP; }
+    else if (named) { st = `IP sbagliato: è a ${named.ip}`; cls = "warn"; h = named; }
+    else { st = "manca"; cls = "bad"; }
+    if (h) used.add(h.ip);
+    return {p, st, cls, h};
+  });
+  const extra = live.filter(h => !used.has(h.ip) && !plan.some(p => p.ip === h.ip));
+  return {rows, extra};
+}
+function planHTML(plan) {
+  const {rows, extra} = comparePlan(plan);
+  const n = c => rows.filter(r => r.cls === c).length;
+  const scanned = hosts.length > 0;
+  return `<div class="sum">${scanned ? `<span class="pill ok">✓ ${n("ok")} a posto</span><span class="pill bad">✗ ${n("bad")} mancanti o in conflitto</span><span class="pill warn">⚠ ${n("warn")} da controllare</span><span class="pill">${extra.length} non previsti</span>` : '<span class="pill warn">Fai una scansione per il confronto</span>'}</div>
+  <div class="wrap" style="margin:0"><table><thead><tr><th>Stato</th><th>Previsto</th><th>IP</th><th>Ruolo</th><th>Trovato</th></tr></thead><tbody>
+  ${rows.map(r => `<tr><td class="st-${r.cls}">${scanned ? (r.cls === "ok" ? "✓ ok" : esc(r.st)) : "—"}</td><td class="nt"><b>${esc(r.p.name || "—")}</b></td><td class="mono">${esc(r.p.ip)}</td><td class="nt">${esc(r.p.role || "")}</td><td class="nt">${r.h ? esc(label(r.h) || r.h.mac || r.h.ip) : ""}</td></tr>`).join("")}
+  ${scanned ? extra.map(h => `<tr><td class="st-warn">non previsto</td><td>—</td><td class="mono">${esc(h.ip)}</td><td></td><td class="nt">${esc(label(h) || h.mac || "")}</td></tr>`).join("") : ""}
+  </tbody></table></div>
+  <div class="row"><button id="plImport">Importa un altro CSV</button>${scanned ? '<button id="plApply" title="Dà ai dispositivi trovati il nome e il ruolo del piano, se non ne hanno già uno">Usa nomi e ruoli del piano</button>' : ""}<button id="plClear" class="danger">Togli il piano</button></div>`;
+}
+async function applyPlanNames(plan) {
+  const {rows} = comparePlan(plan);
+  let n = 0;
+  for (const r of rows) {
+    if (!r.h || r.cls === "bad" || (r.h.name && r.h.role)) continue;
+    const name = r.h.name || r.p.name || "", role = r.h.role || r.p.role || "";
+    try { await post("api/device", {key: r.h.key, name, role, note: r.h.note || "", critical: !!r.h.critical}); Object.assign(r.h, {name, role}); n++; } catch {}
+  }
+  toast(`${n} dispositivi aggiornati dal piano.`); render(); planView();
+}
+
+// Free addresses in the scanned range: for a new fixture's static IP.
+function rangeOf(spec) {
+  const toN = ip => ip.split(".").reduce((a, b) => a * 256 + +b, 0) >>> 0;
+  let m = spec.match(/^(\d+\.\d+\.\d+\.\d+)\/(\d+)$/);
+  if (m) { const bits = +m[2], size = 2 ** (32 - bits), base = Math.floor(toN(m[1]) / size) * size; return size > 2 ? [base + 1, base + size - 2] : [base, base + size - 1]; }
+  m = spec.match(/^(\d+\.\d+\.\d+)\.(\d+)-(\d+)$/);
+  if (m) return [toN(m[1] + "." + m[2]), toN(m[1] + "." + m[3])];
+  return null;
+}
+const nToIP = n => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+async function freeView() {
+  const r = rangeOf($("target").value.trim());
+  if (!r || r[1] - r[0] > 4096) { openSheet("IP liberi", "<p>Scrivi una rete (es. 10.0.0.0/24) o un intervallo nel campo in alto.</p>"); return; }
+  let plan = [];
+  try { plan = await fetch("api/plan").then(x => x.json()) || []; } catch {}
+  const taken = new Map();
+  for (const h of hosts) taken.set(h.ip, "in uso: " + (label(h) || h.mac || ""));
+  for (const g of gone) if (!taken.has(g.ip)) taken.set(g.ip, "conosciuto, ora spento: " + (g.name || g.friendly || g.hostname || g.mac || ""));
+  for (const p of plan) if (!taken.has(p.ip)) taken.set(p.ip, "previsto nel piano: " + (p.name || ""));
+  const ranges = []; let start = null;
+  for (let n = r[0]; n <= r[1] + 1; n++) {
+    const free = n <= r[1] && !taken.has(nToIP(n));
+    if (free && start === null) start = n;
+    if (!free && start !== null) { ranges.push([start, n - 1]); start = null; }
+  }
+  const total = ranges.reduce((a, [x, y]) => a + y - x + 1, 0);
+  openSheet("IP liberi", `<p>${total} indirizzi liberi in ${esc($("target").value)}: non rispondono ora, non sono di dispositivi conosciuti (anche spenti) e non sono nel piano IP. Clic per copiare.</p>
+    <p class="muted">Controlla comunque l'intervallo del DHCP, se sulla rete c'è un router.</p>
+    <div class="free">${ranges.map(([x, y]) => `<a data-ip="${nToIP(x)}">${x === y ? nToIP(x) : nToIP(x) + " – " + nToIP(y).split(".").pop()}</a>`).join("") || "Nessuno."}</div>`);
+  $("shBody").querySelectorAll("a[data-ip]").forEach(a => a.onclick = () => copy(a.dataset.ip));
+}
+
+// Live DMX: universes heard on Art-Net and sACN, with the levels of one.
+let dmxES = null, dmxSel = "", dmxSess = "";
+function dmxView() {
+  openSheet("Universi DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Clic su un universo per vedere i 512 canali.</p>
+    <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxGrid"></div>`);
+  dmxSess = Math.random().toString(36).slice(2);
+  dmxES = new EventSource(`api/dmx?s=${dmxSess}&u=${encodeURIComponent(dmxSel)}`);
+  dmxES.addEventListener("snap", e => drawDMX(JSON.parse(e.data)));
+  dmxES.onerror = () => { if (dmxES) $("dmxBody").innerHTML = "<p>Ascolto interrotto.</p>"; };
+}
+function drawDMX(unis) {
+  if (!$("dmxBody")) return;
+  if (!unis.length) { $("dmxBody").innerHTML = "<p>Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.</p>"; $("dmxGrid").innerHTML = ""; return; }
+  const multi = u => u.sources.length > 1;
+  $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th></tr></thead><tbody>
+    ${unis.map(u => `<tr class="pick${u.id === dmxSel ? " sel" : ""}" data-id="${esc(u.id)}"><td><b>${u.number}</b></td><td>${esc(u.protocol)}</td>
+      <td>${u.sources.map(x => `${esc(x.name || x.ip)}${x.name ? ` <span class="muted">${esc(x.ip)}</span>` : ""}${x.priority ? ` <span class="muted">prio ${x.priority}</span>` : ""}`).join("<br>")}${multi(u) ? ' <span class="badge warn">più sorgenti</span>' : ""}</td>
+      <td>${u.sources.map(x => x.fps.toFixed(0)).join(" / ")}</td><td>${u.active} / 512</td></tr>`).join("")}
+  </tbody></table></div>`;
+  $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => {
+    dmxSel = tr.dataset.id;
+    fetch(`api/dmx?s=${dmxSess}&u=${encodeURIComponent(dmxSel)}`, {method: "POST"});
+  });
+  const sel = unis.find(u => u.id === dmxSel && u.levels);
+  $("dmxGrid").innerHTML = sel ? `<h3 style="font-size:14px;margin:16px 0 0">${esc(sel.protocol)} universo ${sel.number}</h3><div class="dmxgrid">${sel.levels.map((v, i) =>
+    `<i title="canale ${i + 1}: ${v} (${Math.round(v / 2.55)}%)" style="background:${v ? `rgba(129,215,66,${0.15 + 0.85 * v / 255})` : ""}"></i>`).join("")}</div>` : "";
+}
+
+// Switch ports: which port of which managed switch each device is on.
+function switchView() {
+  openSheet("Porte switch", `<p>wasaping chiede agli switch gestiti (Luminex, Cisco, Netgear, Ubiquiti, MikroTik…) su quale porta si trova ogni dispositivo, via SNMP in sola lettura.</p>
+    <p class="muted">Sullo switch deve essere attivo SNMP v2c con una community di lettura (spesso <b>public</b>).</p>
+    <div class="row"><input id="swComm" value="${esc(snmpCommunity)}" style="width:180px" placeholder="community" title="Community SNMP di lettura"><button class="primary" id="swGo" ${hosts.length ? "" : "disabled"}>Cerca</button>${hosts.length ? "" : '<span class="muted">Fai prima una scansione.</span>'}</div>
+    <div id="swOut"></div>`);
+  $("swGo").onclick = async () => {
+    $("swGo").disabled = true; $("swOut").innerHTML = "<p>Chiedo agli switch…</p>";
+    try {
+      const d = await post("api/switchports", {community: $("swComm").value}).then(r => r.json());
+      snmpCommunity = d.community; swPorts = d.ports || {};
+      for (const h of hosts) h.swport = h.mac ? swPorts[h.mac] : undefined;
+      const rows = hosts.filter(h => h.swport).sort((a, b) => (a.swport.switch + a.swport.port).localeCompare(b.swport.switch + b.swport.port, "it", {numeric: true}));
+      $("swOut").innerHTML = !d.switches || !d.switches.length
+        ? "<p>Nessuno switch ha risposto. Controlla che SNMP sia attivo e la community giusta.</p>"
+        : `<p>${d.switches.map(x => `<b>${esc(x.name || x.ip)}</b> <span class="muted">${esc(x.ip)} · ${x.macs} indirizzi</span>`).join("<br>")}</p>
+           <div class="wrap" style="margin:0"><table><thead><tr><th>Switch</th><th>Porta</th><th>Descrizione porta</th><th>Dispositivo</th><th>IP</th></tr></thead><tbody>
+           ${rows.map(h => `<tr><td>${esc(h.swport.switch)}</td><td class="mono">${esc(h.swport.port)}</td><td class="nt">${esc(h.swport.alias || "")}</td><td class="nt"><b>${esc(label(h) || h.mac)}</b>${h.swport.shared > 1 ? ` <span class="muted" title="Su questa porta ci sono ${h.swport.shared} indirizzi: probabilmente un altro switch o un collegamento tra switch">· ${h.swport.shared} indirizzi</span>` : ""}</td><td class="mono">${esc(h.ip)}</td></tr>`).join("")}
+           </tbody></table></div>`;
+      render();
+    } catch (e) { $("swOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
+    $("swGo").disabled = false;
+  };
+}
+
+async function exportVenue() {
+  try {
+    const v = await fetch("api/venue").then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
+    download(`wasaping-locale-${stamp()}.wasaping`, JSON.stringify(v, null, 2), "application/json");
+  } catch (e) { toast("Non esportato: " + e.message); }
+}
+async function importVenue(text) {
+  try {
+    const d = await post("api/venue", JSON.parse(text)).then(r => r.json());
+    toast(`Locale importato: ${d.devices} dispositivi. Rifaccio la scansione.`);
+    if (!es) start();
+  } catch (e) { toast("Non importato: " + e.message); }
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("sheet").classList.contains("open")) closeSheet(); });
 
 function sortValue(h, k) {
   switch (k) {
@@ -554,7 +996,7 @@ function render() {
     const sub = [h.role, h.name ? (h.friendly || h.hostname) : (h.friendly && h.hostname && h.friendly !== h.hostname ? h.hostname : "")].filter(Boolean).join(" · ");
     const warns = (h.warnings || []).length;
     return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${selected === h.key ? " sel" : ""}">
-    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${h.critical ? '<span class="badge crit">critico</span>' : ""}${warns ? `<span class="badge warn" title="${esc(h.warnings.join("\n"))}">⚠ ${warns}</span>` : ""}${sub ? `<span class="sub">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
+    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${h.critical ? '<span class="badge crit">critico</span>' : ""}${warns ? `<span class="badge warn" title="${esc(h.warnings.join("\n"))}">⚠ ${warns}</span>` : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
     <td class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
@@ -650,7 +1092,7 @@ function openDetail(key) {
   const changed = selected !== key;
   selected = key;
   const isGone = !hosts.includes(h);
-  $("dTitle").innerHTML = kindIcon(h.kind) + esc(label(h) || h.ip);
+  $("dTitle").innerHTML = kindIcon(h.kind) + `<span class="nt">${esc(label(h) || h.ip)}</span>`;
   $("dSub").textContent = (KIND[h.kind] || KIND[""])[0] + (isGone ? " · non risponde" : "");
   if (changed) { stopTool(); $("dToolHost").value = h.ip; $("dPings").hidden = $("dToolOut").hidden = true; }
   if (changed) { $("dName").value = h.name || ""; $("dRole").value = h.role || ""; $("dNote").value = h.note || ""; $("dCrit").checked = !!h.critical; $("dMsg").textContent = ""; }
@@ -664,6 +1106,7 @@ function openDetail(key) {
     ...(h.model ? [["Modello", esc(h.model)]] : []),
     ...(h.friendly ? [["Nome del dispositivo", esc(h.friendly)]] : []),
     ...(h.web_title ? [["Pagina web", esc(h.web_title)]] : []),
+    ...(h.swport ? [["Switch", `${esc(h.swport.switch)} · porta <b>${esc(h.swport.port)}</b>${h.swport.alias ? ` <span class="muted">(${esc(h.swport.alias)})</span>` : ""}`]] : []),
     ["Nome in rete", esc(h.hostname) || "—"],
     ...(h.protocols && h.protocols.length ? [["Protocolli", protoChips(h)]] : []),
     ...showFacts(h),
@@ -690,7 +1133,7 @@ function showFacts(h) {
   const f = [];
   if (h.artnet) {
     const a = h.artnet;
-    f.push(["Art-Net", esc([a.short_name, a.style].filter(Boolean).join(" · "))]);
+    f.push(["Art-Net", esc([a.short_name, tr(a.style)].filter(Boolean).join(" · "))]);
     if ((a.out || []).length) f.push(["Universi in uscita", esc(ranges(a.out)) + ' <span class="muted">(port-address)</span>']);
     if ((a.in || []).length) f.push(["Universi in ingresso", esc(ranges(a.in))]);
     if (a.report) f.push(["Stato del nodo", esc(a.report)]);
@@ -707,7 +1150,7 @@ function showFacts(h) {
     const p = h.pjlink;
     if (p.needs_login) f.push(["PJLink", "protetto da password"]);
     else {
-      if (p.power) f.push(["Stato proiettore", esc(p.power)]);
+      if (p.power) f.push(["Stato proiettore", esc(tr(p.power))]);
       if ((p.lamp_hours || []).length) f.push(["Ore lampada", esc(p.lamp_hours.join(" / "))]);
       if (p.errors) f.push(["Errori", esc(p.errors)]);
     }
@@ -848,84 +1291,114 @@ function universeText(h) {
 $("printBtn").onclick = () => {
   const title = network ? (network.name || network.auto) : "Rete";
   const list = [...hosts].sort((a, b) => ipNum(a.ip) - ipNum(b.ip));
-  const rows = list.map(h => `<tr><td>${esc(h.ip)}</td><td><b>${esc(label(h) || "—")}</b>${h.critical ? " ●" : ""}</td><td>${esc(h.role || "")}</td><td>${esc((KIND[h.kind] || KIND[""])[0])}</td><td>${esc(h.model || h.vendor || "")}</td><td>${esc(h.mac || "")}</td><td>${esc((h.protocols || []).join(", "))}</td><td>${esc(universeText(h))}</td><td>${esc(h.note || "")}</td></tr>`).join("");
+  const rows = list.map(h => `<tr><td>${esc(h.ip)}</td><td><b>${esc(label(h) || "—")}</b>${h.critical ? " ●" : ""}</td><td>${esc(h.role || "")}</td><td>${esc((KIND[h.kind] || KIND[""])[0])}</td><td>${esc(h.model || h.vendor || "")}</td><td>${esc(h.mac || "")}</td><td>${esc((h.protocols || []).join(", "))}</td><td>${esc(universeText(h))}</td><td>${esc(h.swport ? h.swport.switch + " " + h.swport.port : "")}</td><td>${esc(h.note || "")}</td></tr>`).join("");
   const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>${esc(title)} — elenco IP</title>
 <style>body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:11px;color:#171717;margin:24px}h1{font-size:18px;margin:0}p{color:#666;margin:4px 0 14px}
 table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left;vertical-align:top}th{font-size:10px;text-transform:uppercase;color:#666}
 td:first-child,td:nth-child(6){font-family:Menlo,Consolas,monospace}tr:nth-child(even) td{background:#f6f8f3}@page{size:A4 landscape;margin:12mm}</style></head>
 <body><h1>${esc(title)}</h1><p>Elenco IP · ${list.length} dispositivi · ${esc(new Date().toLocaleString("it"))} · wasaping · ● = critico</p>
-<table><thead><tr><th>IP</th><th>Dispositivo</th><th>Ruolo</th><th>Tipo</th><th>Modello</th><th>MAC</th><th>Protocolli</th><th>Universi</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr><th>IP</th><th>Dispositivo</th><th>Ruolo</th><th>Tipo</th><th>Modello</th><th>MAC</th><th>Protocolli</th><th>Universi</th><th>Switch</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table>
 <script>addEventListener("load",()=>setTimeout(()=>print(),300))<\/script></body></html>`;
+  let page = html;
+  if (LANG === "en") {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    translateTree(doc.body);
+    for (const [it, en] of [["Elenco IP", "IP list"], ["dispositivi", "devices"], ["critico", "critical"], ["Ruolo", "Role"], ["Tipo", "Type"], ["Universi", "Universes"], ["Note", "Notes"], ["Modello", "Model"], ["Protocolli", "Protocols"], ["Dispositivo", "Device"]])
+      doc.body.innerHTML = doc.body.innerHTML.replaceAll(`>${it}<`, `>${en}<`).replace(`Elenco IP ·`, "IP list ·").replace(" dispositivi ·", " devices ·").replace("● = critico", "● = critical");
+    page = "<!DOCTYPE html>" + doc.documentElement.outerHTML;
+  }
   if (ui === "browser") {
     const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); return; }
+    if (w) { w.document.write(page); w.document.close(); return; }
   }
-  post("api/save", {name: `wasaping-elenco-${stamp()}.html`, data: html, open: true})
+  post("api/save", {name: `wasaping-elenco-${stamp()}.html`, data: page, open: true})
     .then(r => r.json()).then(d => toast("Elenco aperto nel browser: " + d.path))
     .catch(e => toast("Non salvato: " + e.message));
 };
 
-// ---- Show monitor: critical devices, checked every few seconds ----
-let monTimer = null, monState = {}, monDevices = [], audioCtx = null;
+// ---- Show monitor: runs in the program; the page shows its state ----
+let monTimer = null, monLast = null, audioCtx = null, monSeenEvent = -1;
 $("monBtn").onclick = openMonitor;
 $("mClose").onclick = closeMonitor;
-$("mEvery").onchange = () => { if (monTimer) { clearTimeout(monTimer); monTick(); } };
+$("mEvery").onchange = () => post("api/monitor", {on: !!(monLast && monLast.on), every: +$("mEvery").value}).then(monRefresh);
+$("mToggle").onclick = () => post("api/monitor", {on: !(monLast && monLast.on), every: +$("mEvery").value}).then(monRefresh);
+$("mExport").onclick = () => {
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const ev = (monLast && monLast.events) || [];
+  const lines = ["data,ora,dispositivo,ip,evento,durata_s"].concat(ev.map(e => {
+    const d = new Date(e.at);
+    return [d.toLocaleDateString("it"), d.toLocaleTimeString("it"), q(e.name), e.ip, e.up ? "di nuovo in linea" : "non risponde", e.up ? Math.round(e.down_for) : ""].join(",");
+  }));
+  download(`wasaping-registro-${stamp()}.csv`, lines.join("\n"), "text/csv");
+};
 
 async function openMonitor() {
-  try { monDevices = await fetch("api/critical").then(r => r.json()) || []; } catch { monDevices = []; }
-  // Devices marked critical in this session but not saved yet are in hosts too.
-  monState = {};
   $("monitor").classList.add("open"); $("monitor").setAttribute("aria-hidden", "false");
-  $("mInfo").textContent = network ? (network.name || network.auto) : "";
-  drawTiles();
-  if (monDevices.length) monTick();
   // Browsers need a user gesture to allow sound later.
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
+  const st = await monRefresh();
+  // Opening the monitor starts it, if there is something to watch.
+  if (st && !st.on && (st.devices || []).length === 0) {
+    const crit = await fetch("api/critical").then(r => r.json()).catch(() => []);
+    if ((crit || []).length) await post("api/monitor", {on: true, every: +$("mEvery").value}).then(monRefresh);
+  } else if (st && !st.on) {
+    await post("api/monitor", {on: true, every: +$("mEvery").value}).then(monRefresh);
+  }
+  fetch("api/remote").then(r => r.json()).then(showRemoteHint).catch(() => {});
+  clearInterval(monTimer); monTimer = setInterval(monRefresh, 1000);
 }
 function closeMonitor() {
-  clearTimeout(monTimer); monTimer = null;
+  clearInterval(monTimer); monTimer = null;
   $("monitor").classList.remove("open"); $("monitor").setAttribute("aria-hidden", "true");
 }
-function drawTiles() {
-  if (!monDevices.length) {
+async function monRefresh() {
+  let st;
+  try { st = await fetch("api/monitor").then(r => r.json()); } catch { return null; }
+  monLast = st;
+  $("mEvery").value = String(st.every);
+  $("mToggle").textContent = st.on ? "Ferma" : "Avvia";
+  $("mToggle").classList.toggle("primary", !st.on);
+  $("mInfo").textContent = (st.network || "") + (st.on ? " · attivo, anche a finestra chiusa" : " · fermo");
+  drawTiles(st);
+  const ev = st.events || [];
+  $("mEvents").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b class="nt">${esc(e.name)}</b> ${e.up ? `di nuovo in linea dopo ${esc(fmtDur(e.down_for))}` : "non risponde"}</li>`).join("") : '<li class="muted">Nessun evento.</li>';
+  // Sound for drops that happened since the page last looked.
+  const fresh = ev.filter(e => e.id > monSeenEvent && !e.up);
+  if (monSeenEvent >= 0 && fresh.length) alarm(fresh.map(e => e.name), true);
+  if (ev.length) monSeenEvent = Math.max(monSeenEvent, ev[ev.length - 1].id); else if (monSeenEvent < 0) monSeenEvent = 0;
+  return st;
+}
+const fmtDur = s => s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`;
+function drawTiles(st) {
+  const devs = st.devices || [];
+  if (!devs.length) {
     $("tiles").innerHTML = '<div class="mhint">Nessun dispositivo critico su questa rete.<br>Apri un dispositivo dall\'elenco e spunta <b>Critico</b>: console, switch principale, stagebox Dante, media server…</div>';
     $("mState").className = "state ok"; $("mState").textContent = "—";
     return;
   }
-  const down = monDevices.filter(d => monState[d.ip] && !monState[d.ip].alive);
-  $("mState").className = "state " + (down.length ? "bad" : "ok");
-  $("mState").textContent = down.length ? `${down.length} ${down.length === 1 ? "NON RISPONDE" : "NON RISPONDONO"}` : "TUTTO OK";
-  $("tiles").innerHTML = monDevices.map(d => {
-    const st = monState[d.ip], isDown = st && !st.alive;
-    const status = !st ? "controllo…" : st.alive ? (st.rtt_ms ? st.rtt_ms + " ms" : "ok") : "NON RISPONDE";
-    const since = st && st.since ? `da ${new Date(st.since).toLocaleTimeString("it")}` : "";
-    return `<div class="tile${isDown ? " down" : ""}"><div class="t">${kindIcon(d.kind)}${esc(d.name || d.friendly || d.hostname || d.ip)}</div>
-      <div class="r">${esc([d.role, d.ip].filter(Boolean).join(" · "))}</div>
+  $("mState").className = "state " + (st.down ? "bad" : "ok");
+  $("mState").textContent = !st.on ? "FERMO" : st.down ? `${st.down} ${st.down === 1 ? "NON RISPONDE" : "NON RISPONDONO"}` : "TUTTO OK";
+  $("tiles").innerHTML = devs.map(d => {
+    const isDown = d.known && !d.alive;
+    const status = !d.known ? "controllo…" : d.alive ? (d.rtt_ms ? d.rtt_ms + " ms" : "ok") : "NON RISPONDE";
+    const since = d.known && d.since ? `da ${new Date(d.since).toLocaleTimeString("it")}` : "";
+    return `<div class="tile${isDown ? " down" : ""}"><div class="t nt">${kindIcon(d.kind)}${esc(d.name)}</div>
+      <div class="r nt">${esc([d.role, d.ip].filter(Boolean).join(" · "))}</div>
       <div class="s"><b>${esc(status)}</b><span class="muted">${esc(since)}</span></div></div>`;
   }).join("");
 }
-async function monTick() {
-  const ports = {};
-  for (const d of monDevices) if ((d.ports || []).length) ports[d.ip] = d.ports.slice(0, 8);
-  try {
-    const res = await post("api/check", {ips: monDevices.map(d => d.ip), ports}).then(r => r.json());
-    const lost = [], back = [];
-    for (const r of res) {
-      const prev = monState[r.ip];
-      const changed = !prev || prev.alive !== r.alive;
-      monState[r.ip] = {...r, since: changed ? Date.now() : prev.since};
-      const d = monDevices.find(x => x.ip === r.ip), name = d ? (d.name || d.friendly || d.ip) : r.ip;
-      if (prev && prev.alive && !r.alive) lost.push(name);
-      if (prev && !prev.alive && r.alive) back.push(name);
-    }
-    drawTiles();
-    if (lost.length) alarm(lost);
-    if (back.length) post("api/notify", {title: "wasaping: di nuovo in linea", body: back.join(", ")}).catch(() => {});
-  } catch {}
-  if ($("monitor").classList.contains("open")) monTimer = setTimeout(monTick, +$("mEvery").value * 1000);
+function showRemoteHint(r) {
+  $("rOn").checked = !!(r && r.on);
+  $("mRemote").innerHTML = r && r.on
+    ? `Apri <b>${esc(r.url)}</b> sul dispositivo (stessa rete) e inserisci il PIN <b style="font-size:16px;letter-spacing:2px">${esc(r.pin)}</b>. Da lì si guarda soltanto, non si cambia niente. <a id="rNew">Nuovo PIN</a>`
+    : "Mostra questo Monitor su un iPad o un telefono della stessa rete, protetto da un PIN.";
+  if ($("rNew")) $("rNew").onclick = () => post("api/remote", {on: true, new_pin: true}).then(r => r.json()).then(showRemoteHint).catch(e => toast(e.message));
 }
-function alarm(names) {
-  post("api/notify", {title: "⚠️ wasaping: non risponde", body: names.join(", ")}).catch(() => {});
+$("rOn").onchange = () => post("api/remote", {on: $("rOn").checked}).then(r => r.json()).then(showRemoteHint)
+  .catch(e => { toast("Non attivato: " + e.message); $("rOn").checked = false; });
+function alarm(names, quiet) {
+  // The program sends the system notification; the page adds sound and a toast.
+  if (!quiet) post("api/notify", {title: "⚠️ wasaping: non risponde", body: names.join(", ")}).catch(() => {});
   toast("Non risponde: " + names.join(", "));
   if (!$("mSound").checked || !audioCtx) return;
   try {
@@ -950,6 +1423,7 @@ $("ouiBtn").onclick = async () => {
     $("status").textContent = "Download non riuscito: " + await r.text();
   }
 };
+
 
 init();
 </script>

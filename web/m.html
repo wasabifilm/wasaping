@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#171717">
+<title>wasaping · Monitor</title>
+<style>
+  :root { --bg: #171717; --panel: #1f1f1f; --ink: #fafaff; --muted: #8a8a8d; --line: #333335; --wasabi: #81d742; --warn: #d63f3f;
+          font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 0; flex-wrap: wrap; }
+  .logo { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #b4ec8a, var(--wasabi) 55%, #5ea52a); }
+  h1 { font-size: 20px; margin: 0; }
+  h1 b { color: var(--wasabi); }
+  .net { color: var(--muted); font-size: 14px; flex-basis: 100%; }
+  .state { font-weight: 800; font-size: 18px; padding: 6px 14px; border-radius: 8px; margin-left: auto; }
+  .ok { background: var(--wasabi); color: #171717; }
+  .bad { background: var(--warn); color: #fff; animation: blink 1s steps(2) infinite; }
+  .off { background: var(--line); color: var(--muted); }
+  @keyframes blink { 50% { opacity: .55; } }
+  #tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .tile { border-radius: 12px; padding: 14px; border: 2px solid var(--wasabi); background: var(--panel); }
+  .tile.down { border-color: var(--warn); background: rgba(214,63,63,.15); }
+  .tile .t { font-weight: 700; font-size: 17px; }
+  .tile .r { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .tile .s { margin-top: 10px; font-size: 14px; font-weight: 700; color: var(--wasabi); }
+  .tile.down .s { color: var(--warn); }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 24px 0 8px; }
+  ol { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  li .t { color: var(--muted); font-family: ui-monospace, Menlo, monospace; margin-right: 8px; }
+  li.down b { color: var(--warn); }
+  li.up b { color: var(--wasabi); }
+  .warn { border: 1px solid #f2994a; border-radius: 8px; padding: 10px 12px; font-size: 14px; margin-top: 8px; }
+  form { max-width: 320px; margin: 18vh auto 0; text-align: center; }
+  input { font: inherit; font-size: 28px; letter-spacing: 8px; text-align: center; width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  button.primary { background: var(--wasabi); border-color: var(--wasabi); color: #171717; font-weight: 700; width: 100%; margin-top: 12px; font-size: 18px; }
+  .err { color: var(--warn); min-height: 24px; margin-top: 10px; }
+  .muted { color: var(--muted); }
+  .foot { color: var(--muted); font-size: 12px; margin: 24px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div id="login" hidden>
+  <form id="f">
+    <div class="logo" style="margin:0 auto 12px"></div>
+    <h1>wasa<b>ping</b> · Monitor</h1>
+    <p class="muted" id="hint">Inserisci il PIN che vedi nel Monitor di wasaping sul computer.</p>
+    <input id="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" autofocus>
+    <button class="primary" id="enter">Entra</button>
+    <div class="err" id="err"></div>
+  </form>
+</div>
+<div id="app" hidden>
+  <header>
+    <div class="logo"></div><h1>wasa<b>ping</b></h1>
+    <span class="state off" id="state">…</span>
+    <div class="net" id="net"></div>
+  </header>
+  <div id="tiles"></div>
+  <div id="issues"></div>
+  <h2 id="logH">Registro</h2>
+  <ol id="events"></ol>
+  <div class="foot"><span id="upd"></span><button id="sound">🔈 Attiva l'allarme sonoro</button></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const EN = (navigator.language || "it").toLowerCase().startsWith("it") ? null : {
+  "Inserisci il PIN che vedi nel Monitor di wasaping sul computer.": "Type the PIN shown in wasaping's Monitor on the computer.", "Entra": "Enter",
+  "Registro": "Log", "🔈 Attiva l'allarme sonoro": "🔈 Turn on the sound alarm", "🔊 Allarme sonoro attivo": "🔊 Sound alarm on",
+  "MONITOR FERMO": "MONITOR STOPPED", "TUTTO OK": "ALL OK", "NON RISPONDE": "NOT RESPONDING", "controllo…": "checking…", "Nessun evento.": "No events.",
+  "non risponde": "not responding", "di nuovo in linea dopo ": "back online after ", "Aggiornato alle ": "Updated at ", "⚠️ Computer non raggiungibile": "⚠️ Computer not reachable",
+  "Nessun dispositivo critico. Segnali dal computer, nel pannello di dettaglio.": "No critical devices. Mark them on the computer, in the detail panel.",
+  "PIN sbagliato": "Wrong PIN", "troppi tentativi: riprova tra un minuto": "too many attempts: try again in a minute",
+};
+const L = s => (EN && EN[s]) || s;
+if (EN) document.documentElement.lang = "en";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dur = s => s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`;
+let audio = null, seen = -1, timer = null;
+
+$("f").onsubmit = async e => {
+  e.preventDefault();
+  const r = await fetch("login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({pin: $("pin").value.trim()})});
+  if (r.ok) { $("err").textContent = ""; start(); } else $("err").textContent = L((await r.text()).trim());
+};
+$("sound").onclick = () => {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); beep(1); $("sound").textContent = L("🔊 Allarme sonoro attivo"); } catch {}
+};
+function beep(n) {
+  if (!audio) return;
+  const t = audio.currentTime;
+  for (let i = 0; i < n; i++) {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = "square"; o.frequency.value = i % 2 ? 660 : 880;
+    g.gain.setValueAtTime(0.2, t + i * 0.25); g.gain.setValueAtTime(0, t + i * 0.25 + 0.18);
+    o.connect(g).connect(audio.destination); o.start(t + i * 0.25); o.stop(t + i * 0.25 + 0.2);
+  }
+}
+async function tick() {
+  let r;
+  try { r = await fetch("state", {cache: "no-store"}); } catch { $("upd").textContent = L("⚠️ Computer non raggiungibile"); return; }
+  if (r.status === 401) { clearInterval(timer); $("app").hidden = true; $("login").hidden = false; return; }
+  const d = await r.json(), m = d.monitor;
+  $("login").hidden = true; $("app").hidden = false;
+  $("net").textContent = m.network || "";
+  const st = $("state");
+  st.className = "state " + (!m.on ? "off" : m.down ? "bad" : "ok");
+  st.textContent = !m.on ? L("MONITOR FERMO") : m.down ? (EN ? `${m.down} NOT RESPONDING` : `${m.down} NON ${m.down === 1 ? "RISPONDE" : "RISPONDONO"}`) : L("TUTTO OK");
+  const devs = m.devices || [];
+  $("tiles").innerHTML = devs.length ? devs.map(x => {
+    const down = x.known && !x.alive;
+    return `<div class="tile${down ? " down" : ""}"><div class="t">${esc(x.name)}</div><div class="r">${esc([x.role, x.ip].filter(Boolean).join(" · "))}</div>
+      <div class="s">${!x.known ? L("controllo…") : x.alive ? (x.rtt_ms ? x.rtt_ms + " ms" : "ok") : L("NON RISPONDE")}</div></div>`;
+  }).join("") : `<p class="muted">${L("Nessun dispositivo critico. Segnali dal computer, nel pannello di dettaglio.")}</p>`;
+  $("issues").innerHTML = ((d.scan && d.scan.issues) || []).map(i => `<div class="warn">⚠️ ${esc(i)}</div>`).join("");
+  const ev = m.events || [];
+  $("events").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b>${esc(e.name)}</b> ${e.up ? L("di nuovo in linea dopo ") + dur(e.down_for) : L("non risponde")}</li>`).join("") : `<li class="muted">${L("Nessun evento.")}</li>`;
+  const fresh = ev.filter(e => e.id > seen && !e.up);
+  if (seen >= 0 && fresh.length) beep(3);
+  seen = ev.length ? Math.max(seen, ev[ev.length - 1].id) : Math.max(seen, 0);
+  $("upd").textContent = L("Aggiornato alle ") + new Date().toLocaleTimeString(EN ? "en-GB" : "it");
+}
+for (const id of ["hint", "enter", "logH", "sound"]) $(id).textContent = L($(id).textContent);
+function start() { tick(); clearInterval(timer); timer = setInterval(tick, 2000); }
+start();
+</script>
+</body>
+</html>

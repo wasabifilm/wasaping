@@ -68,7 +68,7 @@ func findAppBrowser() string {
 	return ""
 }
 
-var reExportName = regexp.MustCompile(`^wasaping-[0-9A-Za-z-]+\.(csv|json|html)$`)
+var reExportName = regexp.MustCompile(`^wasaping-[0-9A-Za-z-]+\.(csv|json|html|wasaping)$`)
 
 // handleSave writes an export into the Downloads folder and shows it. App
 // windows cannot always download files from the page, so the server does it.

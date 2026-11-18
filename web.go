@@ -61,6 +61,10 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/check", handleCheck)
 	mux.HandleFunc("/api/critical", handleCritical)
 	mux.HandleFunc("/api/notify", handleNotify)
+	mux.HandleFunc("/api/pingtest", handlePingTest)
+	mux.HandleFunc("/api/bg", handleBackground)
+	mux.HandleFunc("/api/last", handleLast)
+	mux.HandleFunc("/api/trace", handleTrace)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
 		lastPing.Store(time.Now().UnixNano())
 		w.WriteHeader(http.StatusNoContent)
@@ -111,6 +115,7 @@ func runWeb(ctx context.Context, args []string) error {
 	} else {
 		go func() { helperState.Store(setupARP(false)) }()
 	}
+	go backgroundLoop(ctx)
 	switch {
 	case *appMode && hasNativeWindow:
 		uiMode.Store("native")
@@ -250,8 +255,6 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming non supportato", http.StatusInternalServerError)
 		return
 	}
-	activeScan.Add(1)
-	defer activeScan.Add(-1)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 
@@ -264,19 +267,11 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		fl.Flush()
 	}
 	lastProgress := time.Time{}
-	start := time.Now()
-	sess := devices().Begin(r.Context(), ips)
-	var fresh []string
-	hosts, err := scanner.Scan(r.Context(), scanner.Options{
-		Targets:    ips,
+	res, err := runCollect(r.Context(), q.Get("target"), ips, scanner.Options{
 		Ping:       q.Get("ping") != "0",
 		ResolveDNS: q.Get("dns") != "0",
 		ScanPorts:  ports,
-	}, func(h scanner.Host) {
-		v := sess.View(h)
-		if v.New {
-			fresh = append(fresh, firstNonEmpty(v.Name, v.Hostname, v.IP))
-		}
+	}, false, func(v HostView) {
 		send("host", v)
 	}, func(p scanner.Progress) {
 		mu.Lock()
@@ -293,21 +288,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		send("failure", map[string]string{"error": err.Error()})
 		return
 	}
-	gone := sess.Finish(ips)
-	if len(fresh) > 0 && appModeOn && q.Get("auto") == "1" {
-		// Background re-scan found someone new: tell the user even if the
-		// window is not in front.
-		notify("wasaping: nuovi dispositivi", strings.Join(fresh, ", "))
-	}
-	send("done", map[string]any{
-		"count":     len(hosts),
-		"seconds":   time.Since(start).Seconds(),
-		"macHidden": scanner.MACsHidden(hosts),
-		"gone":      gone,
-		"new":       len(fresh),
-		"network":   sess.Network(),
-		"issues":    scanner.NetworkIssues(hosts),
-	})
+	done := *res
+	done.Hosts = nil // already streamed one by one
+	send("done", done)
 }
 
 func handleUpdateOUI(w http.ResponseWriter, r *http.Request) {

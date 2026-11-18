@@ -14,9 +14,21 @@
     font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #171717; --panel: #1f1f1f; --ink: #fafaff; --muted: #8a8a8d; --line: #333335;
-            --wasabi-text: #81d742; --wasabi-soft: #24301b; --shadow: 0 8px 30px rgba(0,0,0,.5); }
+    :root:not([data-theme="light"]) { --bg: #171717; --panel: #1f1f1f; --ink: #fafaff; --muted: #8a8a8d; --line: #333335;
+            --wasabi-text: #81d742; --wasabi-soft: #24301b; --shadow: 0 8px 30px rgba(0,0,0,.5); color-scheme: dark; }
   }
+  :root[data-theme="dark"] { --bg: #171717; --panel: #1f1f1f; --ink: #fafaff; --muted: #8a8a8d; --line: #333335;
+          --wasabi-text: #81d742; --wasabi-soft: #24301b; --shadow: 0 8px 30px rgba(0,0,0,.5); color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  #theme { margin-left: auto; border: none; background: none; color: var(--muted); font-size: 13px; padding: 4px 8px; }
+  #theme:hover { color: var(--ink); }
+  .tool { margin-top: 14px; }
+  .tool .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tool input { flex: 1 1 120px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .tool pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; max-height: 220px; overflow: auto; margin: 8px 0 0; white-space: pre-wrap; }
+  .pings { display: flex; gap: 2px; margin-top: 8px; align-items: flex-end; height: 34px; }
+  .pings i { width: 6px; background: var(--wasabi); border-radius: 2px 2px 0 0; min-height: 3px; }
+  .pings i.lost { background: var(--warn); height: 34px !important; opacity: .7; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font-size: 14px; }
   header { display: flex; align-items: center; gap: 12px; padding: 18px 24px 8px; }
@@ -90,7 +102,7 @@
   .check, #detail label.check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; text-transform: none; letter-spacing: 0; color: var(--ink); cursor: pointer; }
   .check input, #detail .check input { width: auto; margin: 0; }
   ::placeholder { color: var(--muted); opacity: .8; }
-  @media (min-width: 1100px) { body.detail-open .bar, body.detail-open .status, body.detail-open .netbar, body.detail-open .notice, body.detail-open .progress, body.detail-open .wrap, body.detail-open .foot { margin-right: 404px; } body.detail-open .bar, body.detail-open .status, body.detail-open .netbar { margin-right: 380px; } }
+  @media (min-width: 1100px) { body.detail-open .bar, body.detail-open .status, body.detail-open .netbar, body.detail-open .notice, body.detail-open .progress, body.detail-open .wrap, body.detail-open .foot { margin-right: 404px; } body.detail-open .bar, body.detail-open .status, body.detail-open .netbar { margin-right: 380px; } body.detail-open header { margin-right: 380px; } }
   /* Show monitor */
   #monitor { position: fixed; inset: 0; background: var(--bg); z-index: 20; display: none; flex-direction: column; }
   #monitor.open { display: flex; }
@@ -136,6 +148,7 @@
   <div class="logo"></div>
   <h1>wasa<b>ping</b></h1>
   <span class="tag">a spicy little IP scanner</span>
+  <button id="theme" title="Tema chiaro o scuro">Tema: automatico</button>
 </header>
 
 <div class="bar">
@@ -210,6 +223,16 @@
     <button id="dForget" class="danger" title="Toglie il dispositivo dall'elenco dei conosciuti">Dimentica</button>
   </div>
   <div class="msg" id="dMsg"></div>
+  <div class="tool">
+    <label for="dToolHost">Strumenti di rete</label>
+    <div class="row">
+      <input id="dToolHost" spellcheck="false" title="IP o nome: anche un indirizzo internet, es. 8.8.8.8">
+      <button id="dPing" title="20 ping: perdite, tempi e stabilità del collegamento">Qualità del collegamento</button>
+      <button id="dTrace" title="Il percorso dei pacchetti fino al dispositivo">Traceroute</button>
+    </div>
+    <div class="pings" id="dPings" hidden></div>
+    <pre id="dToolOut" hidden></pre>
+  </div>
 </aside>
 
 <section id="monitor" aria-hidden="true">
@@ -257,7 +280,7 @@ const KIND = {
   phone:    ["Telefono",      '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>'],
   tablet:   ["Tablet",        '<rect x="4.5" y="3" width="15" height="18" rx="2"/><path d="M11 18h2"/>'],
   printer:  ["Stampante",     '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 14h10v7H7z"/>'],
-  tv:       ["TV / media",    '<rect x="2.5" y="4" width="19" height="13" rx="1.5"/><path d="M8 21h8"/>'],
+  tv:       ["TV / media",    '<rect x="2.5" y="7" width="19" height="13" rx="2"/><path d="M8 3l4 4 4-4"/>'],
   speaker:  ["Altoparlante",  '<rect x="6" y="2.5" width="12" height="19" rx="2"/><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="6.5" r="1"/>'],
   nas:      ["NAS / archivio",'<rect x="4" y="3" width="16" height="8" rx="1.5"/><rect x="4" y="13" width="16" height="8" rx="1.5"/><path d="M8 7h.01M8 17h.01"/>'],
   camera:   ["Videocamera",   '<path d="M3 7h12v10H3z"/><path d="M15 10l6-3v10l-6-3"/>'],
@@ -324,7 +347,9 @@ async function init() {
     const ping = () => fetch("api/ping", {method: "POST"}).catch(() => {});
     ping(); setInterval(ping, 10000);
   }
-  try { $("repeat").value = localStorage.getItem("wasaping.repeat") || "0"; } catch {}
+  try { const b = await fetch("api/bg").then(r => r.json()); $("repeat").value = String(b.repeat_minutes || 0); } catch {}
+  try { const last = await fetch("api/last").then(r => r.json()); if (last && !hosts.length) applyResult(last); } catch {}
+  setInterval(pollLast, 15000);
   showHelper(info.helper);
 }
 
@@ -367,17 +392,54 @@ $("ports").onchange = e => {
 };
 for (const id of ["target", "custom"]) $(id).onkeydown = e => { if (e.key === "Enter" && !es) start(); };
 $("repeat").onchange = () => {
-  try { localStorage.setItem("wasaping.repeat", $("repeat").value); } catch {}
-  schedule();
+  post("api/bg", {repeat_minutes: +$("repeat").value})
+    .then(() => toast(+$("repeat").value ? "wasaping ripeterà la scansione da solo, anche a finestra chiusa." : "Ripetizione automatica spenta."))
+    .catch(e => toast("Non salvato: " + e.message));
+};
+
+// A background scan finished (menu bar, automatic repeat): show it.
+let shownAt = "";
+async function pollLast() {
+  if (es || $("monitor").classList.contains("open")) return;
+  try {
+    const last = await fetch("api/last").then(r => r.json());
+    if (last && last.at !== shownAt) applyResult(last);
+  } catch {}
+}
+function applyResult(r) {
+  hosts = r.hosts || [];
+  finish(r, `${r.count} dispositivi · scansione ${r.auto ? "automatica" : ""} delle ${new Date(r.at).toLocaleTimeString("it", {hour: "2-digit", minute: "2-digit"})}`.replace("scansione  delle", "scansione delle"));
+}
+
+// Global hooks for the macOS menu (⌘R, ⌘F, ⇧⌘M).
+window.wasapingScan = () => { if (!es) start(); };
+window.wasapingFind = () => { $("filter").focus(); $("filter").select(); };
+window.wasapingMonitor = () => openMonitor();
+document.addEventListener("keydown", e => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "r" && !e.shiftKey) { e.preventDefault(); wasapingScan(); }
+  else if (k === "f") { e.preventDefault(); wasapingFind(); }
+});
+
+// Theme: automatic (follows the system), light, dark.
+const THEMES = ["", "light", "dark"], THEME_NAMES = {"": "automatico", light: "chiaro", dark: "scuro"};
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  $("theme").textContent = "Tema: " + THEME_NAMES[t];
+}
+let theme = "";
+try { theme = localStorage.getItem("wasaping.theme") || ""; } catch {}
+applyTheme(theme);
+$("theme").onclick = () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  try { localStorage.setItem("wasaping.theme", theme); } catch {}
+  applyTheme(theme);
 };
 
 $("scan").onclick = () => es ? stop("Scansione interrotta.") : start();
 
-function schedule() {
-  clearTimeout(repeatTimer); repeatTimer = null;
-  const min = +$("repeat").value;
-  if (min > 0 && !es) repeatTimer = setTimeout(() => start(true), min * 60000);
-}
+function schedule() {} // repeats are done by the program (backgroundLoop)
 
 function start(auto = false) {
   const target = $("target").value.trim();
@@ -397,19 +459,20 @@ function start(auto = false) {
     $("status").textContent = `Sondaggio ${p.done}/${p.total}… ${p.done === p.total ? "raccolgo i dettagli" : ""}`;
   });
   es.addEventListener("host", e => { hosts.push(JSON.parse(e.data)); render(); });
-  es.addEventListener("done", e => {
-    const d = JSON.parse(e.data);
+  es.addEventListener("done", e => finish(JSON.parse(e.data)));
+  es.addEventListener("failure", e => stop("Errore: " + JSON.parse(e.data).error));
+  es.onerror = () => { if (es) stop("Connessione interrotta: il target è valido?"); };
+}
+
+function finish(d, msg) {
+    shownAt = d.at || shownAt;
     gone = d.gone || [];
     network = d.network || null; issues = d.issues || [];
     showNetwork();
     fetch("api/info").then(r => r.json()).then(i => showHelper(i.helper)).catch(() => {});
     $("machidden").style.display = d.macHidden ? "flex" : "none";
     if (d.macHidden) $("oui").style.display = "none"; // no MACs, no vendors to look up
-    stop(`${d.count} dispositivi trovati in ${d.seconds.toFixed(1)} s.`);
-    if (autoRun && d.gone) {
-      const lost = d.gone.filter(g => g.critical);
-      if (lost.length) alarm(lost.map(g => g.name || g.friendly || g.ip));
-    }
+    stop(msg || `${d.count} dispositivi trovati in ${d.seconds.toFixed(1)} s.`);
     const bits = [];
     if (d.new) bits.push(`<b>${d.new} ${d.new === 1 ? "nuovo" : "nuovi"}</b>`);
     if (gone.length) bits.push(`<a id="toggleGone">${gone.length} non ${gone.length === 1 ? "risponde" : "rispondono"} (${showGone ? "nascondi" : "mostra"})</a>`);
@@ -417,9 +480,6 @@ function start(auto = false) {
     if ($("toggleGone")) $("toggleGone").onclick = () => { showGone = !showGone; $("toggleGone").textContent = `${gone.length} non ${gone.length === 1 ? "risponde" : "rispondono"} (${showGone ? "nascondi" : "mostra"})`; render(); };
     render();
     if (selected) openDetail(selected);
-  });
-  es.addEventListener("failure", e => stop("Errore: " + JSON.parse(e.data).error));
-  es.onerror = () => { if (es) stop("Connessione interrotta: il target è valido?"); };
 }
 
 function stop(msg) {
@@ -582,6 +642,7 @@ function openDetail(key) {
   const isGone = !hosts.includes(h);
   $("dTitle").innerHTML = kindIcon(h.kind) + esc(label(h) || h.ip);
   $("dSub").textContent = (KIND[h.kind] || KIND[""])[0] + (isGone ? " · non risponde" : "");
+  if (changed) { stopTool(); $("dToolHost").value = h.ip; $("dPings").hidden = $("dToolOut").hidden = true; }
   if (changed) { $("dName").value = h.name || ""; $("dRole").value = h.role || ""; $("dNote").value = h.note || ""; $("dCrit").checked = !!h.critical; $("dMsg").textContent = ""; }
   $("dName").placeholder = (h.friendly || h.hostname) ? `vuoto = ${h.friendly || h.hostname}` : "es. Console FOH";
   $("dWarn").innerHTML = (h.warnings || []).map(w => `<li>${esc(w)}</li>`).join("");
@@ -592,6 +653,7 @@ function openDetail(key) {
     ["Produttore", esc(h.vendor) || "—"],
     ...(h.model ? [["Modello", esc(h.model)]] : []),
     ...(h.friendly ? [["Nome del dispositivo", esc(h.friendly)]] : []),
+    ...(h.web_title ? [["Pagina web", esc(h.web_title)]] : []),
     ["Nome in rete", esc(h.hostname) || "—"],
     ...(h.protocols && h.protocols.length ? [["Protocolli", protoChips(h)]] : []),
     ...showFacts(h),
@@ -691,6 +753,46 @@ $("dPorts").onclick = async () => {
     openDetail(h.key);
   } catch (e) { $("dMsg").textContent = "Errore: " + e.message; }
   $("dPorts").disabled = false;
+};
+
+let toolES = null;
+function stopTool() { if (toolES) { toolES.close(); toolES = null; } $("dPing").disabled = $("dTrace").disabled = false; }
+$("dPing").onclick = () => {
+  stopTool();
+  const host = $("dToolHost").value.trim(); if (!host) return;
+  const bars = $("dPings"), out = $("dToolOut");
+  bars.hidden = false; bars.innerHTML = ""; out.hidden = false; out.textContent = `Ping di ${host}…`;
+  $("dPing").disabled = $("dTrace").disabled = true;
+  toolES = new EventSource(`api/pingtest?host=${encodeURIComponent(host)}&count=20`);
+  let max = 1;
+  toolES.addEventListener("ping", e => {
+    const p = JSON.parse(e.data);
+    if (p.ok) max = Math.max(max, p.ms);
+    bars.insertAdjacentHTML("beforeend", p.ok ? `<i data-ms="${p.ms}" title="${p.ms.toFixed(1)} ms"></i>` : '<i class="lost" title="perso"></i>');
+    bars.querySelectorAll("i[data-ms]").forEach(i => i.style.height = Math.max(3, 34 * i.dataset.ms / max) + "px");
+    out.textContent = `Ping ${p.seq}/20 · ${p.ok ? p.ms.toFixed(1) + " ms" : "perso"}`;
+  });
+  toolES.addEventListener("done", e => {
+    const d = JSON.parse(e.data);
+    const f = v => v === undefined ? "—" : v.toFixed(1);
+    const verdict = d.received === 0 ? "✗ Non risponde al ping."
+      : d.loss > 0 || d.jitter > 5 ? "⚠ Collegamento instabile: pacchetti persi o tempi che variano molto (cavo, Wi-Fi, switch?)."
+      : "✓ Collegamento stabile.";
+    out.textContent = `${verdict}\nRicevuti ${d.received}/${d.sent} · persi ${d.loss.toFixed(0)}%\nmin ${f(d.min)} · media ${f(d.avg)} · max ${f(d.max)} ms · jitter ${f(d.jitter)} ms`;
+    stopTool();
+  });
+  toolES.onerror = () => { out.textContent += "\nInterrotto."; stopTool(); };
+};
+$("dTrace").onclick = () => {
+  stopTool();
+  const host = $("dToolHost").value.trim(); if (!host) return;
+  const out = $("dToolOut");
+  $("dPings").hidden = true; out.hidden = false; out.textContent = "";
+  $("dPing").disabled = $("dTrace").disabled = true;
+  toolES = new EventSource(`api/trace?host=${encodeURIComponent(host)}`);
+  toolES.addEventListener("line", e => { out.textContent += JSON.parse(e.data) + "\n"; out.scrollTop = out.scrollHeight; });
+  toolES.addEventListener("done", stopTool);
+  toolES.onerror = stopTool;
 };
 
 $("dForget").onclick = async () => {

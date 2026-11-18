@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 PLATFORMS := windows/amd64 windows/arm64 darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
 
-.PHONY: build test release macapp icon oui clean
+.PHONY: build test release macapp icon oui winicon clean
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o wasaping .
@@ -28,6 +28,10 @@ macapp:
 
 icon:
 	python3 scripts/make_icon.py
+
+# icon of the Windows .exe (rsrc_windows_*.syso, linked automatically)
+winicon:
+	go run ./scripts/winres
 
 # refresh the vendor database built into the program (scanner/oui.txt.gz)
 oui:

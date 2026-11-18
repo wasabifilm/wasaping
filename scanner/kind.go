@@ -57,7 +57,7 @@ func GuessKind(h Host) string {
 		return false
 	}
 	switch {
-	case h.Gateway:
+	case h.Gateway, h.UPnP == "InternetGatewayDevice":
 		return KindRouter
 	// Show gear first: it is what matters on a show network.
 	case h.PJLink != nil || port(4352) || has(name, "projector", "proiettore"):
@@ -81,7 +81,7 @@ func GuessKind(h Host) string {
 		return KindPhone
 	case has(model, "ipad"):
 		return KindTablet
-	case has(model, "appletv", "chromecast", "google tv", "bravia"):
+	case has(model, "appletv", "chromecast", "google tv", "bravia") || h.UPnP == "MediaRenderer" && !has(name+model, "sonos", "speaker"):
 		return KindTV
 	case has(model, "audioaccessory", "homepod", "sonos"):
 		return KindSpeaker

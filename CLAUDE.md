@@ -18,6 +18,11 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
 - Per provare senza attrezzatura: un simulatore Art-Net/sACN è facile da scrivere (ArtPollReply in broadcast su 6454, pacchetti E1.31 su 239.255.0.x:5568); i test di `scanner/show_test.go` coprono i parser.
 - `main.go`: riga di comando. Sottocomandi: scan (default), web, app, interfaces, update-oui, version.
 - `web.go` + `web/index.html`: server su 127.0.0.1 con porta casuale, risultati in streaming via SSE (`/api/scan`). Blocca DNS rebinding (header Host) e richieste da altri siti (Sec-Fetch-Site/Origin). `/api/save` scrive le esportazioni in Download (le finestre app non scaricano blob).
+- `background.go`: `runCollect` è l'unica via per scansionare (pagina e background): registra nell'archivio e tiene `lastResult` (`/api/last`). `backgroundLoop` ripete ogni `repeat_minutes` (settings.json, `/api/bg`) e notifica nuovi e critici spariti; la pagina fa polling di `/api/last`.
+- macOS: `native_darwin.go` ha anche l'NSStatusItem (pallino verde/rosso, menu con ultimo risultato via `setStatus`); chiudere la finestra la nasconde (activation policy Accessory), ⌘Q esce. Menu Scansione: ⌘R/⌘F/⇧⌘M chiamano `window.wasapingScan/Find/Monitor` nella pagina.
+- `tools.go`: `/api/pingtest` (SSE, 20 ping, perdite/jitter) e `/api/trace` (traceroute/tracert/tracepath); il bersaglio passa da `toolTarget` (niente opzioni).
+- `scanner/upnp.go`: SSDP M-SEARCH + XML di descrizione (solo dall'IP che risponde), titoli delle pagine web (client che accetta certificati self-signed, redirect solo sullo stesso host); scarta MiniDLNA e titoli vuoti.
+- Icona Windows: `make winicon` → `scripts/winres` scrive `rsrc_windows_{amd64,arm64}.syso` (COFF .rsrc con RT_ICON PNG + RT_GROUP_ICON) dal file `assets/icon.png`; Go li collega da solo.
 - Modalità `app`, in ordine: finestra nativa Cocoa+WKWebView (`native_darwin.go`, build tag `darwin && cgo`, deve girare sul main thread: `init()` fa LockOSThread) → finestra `--app=` di Edge/Chrome con profilo proprio (`window.go`, si chiude quando il processo esce) → browser predefinito con heartbeat (`/api/ping`) e pulsante Esci. La pagina sa quale da `/api/info` → `ui`.
 - Doppio clic: su Windows `launch_windows.go` (GetConsoleProcessList == 1); su macOS `launch_darwin.go` (eseguibile dentro `.app/Contents/MacOS/`). `wasaping.app` contiene un binario universale (lipo arm64+x86_64, cgo, macOS ≥ 13) firmato ad hoc; la release della CI quindi gira su macos-latest.
 
@@ -30,4 +35,4 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
 - v0.1 pubblicata. Provato su Mac reale (macOS 27, arm64): finestra nativa, scansione, nomi mDNS/NetBIOS, esportazione. Windows ancora da provare su hardware reale (finestra Edge, ARP, ping).
 - Modulo: `github.com/wasabifilm/wasaping`. Repository pubblico: https://github.com/wasabifilm/wasaping
 - Nuova release: `git tag vX.Y.Z && git push --tags` fa partire la CI, che crea la release.
-- Idee: confronto tra scansioni, nomi personalizzati, icona Windows (.syso), firma/notarizzazione Apple (anche per i MAC), WebView2 su Windows.
+- Idee: firma/notarizzazione Apple (anche per i MAC), WebView2 su Windows, avvio al login, IPv6.

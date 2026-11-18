@@ -133,3 +133,12 @@ func reverseDNS(ctx context.Context, ip string, timeout time.Duration) string {
 	}
 	return strings.TrimSuffix(names[0], ".")
 }
+
+// SystemPing sends one ping with the system command and returns the time
+// ping measured.
+func SystemPing(ctx context.Context, host string, timeout time.Duration) (bool, time.Duration) {
+	return systemPing(ctx, host, timeout)
+}
+
+// HideWindow keeps a console window from flashing on Windows.
+func HideWindow(cmd *exec.Cmd) { hideWindow(cmd) }

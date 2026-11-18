@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,8 +32,10 @@ type Host struct {
 	SACN      *SACNSource `json:"sacn,omitempty"`
 	PTP       string      `json:"ptp,omitempty"` // set when this device is a PTP clock master
 	PJLink    *PJLink     `json:"pjlink,omitempty"`
-	NDI       []string    `json:"ndi,omitempty"`  // NDI sources it publishes
-	Kind      string      `json:"kind,omitempty"` // see GuessKind
+	UPnP      string      `json:"upnp,omitempty"`      // UPnP device type, e.g. MediaRenderer
+	WebTitle  string      `json:"web_title,omitempty"` // <title> of its web page
+	NDI       []string    `json:"ndi,omitempty"`       // NDI sources it publishes
+	Kind      string      `json:"kind,omitempty"`      // see GuessKind
 	Warnings  []string    `json:"warnings,omitempty"`
 	OffSubnet bool        `json:"off_subnet,omitempty"` // not in any network of this computer
 	Gateway   bool        `json:"gateway,omitempty"`
@@ -187,7 +190,14 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 		sem     = make(chan struct{}, 32)
 	)
 	var info map[string]*devInfo
+	var upnp map[string]*upnpInfo
 	infoReady := make(chan struct{})
+	upnpReady := make(chan struct{})
+	if opt.ResolveDNS {
+		go func() { upnp = upnpDiscover(ctx, 1500*time.Millisecond); close(upnpReady) }()
+	} else {
+		close(upnpReady)
+	}
 	if opt.ResolveDNS {
 		ips := make([]string, 0, len(alive))
 		for ip := range alive {
@@ -229,6 +239,15 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			if containsInt(host.Ports, 4352) {
 				host.PJLink = queryPJLink(ctx, ip, opt.Timeout+time.Second)
 			}
+			if opt.ResolveDNS && !host.Self {
+				var web []int
+				for _, p := range []int{80, 8080, 443, 8443, 8000} {
+					if containsInt(host.Ports, p) {
+						web = append(web, p)
+					}
+				}
+				host.WebTitle = webTitle(ctx, ip, web)
+			}
 			<-infoReady
 			if d := info[ip]; d != nil {
 				if host.Hostname == "" {
@@ -243,6 +262,23 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				host.ArtNet, host.SACN, host.PTP = s.artnet, s.sacn, s.ptp
 				if len(s.artMACs) > 1 {
 					host.Warnings = append(host.Warnings, "Conflitto di IP: su Art-Net rispondono più dispositivi con questo indirizzo ("+joinStrings(s.artMACs)+").")
+				}
+			}
+			<-upnpReady
+			if u := upnp[ip]; u != nil && !upnpSoftware(u) {
+				host.UPnP = u.devType
+				if host.Model == "" {
+					m := u.model
+					if u.number != "" && !strings.Contains(m, u.number) && !(strings.Contains(u.number, ".") && strings.IndexFunc(u.number, isLetter) >= 0) {
+						m = joinNonEmpty(m, u.number)
+					}
+					if f := strings.Fields(u.maker); len(f) > 0 && !strings.Contains(strings.ToLower(m), strings.ToLower(f[0])) {
+						m = joinNonEmpty(u.maker, m)
+					}
+					host.Model = m
+				}
+				if host.Friendly == "" {
+					host.Friendly = u.friendly
 				}
 			}
 			if host.PJLink != nil && host.Model == "" {
@@ -357,4 +393,13 @@ func scanPorts(ctx context.Context, ip string, ports []int, timeout time.Duratio
 	wg.Wait()
 	sort.Ints(open)
 	return open
+}
+
+func isLetter(r rune) bool { return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' }
+
+// upnpSoftware recognizes descriptions of a software service (a DLNA media
+// server running on a router or NAS), which say nothing about the device.
+func upnpSoftware(u *upnpInfo) bool {
+	s := strings.ToLower(u.maker + " " + u.model)
+	return strings.Contains(s, "minidlna") || strings.Contains(s, "justin maggard") || strings.Contains(s, "windows media connect")
 }

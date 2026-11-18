@@ -108,3 +108,19 @@ func TestDNSSDInstance(t *testing.T) {
 		t.Errorf("txt %v", txt)
 	}
 }
+
+func TestUPnPFilters(t *testing.T) {
+	if !upnpSoftware(&upnpInfo{maker: "Justin Maggard", model: "Windows Media Connect compatible (MiniDLNA)"}) {
+		t.Error("MiniDLNA should be ignored")
+	}
+	for _, b := range []string{"404 - Not Found", "Opening...", "Login"} {
+		if !boringTitle(b) {
+			t.Errorf("%q should be boring", b)
+		}
+	}
+	for _, g := range []string{"Glasshouse", "Archer A6", "grandMA3 Web Remote"} {
+		if boringTitle(g) {
+			t.Errorf("%q is a real title", g)
+		}
+	}
+}

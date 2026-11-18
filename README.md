@@ -36,7 +36,11 @@
 - Riconosce il **tipo di dispositivo** (router, computer, telefono, stampante, TV, NAS, videocamera, domotica…) e i **servizi** che annuncia (AirPlay, stampa, condivisione file…)
 - **Si ricorda dei dispositivi**: segna quelli **nuovi** dall'ultima scansione e quelli che **non rispondono più**
 - **Nomi e note personalizzati** per ogni dispositivo ("TV del salotto"), salvati sul tuo computer
-- **Ripetizione automatica** ogni 5, 15 o 60 minuti, con una notifica quando arriva un dispositivo nuovo
+- **Ripetizione automatica** ogni 5, 15 o 60 minuti, anche a finestra chiusa, con una notifica quando arriva un dispositivo nuovo o un dispositivo critico smette di rispondere
+- **Icona nella barra dei menu (macOS)**: chiudendo la finestra wasaping resta attivo. Dall'icona: apri, scansiona ora, Monitor, ultimo risultato. L'icona diventa rossa se un dispositivo critico non risponde; ⌘Q esce del tutto.
+- **Modelli e nomi via UPnP** (TV, router, NAS: "Samsung QE55Q95T", "TP-Link Archer A6") e titolo della pagina web dei dispositivi
+- **Strumenti di rete** nel pannello di dettaglio: **qualità del collegamento** (20 ping con perdite, min/media/max e jitter) e **traceroute**, anche verso indirizzi internet
+- Scorciatoie: **⌘R** scansiona, **⌘F** cerca, **⇧⌘M** Monitor (Ctrl su Windows/Linux). Tema **automatico, chiaro o scuro**.
 - **Wake-on-LAN** per accendere un computer dalla rete, e controllo di tutte le porte 1–1024 di un dispositivo
 - **Storico della presenza** di ogni dispositivo nelle ultime scansioni, e avvisi sulle porte rischiose (Telnet, FTP sul router, pannello solo in HTTP…)
 - Ha un'**interfaccia grafica** in una finestra propria (tema chiaro e scuro) e una **riga di comando** con output in tabella, JSON o CSV
@@ -113,6 +117,7 @@ go build -o wasaping .
 make release        # crea gli eseguibili di tutti i sistemi + wasaping-macos.zip in dist/
 make macapp         # solo dist/wasaping.app (universale, solo su macOS)
 make icon           # rigenera le icone in assets/ (serve Python + Pillow)
+make winicon        # rigenera l'icona dell'eseguibile Windows (rsrc_windows_*.syso)
 go test ./...
 ```
 
@@ -135,7 +140,6 @@ scanner/           motore: rilevamento reti, sonde, ARP, nomi (DNS, mDNS, NetBIO
 ## Idee per le prossime versioni
 
 - [ ] IPv6
-- [ ] Icona dell'eseguibile Windows (risorsa .syso)
 - [ ] Firma e notarizzazione Apple (serve un account Apple Developer): toglie l'avviso di Gatekeeper e dovrebbe restituire gli indirizzi MAC su macOS
 - [ ] Finestra nativa anche su Windows (WebView2)
 

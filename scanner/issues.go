@@ -18,7 +18,7 @@ func protocolsOf(h Host) []string {
 	svc := func(s string) bool { return slices.Contains(h.Services, s) }
 	add(h.ArtNet != nil, "Art-Net")
 	add(h.SACN != nil, "sACN")
-	add(svc("netaudio-arc") || svc("netaudio-cmc") || svc("netaudio-dbc"), "Dante")
+	add(svc("netaudio-arc") || svc("netaudio-cmc") || svc("netaudio-dbc") || svc("netaudio-chan") || h.Dante != nil, "Dante")
 	add(h.PTP != "", "PTP master")
 	add(len(h.NDI) > 0 || svc("ndi") || containsInt(h.Ports, 5960), "NDI")
 	add(svc("blackmagic") || svc("videohub") || containsInt(h.Ports, 9990) || containsInt(h.Ports, 9993), "Blackmagic")

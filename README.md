@@ -44,7 +44,15 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - più master PTP;
   - lo stesso universo sACN inviato da più sorgenti;
   - rete senza router.
-- **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere. Continua anche a finestra chiusa.
+- **Check pre-show:** un solo pulsante controlla tutto prima dello show e prepara un **report verde/giallo/rosso** da stampare o salvare in PDF. Guarda:
+  - i dispositivi e gli universi critici;
+  - il piano IP;
+  - i problemi di rete e gli avvisi.
+- **Più reti insieme:** con «Tutte le reti» wasaping scansiona ogni rete del computer (luci, Dante primaria e secondaria, video…) e mostra una scheda per rete. Controlla anche la **ridondanza Dante**: ogni dispositivo deve essere su entrambe le reti.
+- **Dante:** canali in trasmissione, sample rate e latenza, letti da Bonjour.
+- **Apparecchi RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti**. È in sola lettura.
+- **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere. Continua anche a finestra chiusa. Controlla anche gli **universi critici** (se smettono di arrivare o se compare una seconda sorgente) e il **master del clock PTP** (se cambia o sparisce). Ogni dispositivo ha un piccolo **grafico dei tempi di risposta**.
+- **Allarmi verso altri programmi:** a ogni evento del Monitor wasaping manda un messaggio **OSC** (a QLab, a una console, a un media server: `/wasaping/down`, `/wasaping/up`) e/o chiama un **indirizzo web** con i dettagli in JSON.
 - **Registro degli eventi:** ogni caduta viene annotata con ora e durata ("Rio3224-Palco: non risponde 21:43:10, di nuovo in linea dopo 12 s"). Si esporta in CSV a fine serata, e tutto finisce anche in `monitor-log.csv`.
 - **Monitor su iPad o telefono:** lo vedi da un altro dispositivo della stessa rete (l'iPad in FOH, il telefono sul palco), protetto da un PIN di 6 cifre e in sola lettura. Da lì non si cambia niente.
 - **Piano IP:** importi il patch previsto da un foglio di calcolo (CSV con Nome, IP, Ruolo, MAC) e wasaping lo confronta con la rete. Ti dice chi manca, chi ha l'IP sbagliato, chi occupa l'IP di un altro e chi non era previsto. Con un clic dà ai dispositivi i nomi e i ruoli del piano.
@@ -78,7 +86,8 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Wake-on-LAN**, controllo di tutte le porte 1–1024, avvisi sulle porte rischiose (Telnet, FTP sul router…).
 - Scorciatoie **⌘R** scansiona, **⌘F** cerca, **⇧⌘M** Monitor (Ctrl su Windows e Linux). Tema automatico, chiaro o scuro.
 - **Italiano e inglese:** la lingua segue quella del sistema e si cambia col pulsante in alto. La riga di comando segue `LANG`.
-- **Avviso di nuova versione:** una volta al giorno chiede a GitHub l'ultima versione, senza inviare nessun dato tuo o della rete. Si spegne con «Non controllare più».
+- **Avviso di nuova versione:** una volta al giorno chiede a GitHub l'ultima versione, senza inviare nessun dato tuo o della rete. Su Mac si **aggiorna dall'app**: scarica, controlla il file con `SHA256SUMS` e la firma, sostituisce l'app e la riavvia. Si spegne in Impostazioni.
+- **Impostazioni** in un posto solo (⚙ in alto): lingua, tema, ripetizione, allarmi, accesso da iPad, aggiornamenti, apertura al login, aiuto per i MAC e community SNMP. Gli strumenti stanno nel menu **Strumenti**.
 - Esporta in **CSV**, **JSON** o elenco stampabile.
 
 ### Come trova i dispositivi senza permessi di amministratore
@@ -142,6 +151,10 @@ web.go               server locale e API per l'interfaccia
 background.go        scansioni (anche in background) e impostazioni
 devices.go           archivio per rete/locale: nomi, ruoli, note, critici, storico
 monitor.go           monitor dei dispositivi critici e registro degli eventi
+monitor_show.go      monitor di universi critici e master PTP
+multinet.go          più reti insieme, ridondanza Dante
+alerts.go            allarmi OSC e webhook
+selfupdate_*.go      aggiornamento dall'app (macOS)
 remote.go, web/m.html  monitor su iPad/telefono (PIN, sola lettura)
 plan.go              piano IP da CSV, condivisione del locale, porte switch
 dmx.go               universi DMX dal vivo
@@ -153,7 +166,7 @@ arphelper_darwin.go  aiuto di sistema per leggere la tabella ARP (macOS)
 login_darwin.go      apertura al login (macOS)
 web/index.html       interfaccia grafica (incorporata nell'eseguibile)
 scanner/             motore: sonde, ARP, nomi (DNS, mDNS, NetBIOS, UPnP), protocolli
-                     show (Art-Net, sACN, PTP, PJLink), DMX, SNMP, tipi, avvisi
+                     show (Art-Net, sACN, PTP, PJLink, RDM), DMX, SNMP, tipi, avvisi
 scripts/             build dell'app macOS, icone, database produttori
 ```
 

@@ -30,6 +30,7 @@ type MonDevice struct {
 	RTTms  int64     `json:"rtt_ms,omitempty"`
 	Method string    `json:"method,omitempty"`
 	Since  time.Time `json:"since,omitempty"` // when the current state began
+	RTTs   []int64   `json:"rtts,omitempty"`  // latest response times, -1 = no answer
 }
 
 // MonEvent is a change of state: a device stops answering or comes back.
@@ -40,20 +41,25 @@ type MonEvent struct {
 	IP      string    `json:"ip"`
 	Up      bool      `json:"up"`
 	DownFor float64   `json:"down_for,omitempty"` // seconds, on "up" events
+	Kind    string    `json:"kind,omitempty"`     // "", "universe", "ptp"
+	Text    string    `json:"text,omitempty"`     // for warnings that are not up/down
 }
 
 // MonState is what the page and the remote view read.
 type MonState struct {
-	On      bool        `json:"on"`
-	Every   int         `json:"every"`
-	Devices []MonDevice `json:"devices"`
-	Events  []MonEvent  `json:"events"`
-	Down    int         `json:"down"`
-	Network string      `json:"network,omitempty"`
-	Checked time.Time   `json:"checked,omitempty"`
+	On        bool          `json:"on"`
+	Every     int           `json:"every"`
+	Devices   []MonDevice   `json:"devices"`
+	Events    []MonEvent    `json:"events"`
+	Down      int           `json:"down"`
+	Network   string        `json:"network,omitempty"`
+	Checked   time.Time     `json:"checked,omitempty"`
+	Universes []MonUniverse `json:"universes,omitempty"`
+	PTP       []MonPTP      `json:"ptp,omitempty"`
 }
 
 type monitor struct {
+	showMonitor
 	mu      sync.Mutex
 	on      bool
 	every   int
@@ -81,6 +87,14 @@ func (m *monitor) state(maxEvents int) MonState {
 			st.Down++
 		}
 	}
+	for _, id := range m.uniOrder {
+		u := *m.unis[id]
+		st.Universes = append(st.Universes, u)
+		if u.Known && !u.Alive {
+			st.Down++
+		}
+	}
+	st.PTP = m.ptpStateLocked()
 	ev := m.events
 	if len(ev) > maxEvents {
 		ev = ev[len(ev)-maxEvents:]
@@ -122,7 +136,10 @@ func (m *monitor) loop(ctx context.Context) {
 		on, every := m.on, m.every
 		m.mu.Unlock()
 		if on {
+			m.startListeners(ctx)
 			m.check(ctx)
+		} else {
+			m.stopListeners()
 		}
 		wait := time.Duration(every) * time.Second
 		if !on {
@@ -189,6 +206,14 @@ func (m *monitor) check(ctx context.Context) {
 			}
 		}
 		cur.RTTms, cur.Method = r.RTTms, r.Method
+		rtt := int64(-1)
+		if r.Alive {
+			rtt = r.RTTms
+		}
+		cur.RTTs = append(cur.RTTs, rtt)
+		if len(cur.RTTs) > 60 {
+			cur.RTTs = cur.RTTs[len(cur.RTTs)-60:]
+		}
 	}
 	for k := range m.devs {
 		if !seen[k] {
@@ -196,10 +221,17 @@ func (m *monitor) check(ctx context.Context) {
 		}
 	}
 	m.checked = now
+	lostU, backU := m.checkShowLocked(now)
+	lost, back = append(lost, lostU...), append(back, backU...)
 	var downNames []string
 	for _, k := range m.order {
 		if d := m.devs[k]; d.Known && !d.Alive {
 			downNames = append(downNames, d.Name)
+		}
+	}
+	for _, u := range m.unis {
+		if u.Known && !u.Alive {
+			downNames = append(downNames, u.Name)
 		}
 	}
 	m.mu.Unlock()
@@ -216,13 +248,18 @@ func (m *monitor) check(ctx context.Context) {
 
 // addEvent records a change and appends it to the log file (m.mu held).
 func (m *monitor) addEvent(at time.Time, d *MonDevice, up bool, downFor float64) {
+	m.addEventRaw(MonEvent{At: at, Name: d.Name, IP: d.IP, Up: up, DownFor: downFor})
+}
+
+func (m *monitor) addEventRaw(e MonEvent) {
 	m.nextID++
-	e := MonEvent{ID: m.nextID, At: at, Name: d.Name, IP: d.IP, Up: up, DownFor: downFor}
+	e.ID = m.nextID
 	m.events = append(m.events, e)
 	if len(m.events) > 2000 {
 		m.events = m.events[len(m.events)-2000:]
 	}
 	go appendMonitorLog(e)
+	go sendAlert(e)
 }
 
 var logMu sync.Mutex
@@ -257,6 +294,9 @@ func appendMonitorLog(e MonEvent) {
 	ev, dur := "non risponde", ""
 	if e.Up {
 		ev, dur = "di nuovo in linea", fmt.Sprintf("%.0f", e.DownFor)
+	}
+	if e.Text != "" {
+		ev = e.Text
 	}
 	q := func(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
 	fmt.Fprintf(f, "%s,%s,%s,%s,%s,%s,%s\n", e.At.Format("2006-01-02"), e.At.Format("15:04:05"), q(net), q(e.Name), e.IP, ev, dur)

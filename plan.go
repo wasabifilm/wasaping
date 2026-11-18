@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/wasabifilm/wasaping/scanner"
 )
@@ -181,4 +183,36 @@ func handleSwitchPorts(w http.ResponseWriter, r *http.Request) {
 	defer activeScan.Add(-1)
 	switches, ports := scanner.SwitchPorts(r.Context(), ips, comm)
 	writeJSON(w, map[string]any{"switches": switches, "ports": ports, "community": comm})
+}
+
+// handleRDM lists the RDM fixtures behind the Art-Net nodes of the latest scan.
+func handleRDM(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	nodes := map[string][]int{}
+	lastMu.Lock()
+	if lastResult != nil {
+		for _, h := range lastResult.Hosts {
+			if h.ArtNet == nil {
+				continue
+			}
+			u := append(append([]int{}, h.ArtNet.Out...), h.ArtNet.In...)
+			if len(u) == 0 {
+				u = []int{0}
+			}
+			nodes[h.IP] = u
+		}
+	}
+	lastMu.Unlock()
+	if len(nodes) == 0 {
+		http.Error(w, "nessun nodo Art-Net nell'ultima scansione", http.StatusConflict)
+		return
+	}
+	activeScan.Add(1)
+	defer activeScan.Add(-1)
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	writeJSON(w, map[string]any{"nodes": len(nodes), "fixtures": scanner.RDMDiscover(ctx, nodes)})
 }

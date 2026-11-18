@@ -86,6 +86,15 @@
   #ctx div:hover { background: var(--wasabi); color: var(--wasabi-ink); }
   #ctx .hint { color: var(--muted); font-size: 12px; padding: 4px 10px 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
   #ctx .hint:hover { background: none; color: var(--muted); }
+  #ctx .hint:not(:first-child) { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 8px; }
+  #ctx div.dis { opacity: .4; }
+  #ctx div.dis:hover { background: none; color: inherit; }
+  .set { display: grid; grid-template-columns: 200px 1fr; gap: 14px 18px; align-items: start; }
+  .set > b { padding-top: 7px; font-weight: 600; }
+  .set .opt { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .set .opt input[type=text], .set .opt input:not([type]) { min-width: 0; }
+  .set .tag { flex-basis: 100%; }
+  @media (max-width: 640px) { .set { grid-template-columns: 1fr; } .set > b { padding-top: 0; } }
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; }
   #toast.show { opacity: 1; }
   .proto { display: inline-block; font-size: 11px; padding: 1px 6px; margin: 1px 2px 1px 0; border-radius: 4px; border: 1px solid var(--wasabi-text); color: var(--wasabi-text); white-space: nowrap; }
@@ -94,6 +103,9 @@
   .netbar { padding: 0 24px 8px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .netbar b { font-weight: 600; }
   .netbar a { color: var(--wasabi-text); cursor: pointer; font-size: 12px; }
+  .netbar .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-right: 8px; flex-basis: 100%; }
+  .netbar a.tab { font-size: 13px; color: var(--ink); padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; }
+  .netbar a.tab.on { background: var(--wasabi); border-color: var(--wasabi); color: var(--wasabi-ink); font-weight: 600; }
   .notice.warn { background: transparent; border: 1px solid #f2994a; color: var(--ink); flex-direction: column; align-items: flex-start; gap: 4px; }
   .warnlist { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; }
   .warnlist li { padding: 6px 8px; border-left: 3px solid #f2994a; background: rgba(242,153,74,.08); margin-bottom: 6px; border-radius: 0 6px 6px 0; }
@@ -126,7 +138,11 @@
   #mEvents li.down b { color: var(--warn); }
   #mEvents li.up b { color: var(--wasabi-text); }
   @media (max-width: 800px) { .mbody { flex-direction: column; } .mlog { width: auto; border-left: none; border-top: 1px solid var(--line); max-height: 40vh; } }
-  #tiles { flex: 1; overflow: auto; padding: 20px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; align-content: start; }
+  .mmain { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: auto; }
+  #mPTP { padding: 14px 24px 0; }
+  .spark { width: 100%; height: 26px; margin-top: 8px; display: block; }
+  #mEvents li.warn b { color: #f2994a; }
+  #tiles { flex: 1; padding: 20px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; align-content: start; }
   .tile { border-radius: 12px; padding: 14px 16px; border: 2px solid var(--wasabi); background: var(--panel); }
   .tile.down { border-color: var(--warn); background: rgba(214,63,63,.12); }
   .tile .t { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
@@ -148,10 +164,18 @@
   #sheet .pill.bad { border-color: var(--warn); color: var(--warn); }
   #sheet .pill.warn { border-color: #f2994a; color: #f2994a; }
   #sheet table td, #sheet table th { padding: 6px 8px; }
+  #sheet table td { white-space: normal; }
+  #sheet table td.mono { white-space: nowrap; }
   #sheet .st-ok { color: var(--wasabi-text); font-weight: 600; }
   #sheet .st-bad { color: var(--warn); font-weight: 600; }
   #sheet .st-warn { color: #f2994a; font-weight: 600; }
   #sheet .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  #sheet h3 { font-size: 14px; margin: 18px 0 6px; }
+  .verdict { padding: 14px 16px; border-radius: 10px; display: flex; gap: 14px; align-items: center; font-size: 15px; flex-wrap: wrap; }
+  .verdict b { font-size: 18px; letter-spacing: .5px; }
+  .v-ok { background: var(--wasabi); color: var(--wasabi-ink); }
+  .v-warn { background: #f2c94c; color: #171717; }
+  .v-bad { background: var(--warn); color: #fff; }
   #sheet .free { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.9; }
   #sheet .free a { color: var(--wasabi-text); cursor: pointer; margin-right: 10px; white-space: nowrap; }
   .dmxgrid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; margin-top: 12px; }
@@ -184,9 +208,13 @@
   <div class="logo"></div>
   <h1>wasa<b>ping</b></h1>
   <span class="tag">a spicy little IP scanner</span>
-  <button id="langBtn" class="langbtn" title="Lingua / Language">English</button>
-  <button id="theme" title="Tema chiaro o scuro">Tema: automatico</button>
+  <button id="setBtn" class="langbtn" title="Impostazioni">⚙ Impostazioni</button>
 </header>
+<div hidden>
+  <button id="langBtn">English</button><button id="theme">Tema: automatico</button>
+  <select id="repeat"><option value="0">mai</option><option value="5">5</option><option value="15">15</option><option value="60">60</option></select>
+  <button id="printBtn" disabled></button><button id="csv" disabled></button><button id="json" disabled></button>
+</div>
 
 <div class="bar">
   <div class="group">
@@ -202,16 +230,9 @@
   </div>
   <div class="group tools">
     <input id="filter" placeholder="Filtra per IP, nome, produttore…">
-    <select id="repeat" title="Ripeti la scansione da sola e avvisa se arriva un dispositivo nuovo">
-      <option value="0">Ripeti: mai</option>
-      <option value="5">Ogni 5 min</option>
-      <option value="15">Ogni 15 min</option>
-      <option value="60">Ogni ora</option>
-    </select>
+    <button id="preBtn" title="Controlla tutto prima dello show e prepara un report">Check pre-show</button>
     <button id="monBtn" title="Tiene d'occhio i dispositivi critici e suona se uno sparisce">Monitor</button>
-    <button id="printBtn" disabled title="Elenco IP da stampare o salvare in PDF">Stampa</button>
-    <button id="csv" disabled>CSV</button>
-    <button id="json" disabled>JSON</button>
+    <button id="toolsBtn" title="Piano IP, universi, RDM, switch, esportazioni">Strumenti ▾</button>
     <button id="quit" hidden title="Chiude wasaping">Esci</button>
   </div>
 </div>
@@ -291,7 +312,7 @@
     <button id="mClose" title="Il monitor continua a controllare anche a finestra chiusa">Torna all'elenco</button>
   </header>
   <div class="mbody">
-    <div id="tiles"></div>
+    <div class="mmain"><div class="tag" id="mPTP"></div><div id="tiles"></div></div>
     <aside class="mlog">
       <div class="mlog-h"><b>Registro</b><span class="spacer"></span><button id="mExport" title="Salva il registro in CSV">Esporta</button></div>
       <ol id="mEvents"></ol>
@@ -396,7 +417,26 @@ const EN = new Map(Object.entries({
   "Accesso da iPad/telefono non attivo:": "Access from iPad/phone not active:", "fai prima una scansione": "scan first", "fai prima una scansione di questa rete": "scan this network first",
   "dispositivo sconosciuto": "unknown device", "richiesta non valida": "invalid request", "nessuna riga con un indirizzo IP valido": "no rows with a valid IP address",
   "non è un file di locale di wasaping": "not a wasaping venue file", "file non valido": "invalid file", "nome file non valido": "invalid file name", "annullato": "cancelled",
-  "Nessuna scansione ancora": "No scans yet", "(MAC privato/casuale)": "(private/random MAC)", "Stampa": "Print",
+  "Nessuna scansione ancora": "No scans yet", "nessun master del clock": "no clock master", "Controllo in corso: scansione, dispositivi critici, universi, piano IP…": "Checking: scan, critical devices, universes, IP plan…", "Dispositivi critici": "Critical devices", "Universi critici": "Critical universes",
+  "Nessun dispositivo segnato come critico.": "No device marked as critical.", "Nessun universo segnato come critico (Strumenti → Universi DMX).": "No universe marked as critical (Tools → DMX universes).",
+  "Nessun piano IP importato.": "No IP plan imported.", "Problemi di rete": "Network problems", "Nessuno.": "None.", "Avvisi sui dispositivi": "Device warnings", "NON PRONTO": "NOT READY",
+  "PRONTO CON AVVISI": "READY WITH WARNINGS", "PRONTO": "READY", "Niente di bloccante, ma qualcosa da controllare.": "Nothing blocking, but something to check.", "Tutto a posto.": "All good.",
+  "Stampa o salva il report": "Print or save the report", "Ricontrolla": "Check again", "NON ARRIVA": "NOT ARRIVING", "non arriva": "not arriving", "Il Monitor ora controlla questo universo.": "The Monitor now watches this universe.", "Universo tolto dal Monitor.": "Universe removed from the Monitor.",
+  "Il Monitor avvisa se l'universo smette di arrivare": "The Monitor warns if the universe stops arriving", "Clock PTP: master": "PTP clock: master", "Cerca apparecchi": "Find fixtures", "Indirizzo": "Address", "Canali": "Channels", "Etichetta": "Label", "Modalità": "Mode", "UID": "UID", "Nodo": "Node",
+  "wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. Solo lettura: non cambia niente sugli apparecchi.": "wasaping asks the Art-Net nodes which RDM fixtures they have connected, and each fixture who it is: maker, model, label, DMX address, channels and mode. Read-only: nothing is changed on the fixtures.",
+  "Chiedo ai nodi… (può volerci qualche secondo per apparecchio)": "Asking the nodes… (it can take a few seconds per fixture)", "Nessun nodo Art-Net: fai prima una scansione.": "No Art-Net nodes: scan first.",
+  "Nessun apparecchio RDM ha risposto. Controlla che il nodo abbia l'RDM attivo sulle uscite.": "No RDM fixture answered. Check that the node has RDM on for its outputs.", "Scegli una rete per dargli un nome, usare il piano IP o esportare il locale.": "Pick a network to name it, use the IP plan or export the venue.",
+  "Scegli prima una rete dalle schede.": "First pick a network from the tabs.", "Strumenti ▾": "Tools ▾", "⚙ Impostazioni": "⚙ Settings", "Impostazioni": "Settings",
+  "Check pre-show": "Pre-show check", "Esporta": "Export", "Locale": "Venue", "Show": "Show", "Rete": "Network", "Stampa elenco IP": "Print IP list", "Apparecchi RDM": "RDM fixtures",
+  "Lingua": "Language", "Tema": "Theme", "automatico": "automatic", "chiaro": "light", "scuro": "dark", "Ripeti la scansione": "Repeat the scan", "mai": "never",
+  "ogni 5 minuti": "every 5 minutes", "ogni 15 minuti": "every 15 minutes", "ogni ora": "every hour", "Anche a finestra chiusa, con una notifica quando arriva un dispositivo nuovo.": "With the window closed too, with a notification when a new device shows up.",
+  "Allarmi verso altri programmi": "Alarms to other programs", "Prova": "Test", "Monitor su iPad o telefono": "Monitor on iPad or phone", "attivo": "on", "Sola lettura, protetto da un PIN.": "Read-only, protected by a PIN.",
+  "Aggiornamenti": "Updates", "controlla le nuove versioni": "check for new versions", "Apri al login": "Open at login", "apri wasaping all'accesso, nella barra dei menu": "open wasaping at login, in the menu bar",
+  "Indirizzi MAC (macOS)": "MAC addresses (macOS)", "aiuto di sistema attivo": "system helper active", "nascosti da macOS": "hidden by macOS", "Community SNMP": "SNMP community",
+  "Per leggere dagli switch su quale porta è ogni dispositivo.": "To read from the switches which port each device is on.", "Allarmi salvati.": "Alarms saved.", "Inviato.": "Sent.",
+  "Quando un dispositivo o un universo critico cade o torna, wasaping manda un messaggio OSC (a QLab, a una console, a un media server) e/o chiama l'indirizzo web con i dettagli in JSON.": "When a critical device or universe drops or comes back, wasaping sends an OSC message (to QLab, a console, a media server) and/or calls the web address with the details in JSON.",
+  "Scarico l'aggiornamento…": "Downloading the update…", "Aggiornato: wasaping si riavvia.": "Updated: wasaping restarts.",
+  "Controlla tutto prima dello show e prepara un report": "Checks everything before the show and prepares a report", "Piano IP, universi, RDM, switch, esportazioni": "IP plan, universes, RDM, switches, exports", "(MAC privato/casuale)": "(private/random MAC)", "Stampa": "Print",
   "Il monitor è fermo": "The monitor is stopped", "Tema chiaro o scuro": "Light or dark theme",
   // server warnings and network problems
   "Fuori dalla sottorete di questo computer: chi è sulla rete normale non lo raggiunge. Controlla IP e maschera di rete.": "Outside this computer's subnet: devices on the normal network cannot reach it. Check its IP and netmask.",
@@ -440,7 +480,12 @@ const PAT = [
   [/^Il proiettore segnala: (.+)\.$/, "The projector reports: $1."], [/^Il nodo Art-Net segnala un problema: (.+)$/, "The Art-Net node reports a problem: $1"],
   [/^Più master di clock (.+): (.+)\. Dante e AES67 vogliono un solo master per dominio\.$/, "Several $1 clock masters: $2. Dante and AES67 want a single master per domain."],
   [/^Universo sACN (\d+) inviato da più sorgenti \((.+)\): controlla le priorità o il merge\.$/, "sACN universe $1 sent by several sources ($2): check priorities or merging."],
-  [/^master (.+)$/, "master $1"], [/^Apri (.+) sul dispositivo/, null],
+  [/^master (.+)$/, "master $1"], [/^nuovo master (.+) \(prima (.+)\)$/, "new master $1 (was $2)"], [/^master del clock di nuovo presente: (.+)$/, "clock master back: $1"], [/^più sorgenti: (.+)$/, "several sources: $1"], [/^(\d+) problemi da risolvere prima dello show\.$/, "$1 problems to fix before the show."], [/^(\d+) su (\d+) a posto(?: · (\d+) dispositivi non previsti)?\.$/, (m, a, b, c) => `${a} of ${b} OK${c ? ` · ${c} devices not planned` : ""}.`],
+  [/^(\d+) frame\/s · più sorgenti$/, "$1 frames/s · several sources"], [/^Report aperto nel browser: (.+)$/, "Report opened in the browser: $1"], [/^(\d+) frame\/s$/, "$1 frames/s"], [/^(Art-Net|sACN) universo (\d+)$/, "$1 universe $2"],
+  [/^(\d+) nodi Art-Net nell'ultima scansione\.$/, "$1 Art-Net nodes in the latest scan."], [/^(\d+) apparecchi$/, "$1 fixtures"], [/^⚠ (\d+) con indirizzi sovrapposti$/, "⚠ $1 with overlapping addresses"],
+  [/^Dante: (.+) non è sulla rete (.+) \(ridondanza primaria\/secondaria assente\)\.$/, "Dante: $1 is not on network $2 (no primary/secondary redundancy)."],
+  [/^Tutte le reti \((\d+)\)$/, "All networks ($1)"], [/^Tutte \((\d+)\)$/, "All ($1)"], [/^Aggiorna a (.+)$/, "Update to $1"],
+  [/^(\d+) canali in trasmissione$/, "$1 transmit channels"], [/^Apri (.+) sul dispositivo/, null],
 ];
 function tr(s) {
   if (LANG !== "en" || !s) return s;
@@ -532,6 +577,7 @@ const SERVICES = {"netaudio-arc":"Dante", "netaudio-cmc":"Dante", "netaudio-dbc"
 
 let hosts = [], gone = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser", showGone = true;
 let repeatTimer = null, selected = null, autoRun = false, network = null, issues = [], snmpCommunity = "public", swPorts = {};
+let networks = [], activeNet = ""; // several networks: "" = all tabs
 
 const ipNum = ip => ip.split(".").reduce((a, b) => a * 256 + +b, 0);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -573,6 +619,7 @@ async function init() {
     if (i.network === info.defaultTarget) o.selected = true;
     $("iface").add(o);
   }
+  if ((info.allTargets || []).length > 1) $("iface").add(new Option(`Tutte le reti (${info.allTargets.length})`, "all"));
   $("iface").add(new Option("Personalizzato…", ""));
   $("target").value = info.defaultTarget;
   if (!info.hasOUI) $("oui").style.display = "flex";
@@ -714,12 +761,15 @@ function finish(d, msg) {
     shownAt = d.at || shownAt;
     gone = d.gone || [];
     network = d.network || null; issues = d.issues || [];
+    networks = d.networks && d.networks.length ? d.networks : (network ? [network] : []);
+    if (!networks.some(n => n.id === activeNet)) activeNet = "";
     showNetwork();
     fetch("api/info").then(r => r.json()).then(i => showHelper(i.helper)).catch(() => {});
     let no = false; try { no = localStorage.getItem("wasaping.helperNo") === "1"; } catch {}
     $("machidden").style.display = d.macHidden && !no ? "flex" : "none";
     if (d.macHidden) $("oui").style.display = "none"; // no MACs, no vendors to look up
     stop(msg || `${d.count} dispositivi trovati in ${d.seconds.toFixed(1)} s.`);
+    lastScanAt = d.at ? new Date(d.at).getTime() : Date.now();
     const bits = [];
     if (d.new) bits.push(`<b>${d.new} ${d.new === 1 ? "nuovo" : "nuovi"}</b>`);
     if (gone.length) bits.push(`<a id="toggleGone">${gone.length} non ${gone.length === 1 ? "risponde" : "rispondono"} (${showGone ? "nascondi" : "mostra"})</a>`);
@@ -739,18 +789,22 @@ function stop(msg) {
   schedule();
 }
 
+function selectNet(id) {
+  activeNet = id;
+  const n = networks.find(x => x.id === id);
+  if (n) { network = n; post("api/network", {select: id}).catch(() => {}); }
+  showNetwork(); render();
+}
 function showNetwork() {
   const nb = $("netbar");
-  if (!network) { nb.innerHTML = ""; } else {
+  const tabs = networks.length > 1 ? `<span class="tabs">${[["", `Tutte (${hosts.length})`]].concat(networks.map(n => [n.id, `${n.name || n.subnet || n.auto} (${hosts.filter(h => h.net === n.id).length})`]))
+    .map(([id, l]) => `<a class="tab${id === activeNet ? " on" : ""}" data-net="${esc(id)}">${esc(l)}</a>`).join("")}</span>` : "";
+  if (networks.length > 1 && !activeNet) {
+    nb.innerHTML = tabs + `<span class="muted">Scegli una rete per dargli un nome, usare il piano IP o esportare il locale.</span>`;
+  } else if (!network) { nb.innerHTML = ""; } else {
     const name = network.name || network.auto;
-    nb.innerHTML = `Rete: <b>${esc(name)}</b>${network.name ? ` <span class="muted">· ${esc(network.auto)}</span>` : ""}${network.is_new ? ' <span class="badge new">rete nuova</span>' : ""} <a id="netRename">${network.name ? "rinomina" : "dai un nome a questo locale"}</a>
-      <span class="muted">·</span> <a id="netPlan">Piano IP</a> <a id="netFree">IP liberi</a> <a id="netExport">Esporta locale</a> <a id="netImport">Importa locale</a> <a id="netDMX">Universi DMX</a> <a id="netSwitch">Porte switch</a>`;
-    $("netSwitch").onclick = switchView;
-    $("netDMX").onclick = dmxView;
-    $("netPlan").onclick = planView;
-    $("netFree").onclick = freeView;
-    $("netExport").onclick = exportVenue;
-    $("netImport").onclick = () => pickFile(".wasaping,.json", importVenue);
+    nb.innerHTML = tabs + `Rete: <b>${esc(name)}</b>${network.name ? ` <span class="muted">· ${esc(network.auto)}</span>` : ""}${network.is_new ? ' <span class="badge new">rete nuova</span>' : ""} <a id="netRename">${network.name ? "rinomina" : "dai un nome a questo locale"}</a>
+`;
     $("netRename").onclick = async () => {
       nb.innerHTML = `Rete: <input id="netName" maxlength="200" value="${esc(network.name || "")}" placeholder="es. Arena Verona, tour 2027" style="width:260px"> <button id="netSave">Salva</button>`;
       $("netName").focus();
@@ -762,6 +816,7 @@ function showNetwork() {
       $("netName").onkeydown = e => { if (e.key === "Enter") save(); if (e.key === "Escape") showNetwork(); };
     };
   }
+  nb.querySelectorAll("a.tab").forEach(a => a.onclick = () => selectNet(a.dataset.net));
   const box = $("issues");
   box.style.display = issues.length ? "flex" : "none";
   box.innerHTML = issues.map(i => `<span>⚠️ ${esc(i)}</span>`).join("");
@@ -774,10 +829,60 @@ async function checkUpdate() {
     if (!u.newer) { $("updBar").style.display = "none"; return; }
     $("updText").innerHTML = `È uscita <b>wasaping ${esc(u.latest)}</b> (hai la ${esc(u.current)}).`;
     $("updGet").href = u.url;
+    $("updGet").onclick = e => { if (u.can_install) { e.preventDefault(); installUpdate(); } };
     $("updBar").style.display = "flex";
   } catch {}
 }
 $("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updBar").style.display = "none"; toast("Non controllerò più le nuove versioni."); });
+
+// ---- Settings: language, theme, repeat, alarms, remote, updates… ----
+$("setBtn").onclick = settingsView;
+async function settingsView() {
+  const get = u => fetch(u).then(r => r.json()).catch(() => ({}));
+  const [bg, rem, upd, login, alerts, info] = await Promise.all([get("api/bg"), get("api/remote"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info")]);
+  const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}"${String(k) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  openSheet("Impostazioni", `<div class="set">
+    <b>Lingua</b><div class="opt">${sel("sLang", [["it", "Italiano"], ["en", "English"]], LANG)}</div>
+    <b>Tema</b><div class="opt">${sel("sTheme", [["", "automatico"], ["light", "chiaro"], ["dark", "scuro"]], theme)}</div>
+    <b>Ripeti la scansione</b><div class="opt">${sel("sRepeat", [[0, "mai"], [5, "ogni 5 minuti"], [15, "ogni 15 minuti"], [60, "ogni ora"]], bg.repeat_minutes || 0)}<span class="tag">Anche a finestra chiusa, con una notifica quando arriva un dispositivo nuovo.</span></div>
+    <b>Allarmi verso altri programmi</b><div class="opt">
+      <input id="sOSC" placeholder="OSC: 192.168.1.20:53000" value="${esc(alerts.osc || "")}" style="width:220px" spellcheck="false">
+      <input id="sOSCAddr" placeholder="/wasaping" value="${esc(alerts.osc_address || "")}" style="width:140px" spellcheck="false">
+      <input id="sHook" placeholder="Indirizzo web (webhook): https://…" value="${esc(alerts.webhook || "")}" style="flex:1 1 260px" spellcheck="false">
+      <button id="sAlertSave">Salva</button><button id="sAlertTest">Prova</button>
+      <span class="tag">Quando un dispositivo o un universo critico cade o torna, wasaping manda un messaggio OSC (a QLab, a una console, a un media server) e/o chiama l'indirizzo web con i dettagli in JSON.</span></div>
+    <b>Monitor su iPad o telefono</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sRemote"${rem.on ? " checked" : ""}> attivo</label><span class="tag" id="sRemoteInfo">${rem.on ? `Apri <b>${esc(rem.url)}</b> e inserisci il PIN <b>${esc(rem.pin)}</b>.` : "Sola lettura, protetto da un PIN."}</span></div>
+    <b>Aggiornamenti</b><div class="opt"><span>wasaping ${esc(upd.current || "")}</span>${upd.newer ? `<button class="primary" id="sUpdNow">Aggiorna a ${esc(upd.latest)}</button>` : ""}<label class="check" style="margin:0"><input type="checkbox" id="sUpdCheck"${upd.off ? "" : " checked"}> controlla le nuove versioni</label></div>
+    ${login.available ? `<b>Apri al login</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sLogin"${login.enabled ? " checked" : ""}> apri wasaping all'accesso, nella barra dei menu</label></div>` : ""}
+    ${info.helper && info.helper !== "notneeded" ? `<b>Indirizzi MAC (macOS)</b><div class="opt">${info.helper === "installed" ? '<span>aiuto di sistema attivo</span><button id="sHelperOff">Disinstalla</button>' : '<span>nascosti da macOS</span><button id="sHelperOn">Installa l\'aiuto</button>'}</div>` : ""}
+    <b>Community SNMP</b><div class="opt"><input id="sSNMP" value="${esc(snmpCommunity)}" style="width:160px" spellcheck="false"><span class="tag">Per leggere dagli switch su quale porta è ogni dispositivo.</span></div>
+  </div>`);
+  $("sLang").onchange = () => { try { localStorage.setItem("wasaping.lang", $("sLang").value); } catch {} location.reload(); };
+  $("sTheme").onchange = () => { theme = $("sTheme").value; try { localStorage.setItem("wasaping.theme", theme); } catch {} applyTheme(theme); };
+  $("sRepeat").onchange = () => { $("repeat").value = $("sRepeat").value; $("repeat").onchange(); };
+  $("sAlertSave").onclick = () => post("api/alerts", {osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim()}).then(() => toast("Allarmi salvati.")).catch(e => toast("Non salvato: " + e.message));
+  $("sAlertTest").onclick = () => post("api/alerts", {osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim(), test: true}).then(r => r.json()).then(d => toast(d.result || "Inviato.")).catch(e => toast("Errore: " + e.message));
+  $("sRemote").onchange = () => post("api/remote", {on: $("sRemote").checked}).then(r => r.json()).then(r => {
+    $("sRemoteInfo").innerHTML = r.on ? `Apri <b>${esc(r.url)}</b> e inserisci il PIN <b>${esc(r.pin)}</b>.` : "Sola lettura, protetto da un PIN.";
+  }).catch(e => { toast("Non attivato: " + e.message); $("sRemote").checked = false; });
+  $("sUpdCheck").onchange = () => post("api/update", {off: !$("sUpdCheck").checked});
+  if ($("sUpdNow")) $("sUpdNow").onclick = installUpdate;
+  if ($("sLogin")) $("sLogin").onchange = () => post("api/login", {enabled: $("sLogin").checked}).catch(e => { toast(e.message); $("sLogin").checked = !$("sLogin").checked; });
+  if ($("sHelperOff")) $("sHelperOff").onclick = () => { closeSheet(); helper("uninstall"); };
+  if ($("sHelperOn")) $("sHelperOn").onclick = () => { closeSheet(); helper("install"); };
+  $("sSNMP").onchange = () => { snmpCommunity = $("sSNMP").value.trim() || "public"; };
+}
+async function installUpdate() {
+  toast("Scarico l'aggiornamento…");
+  try {
+    const d = await post("api/update/install", {}).then(r => r.json());
+    toast(d.message || "Aggiornato: wasaping si riavvia.");
+  } catch (e) {
+    toast("Aggiornamento non riuscito: " + e.message);
+    const u = await fetch("api/update").then(r => r.json()).catch(() => null);
+    if (u && u.url) openURL(u.url);
+  }
+}
 
 // ---- Sheet: IP plan, free IPs, venue sharing ----
 function openSheet(title, html) {
@@ -797,7 +902,12 @@ function pickFile(accept, then) {
 }
 const normMAC = m => (m || "").toLowerCase().replace(/-/g, ":").split(":").map(x => x.padStart(2, "0")).join(":");
 
+function needOneNet() {
+  if (networks.length > 1 && !activeNet) { toast("Scegli prima una rete dalle schede."); return true; }
+  return false;
+}
 async function planView() {
+  if (needOneNet()) return;
   let plan = [];
   try { plan = await fetch("api/plan").then(r => r.json()) || []; } catch {}
   if (!plan.length) {
@@ -820,7 +930,7 @@ async function planView() {
   };
 }
 function comparePlan(plan) {
-  const live = hosts.filter(h => !h.self);
+  const live = hosts.filter(h => !h.self && (!activeNet || h.net === activeNet));
   const byIP = new Map(live.map(h => [h.ip, h])), byMAC = new Map(live.filter(h => h.mac).map(h => [h.mac, h]));
   const byName = new Map(live.map(h => [(label(h) || "").toLowerCase(), h]));
   const ipCount = {}; plan.forEach(p => ipCount[p.ip] = (ipCount[p.ip] || 0) + 1);
@@ -860,7 +970,7 @@ async function applyPlanNames(plan) {
   for (const r of rows) {
     if (!r.h || r.cls === "bad" || (r.h.name && r.h.role)) continue;
     const name = r.h.name || r.p.name || "", role = r.h.role || r.p.role || "";
-    try { await post("api/device", {key: r.h.key, name, role, note: r.h.note || "", critical: !!r.h.critical}); Object.assign(r.h, {name, role}); n++; } catch {}
+    try { await post("api/device", {key: r.h.key, net: r.h.net || "", name, role, note: r.h.note || "", critical: !!r.h.critical}); Object.assign(r.h, {name, role}); n++; } catch {}
   }
   toast(`${n} dispositivi aggiornati dal piano.`); render(); planView();
 }
@@ -876,7 +986,8 @@ function rangeOf(spec) {
 }
 const nToIP = n => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
 async function freeView() {
-  const r = rangeOf($("target").value.trim());
+  const spec = (network && network.subnet && ($("target").value.trim() === "all" || networks.length > 1)) ? network.subnet : $("target").value.trim();
+  const r = rangeOf(spec);
   if (!r || r[1] - r[0] > 4096) { openSheet("IP liberi", "<p>Scrivi una rete (es. 10.0.0.0/24) o un intervallo nel campo in alto.</p>"); return; }
   let plan = [];
   try { plan = await fetch("api/plan").then(x => x.json()) || []; } catch {}
@@ -891,15 +1002,16 @@ async function freeView() {
     if (!free && start !== null) { ranges.push([start, n - 1]); start = null; }
   }
   const total = ranges.reduce((a, [x, y]) => a + y - x + 1, 0);
-  openSheet("IP liberi", `<p>${total} indirizzi liberi in ${esc($("target").value)}: non rispondono ora, non sono di dispositivi conosciuti (anche spenti) e non sono nel piano IP. Clic per copiare.</p>
+  openSheet("IP liberi", `<p>${total} indirizzi liberi in ${esc(spec)}: non rispondono ora, non sono di dispositivi conosciuti (anche spenti) e non sono nel piano IP. Clic per copiare.</p>
     <p class="muted">Controlla comunque l'intervallo del DHCP, se sulla rete c'è un router.</p>
     <div class="free">${ranges.map(([x, y]) => `<a data-ip="${nToIP(x)}">${x === y ? nToIP(x) : nToIP(x) + " – " + nToIP(y).split(".").pop()}</a>`).join("") || "Nessuno."}</div>`);
   $("shBody").querySelectorAll("a[data-ip]").forEach(a => a.onclick = () => copy(a.dataset.ip));
 }
 
 // Live DMX: universes heard on Art-Net and sACN, with the levels of one.
-let dmxES = null, dmxSel = "", dmxSess = "";
+let dmxES = null, dmxSel = "", dmxSess = "", critUnis = new Set();
 function dmxView() {
+  fetch("api/universe").then(r => r.json()).then(l => { critUnis = new Set(l || []); }).catch(() => {});
   openSheet("Universi DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Clic su un universo per vedere i 512 canali.</p>
     <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxGrid"></div>`);
   dmxSess = Math.random().toString(36).slice(2);
@@ -911,11 +1023,17 @@ function drawDMX(unis) {
   if (!$("dmxBody")) return;
   if (!unis.length) { $("dmxBody").innerHTML = "<p>Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.</p>"; $("dmxGrid").innerHTML = ""; return; }
   const multi = u => u.sources.length > 1;
-  $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th></tr></thead><tbody>
+  $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th><th title="Il Monitor avvisa se l'universo smette di arrivare">Critico</th></tr></thead><tbody>
     ${unis.map(u => `<tr class="pick${u.id === dmxSel ? " sel" : ""}" data-id="${esc(u.id)}"><td><b>${u.number}</b></td><td>${esc(u.protocol)}</td>
       <td>${u.sources.map(x => `${esc(x.name || x.ip)}${x.name ? ` <span class="muted">${esc(x.ip)}</span>` : ""}${x.priority ? ` <span class="muted">prio ${x.priority}</span>` : ""}`).join("<br>")}${multi(u) ? ' <span class="badge warn">più sorgenti</span>' : ""}</td>
-      <td>${u.sources.map(x => x.fps.toFixed(0)).join(" / ")}</td><td>${u.active} / 512</td></tr>`).join("")}
+      <td>${u.sources.map(x => x.fps.toFixed(0)).join(" / ")}</td><td>${u.active} / 512</td><td><input type="checkbox" class="ucrit" data-id="${esc(u.id)}"${critUnis.has(u.id) ? " checked" : ""}></td></tr>`).join("")}
   </tbody></table></div>`;
+  $("dmxBody").querySelectorAll("input.ucrit").forEach(c => {
+    c.onclick = e => e.stopPropagation();
+    c.onchange = () => post("api/universe", {id: c.dataset.id, critical: c.checked}).then(r => r.json()).then(l => {
+      critUnis = new Set(l || []); toast(c.checked ? "Il Monitor ora controlla questo universo." : "Universo tolto dal Monitor.");
+    }).catch(e => toast("Errore: " + e.message));
+  });
   $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => {
     dmxSel = tr.dataset.id;
     fetch(`api/dmx?s=${dmxSess}&u=${encodeURIComponent(dmxSel)}`, {method: "POST"});
@@ -950,7 +1068,109 @@ function switchView() {
   };
 }
 
+// RDM: the fixtures behind the Art-Net nodes, read-only.
+function rdmView() {
+  const nodes = hosts.filter(h => h.artnet).length;
+  openSheet("Apparecchi RDM", `<p>wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. Solo lettura: non cambia niente sugli apparecchi.</p>
+    <div class="row"><button class="primary" id="rdmGo" ${nodes ? "" : "disabled"}>Cerca apparecchi</button><span class="muted">${nodes ? `${nodes} nodi Art-Net nell'ultima scansione.` : "Nessun nodo Art-Net: fai prima una scansione."}</span></div>
+    <div id="rdmOut"></div>`);
+  $("rdmGo").onclick = async () => {
+    $("rdmGo").disabled = true; $("rdmOut").innerHTML = "<p>Chiedo ai nodi… (può volerci qualche secondo per apparecchio)</p>";
+    try {
+      const d = await post("api/rdm", {}).then(r => r.json());
+      const fx = d.fixtures || [];
+      // overlapping DMX addresses on the same universe
+      const clash = new Set();
+      for (const a of fx) for (const b of fx) if (a !== b && a.universe === b.universe && a.address && b.address &&
+        a.address <= b.address + Math.max(b.footprint, 1) - 1 && b.address <= a.address + Math.max(a.footprint, 1) - 1) { clash.add(a.uid); clash.add(b.uid); }
+      const nodeName = ip => { const h = hosts.find(x => x.ip === ip); return h ? (label(h) || ip) : ip; };
+      $("rdmOut").innerHTML = !fx.length ? "<p>Nessun apparecchio RDM ha risposto. Controlla che il nodo abbia l'RDM attivo sulle uscite.</p>" :
+        `<div class="sum"><span class="pill ok">${fx.length} apparecchi</span>${clash.size ? `<span class="pill bad">⚠ ${clash.size} con indirizzi sovrapposti</span>` : ""}</div>
+        <div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Indirizzo</th><th>Canali</th><th>Etichetta</th><th>Produttore</th><th>Modello</th><th>Modalità</th><th>UID</th><th>Nodo</th></tr></thead><tbody>
+        ${fx.map(f => `<tr${clash.has(f.uid) ? ' class="st-bad"' : ""}><td>${f.universe}</td><td class="mono">${f.address || "—"}${f.address && f.footprint > 1 ? "–" + (f.address + f.footprint - 1) : ""}</td><td>${f.footprint || ""}</td>
+          <td class="nt"><b>${esc(f.label || "")}</b></td><td class="nt">${esc(f.maker || "")}</td><td class="nt">${esc(f.model || "")}</td><td>${esc(f.personality || "")}</td><td class="mono">${esc(f.uid)}</td><td class="nt">${esc(nodeName(f.node))}</td></tr>`).join("")}
+        </tbody></table></div>`;
+    } catch (e) { $("rdmOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
+    $("rdmGo").disabled = false;
+  };
+}
+
+// ---- Pre-show check: one click, one report ----
+let lastScanAt = 0;
+function scanAndWait() {
+  return new Promise(resolve => {
+    if (es) { const t = setInterval(() => { if (!es) { clearInterval(t); resolve(); } }, 300); return; }
+    start();
+    const t = setInterval(() => { if (!es) { clearInterval(t); resolve(); } }, 300);
+  });
+}
+function listenUniverses(ms) {
+  return new Promise(resolve => {
+    let last = [];
+    const x = new EventSource(`api/dmx?s=pre${Date.now()}`);
+    x.addEventListener("snap", e => { last = JSON.parse(e.data); });
+    setTimeout(() => { x.close(); resolve(last); }, ms);
+  });
+}
+$("preBtn").onclick = preshow;
+async function preshow() {
+  if (needOneNet()) return;
+  openSheet("Check pre-show", "<p>Controllo in corso: scansione, dispositivi critici, universi, piano IP…</p>");
+  if (!hosts.length || Date.now() - lastScanAt > 120000) await scanAndWait();
+  const [crit, unisCrit, plan] = await Promise.all([fetch("api/critical").then(r => r.json()).catch(() => []), fetch("api/universe").then(r => r.json()).catch(() => []), fetch("api/plan").then(r => r.json()).catch(() => [])]);
+  const critL = crit || [];
+  const checks = critL.length ? await post("api/check", {ips: critL.map(d => d.ip), ports: Object.fromEntries(critL.filter(d => (d.ports || []).length).map(d => [d.ip, d.ports.slice(0, 8)]))}).then(r => r.json()).catch(() => []) : [];
+  const live = (unisCrit || []).length ? await listenUniverses(3500) : [];
+  const sec = [];
+  let red = 0, yellow = 0;
+  // critical devices
+  const devRows = critL.map(d => { const c = checks.find(x => x.ip === d.ip); const ok = c && c.alive; if (!ok) red++; return [ok ? "ok" : "bad", d.name || d.friendly || d.hostname || d.ip, d.role || "", d.ip, ok ? (c.rtt_ms ? c.rtt_ms + " ms" : "ok") : "NON RISPONDE"]; });
+  sec.push(["Dispositivi critici", devRows, critL.length ? "" : "Nessun dispositivo segnato come critico."]);
+  // critical universes
+  const uniRows = (unisCrit || []).map(id => { const u = live.find(x => x.id === id); const ok = u && u.sources.length; if (!ok) red++; if (ok && u.sources.length > 1) yellow++;
+    return [ok ? (u.sources.length > 1 ? "warn" : "ok") : "bad", uniNameJS(id), ok ? u.sources.map(x => x.name || x.ip).join(", ") : "", "", ok ? `${Math.round(Math.max(...u.sources.map(x => x.fps)))} frame/s` + (u.sources.length > 1 ? " · più sorgenti" : "") : "NON ARRIVA"]; });
+  sec.push(["Universi critici", uniRows, (unisCrit || []).length ? "" : "Nessun universo segnato come critico (Strumenti → Universi DMX)."]);
+  // IP plan
+  if ((plan || []).length) {
+    const {rows, extra} = comparePlan(plan);
+    const pr = rows.filter(r => r.cls !== "ok").map(r => { if (r.cls === "bad") red++; else yellow++; return [r.cls, r.p.name || "—", r.p.role || "", r.p.ip, r.st]; });
+    if (extra.length) yellow++;
+    sec.push(["Piano IP", pr, `${rows.filter(r => r.cls === "ok").length} su ${rows.length} a posto${extra.length ? ` · ${extra.length} dispositivi non previsti` : ""}.`]);
+  } else sec.push(["Piano IP", [], "Nessun piano IP importato."]);
+  // network problems and device warnings
+  const probs = (issues || []).map(i => ["warn", i, "", "", ""]);
+  yellow += probs.length;
+  sec.push(["Problemi di rete", probs, probs.length ? "" : "Nessuno."]);
+  const warns = hosts.filter(h => (!activeNet || h.net === activeNet) && (h.warnings || []).length).flatMap(h => h.warnings.map(w => ["warn", label(h) || h.ip, "", h.ip, w]));
+  yellow += warns.length ? 1 : 0;
+  sec.push(["Avvisi sui dispositivi", warns, warns.length ? "" : "Nessuno."]);
+  const verdict = red ? ["bad", "NON PRONTO", `${red} problemi da risolvere prima dello show.`] : yellow ? ["warn", "PRONTO CON AVVISI", "Niente di bloccante, ma qualcosa da controllare."] : ["ok", "PRONTO", "Tutto a posto."];
+  const when = new Date().toLocaleString("it");
+  const netName = network ? (network.name || network.auto) : "";
+  const icon = c => c === "ok" ? "✓" : c === "bad" ? "✗" : "⚠";
+  const body = `<div class="verdict v-${verdict[0]}"><b>${verdict[1]}</b><span>${esc(verdict[2])}</span></div>
+    <p class="muted nt">${esc(netName)} · ${esc(when)}</p>
+    ${sec.map(([t, rows, note]) => `<h3>${esc(t)}</h3>${note ? `<p class="muted">${esc(note)}</p>` : ""}${rows.length ? `<div class="wrap" style="margin:0"><table><tbody>${rows.map(r => `<tr><td class="st-${r[0]}">${icon(r[0])}</td><td class="nt"><b>${esc(r[1])}</b></td><td class="nt">${esc(r[2])}</td><td class="mono">${esc(r[3])}</td><td>${esc(r[4])}</td></tr>`).join("")}</tbody></table></div>` : ""}`).join("")}
+    <div class="row"><button class="primary" id="preSave">Stampa o salva il report</button><button id="preAgain">Ricontrolla</button></div>`;
+  openSheet("Check pre-show", body);
+  $("preAgain").onclick = () => { lastScanAt = 0; preshow(); };
+  $("preSave").onclick = () => {
+    const doc = $("shBody").cloneNode(true);
+    doc.querySelector(".row")?.remove();
+    const html = `<!DOCTYPE html><html lang="${LANG}"><head><meta charset="utf-8"><title>Check pre-show · ${esc(netName)}</title><style>
+      body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12px;color:#171717;margin:24px}h1{font-size:20px;margin:0 0 6px}h3{font-size:14px;margin:18px 0 6px}
+      table{border-collapse:collapse;width:100%}td{border-bottom:1px solid #ddd;padding:5px 6px;vertical-align:top}.muted{color:#666}.mono{font-family:Menlo,Consolas,monospace}
+      .verdict{padding:12px 14px;border-radius:8px;display:flex;gap:12px;align-items:center;font-size:14px}.v-ok{background:#e4f6d6}.v-warn{background:#fdebd3}.v-bad{background:#f9d6d6}
+      .st-ok{color:#3f7a17}.st-bad{color:#d63f3f}.st-warn{color:#c46a10}.wrap{border:none}@page{size:A4;margin:14mm}</style></head>
+      <body><h1>wasaping · Check pre-show</h1>${doc.innerHTML}<script>addEventListener("load",()=>setTimeout(()=>print(),300))<\/script></body></html>`;
+    if (ui === "browser") { const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); return; } }
+    post("api/save", {name: `wasaping-preshow-${stamp()}.html`, data: html, open: true}).then(r => r.json()).then(d => toast("Report aperto nel browser: " + d.path)).catch(e => toast("Non salvato: " + e.message));
+  };
+}
+const uniNameJS = id => { const [p, n] = id.split(":"); return (p === "art" ? "Art-Net" : "sACN") + " universo " + n; };
+
 async function exportVenue() {
+  if (needOneNet()) return;
   try {
     const v = await fetch("api/venue").then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
     download(`wasaping-locale-${stamp()}.wasaping`, JSON.stringify(v, null, 2), "application/json");
@@ -980,13 +1200,14 @@ function sortValue(h, k) {
 function render() {
   const f = $("filter").value.toLowerCase();
   const match = h => !f || [h.ip, h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "), (KIND[h.kind] || KIND[""])[0], (h.ports || []).join(" ")].join(" ").toLowerCase().includes(f);
-  const list = hosts.filter(match);
+  const inNet = h => !activeNet || h.net === activeNet;
+  const list = hosts.filter(h => inNet(h) && match(h));
   list.sort((a, b) => {
     const x = sortValue(a, sortKey), y = sortValue(b, sortKey);
     if (typeof x === "string") { if (!x && y) return 1; if (!y && x) return -1; }
     return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
   });
-  const off = es || !showGone ? [] : gone.filter(match);
+  const off = es || !showGone ? [] : gone.filter(h => inNet(h) && match(h));
   if (!list.length && !off.length) {
     $("rows").innerHTML = `<tr><td colspan="7" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
     return;
@@ -1044,6 +1265,31 @@ function showMenu(x, y, hint, items) {
   m.style.top = Math.min(y, innerHeight - r.height - 8) + "px";
 }
 function hideMenu() { $("ctx").style.display = "none"; }
+
+// "Strumenti" menu: everything that is not scanning, grouped.
+$("toolsBtn").onclick = e => {
+  e.stopPropagation();
+  const r = $("toolsBtn").getBoundingClientRect();
+  const none = !hosts.length;
+  const groups = [
+    ["Rete", [["Piano IP", planView], ["IP liberi", freeView], ["Porte switch", switchView, none]]],
+    ["Show", [["Universi DMX", dmxView], ["Apparecchi RDM", rdmView]]],
+    ["Locale", [["Esporta locale", exportVenue, !network], ["Importa locale", () => pickFile(".wasaping,.json", importVenue), !network]]],
+    ["Esporta", [["Stampa elenco IP", () => $("printBtn").click(), none], ["CSV", () => $("csv").click(), none], ["JSON", () => $("json").click(), none]]],
+  ];
+  const m = $("ctx");
+  m.innerHTML = groups.map(([g, items]) => `<div class="hint">${esc(g)}</div>` + items.map(([l, , dis], i) => `<div data-g="${esc(g)}" data-i="${i}"${dis ? ' class="dis"' : ""}>${esc(l)}</div>`).join("")).join("");
+  m.querySelectorAll("[data-i]").forEach(d => d.onclick = () => {
+    if (d.classList.contains("dis")) return;
+    hideMenu();
+    groups.find(x => x[0] === d.dataset.g)[1][+d.dataset.i][1]();
+  });
+  m.style.display = "block";
+  const w = m.getBoundingClientRect().width;
+  m.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
+  m.style.top = (r.bottom + 6) + "px";
+  translateTree(m);
+};
 document.addEventListener("click", e => { if (!e.target.closest("#ctx")) hideMenu(); });
 document.addEventListener("scroll", hideMenu, true);
 window.addEventListener("blur", hideMenu);
@@ -1145,6 +1391,13 @@ function showFacts(h) {
     if (h.sacn.priority) f.push(["Priorità sACN", esc(h.sacn.priority)]);
   }
   if (h.ptp) f.push(["Clock PTP", `master ${esc(h.ptp)}${h.ptp === "PTPv1" ? ' <span class="muted">(Dante)</span>' : ""}`]);
+  if (h.dante) {
+    const d = h.dante, bits = [];
+    if (d.tx_channels) bits.push(LANG === "en" ? `${d.tx_channels} transmit channels` : `${d.tx_channels} canali in trasmissione`);
+    if (d.sample_rate) bits.push(`${d.sample_rate / 1000} kHz`);
+    if (d.latency_ms) bits.push((LANG === "en" ? "latency " : "latenza ") + d.latency_ms + " ms");
+    if (bits.length) f.push(["Dante", esc(bits.join(" · "))]);
+  }
   if ((h.ndi || []).length) f.push(["Sorgenti NDI", h.ndi.map(n => `<span class="svc">${esc(n)}</span>`).join("")]);
   if (h.pjlink) {
     const p = h.pjlink;
@@ -1180,7 +1433,7 @@ $("dSave").onclick = async () => {
   const h = findHost(selected); if (!h) return;
   const name = $("dName").value.trim(), role = $("dRole").value.trim(), note = $("dNote").value.trim(), critical = $("dCrit").checked;
   try {
-    await post("api/device", {key: h.key, name, role, note, critical});
+    await post("api/device", {key: h.key, net: h.net || "", name, role, note, critical});
     Object.assign(h, {name, role, note, critical});
     $("dMsg").textContent = "✓ Salvato.";
     openDetail(h.key);
@@ -1251,7 +1504,7 @@ $("dTrace").onclick = () => {
 $("dForget").onclick = async () => {
   const h = findHost(selected); if (!h) return;
   try {
-    await post("api/device", {key: h.key, forget: true});
+    await post("api/device", {key: h.key, net: h.net || "", forget: true});
     gone = gone.filter(x => x.key !== h.key);
     closeDetail();
   } catch (e) { $("dMsg").textContent = "Errore: " + e.message; }
@@ -1338,11 +1591,9 @@ async function openMonitor() {
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
   const st = await monRefresh();
   // Opening the monitor starts it, if there is something to watch.
-  if (st && !st.on && (st.devices || []).length === 0) {
-    const crit = await fetch("api/critical").then(r => r.json()).catch(() => []);
-    if ((crit || []).length) await post("api/monitor", {on: true, every: +$("mEvery").value}).then(monRefresh);
-  } else if (st && !st.on) {
-    await post("api/monitor", {on: true, every: +$("mEvery").value}).then(monRefresh);
+  if (st && !st.on) {
+    const [crit, unis] = await Promise.all([fetch("api/critical").then(r => r.json()).catch(() => []), fetch("api/universe").then(r => r.json()).catch(() => [])]);
+    if ((crit || []).length || (unis || []).length) await post("api/monitor", {on: true, every: +$("mEvery").value}).then(monRefresh);
   }
   fetch("api/remote").then(r => r.json()).then(showRemoteHint).catch(() => {});
   clearInterval(monTimer); monTimer = setInterval(monRefresh, 1000);
@@ -1361,7 +1612,7 @@ async function monRefresh() {
   $("mInfo").textContent = (st.network || "") + (st.on ? " · attivo, anche a finestra chiusa" : " · fermo");
   drawTiles(st);
   const ev = st.events || [];
-  $("mEvents").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b class="nt">${esc(e.name)}</b> ${e.up ? `di nuovo in linea dopo ${esc(fmtDur(e.down_for))}` : "non risponde"}</li>`).join("") : '<li class="muted">Nessun evento.</li>';
+  $("mEvents").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.text ? "warn" : e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b class="nt">${esc(e.name)}</b> ${e.text ? `<span class="nt">${esc(e.text)}</span>` : e.up ? `di nuovo in linea dopo ${esc(fmtDur(e.down_for))}` : (e.kind === "universe" ? "non arriva" : "non risponde")}</li>`).join("") : '<li class="muted">Nessun evento.</li>';
   // Sound for drops that happened since the page last looked.
   const fresh = ev.filter(e => e.id > monSeenEvent && !e.up);
   if (monSeenEvent >= 0 && fresh.length) alarm(fresh.map(e => e.name), true);
@@ -1369,9 +1620,17 @@ async function monRefresh() {
   return st;
 }
 const fmtDur = s => s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`;
+function spark(rtts) {
+  if (!rtts || rtts.length < 2) return "";
+  const w = 180, h = 26, max = Math.max(5, ...rtts.filter(x => x >= 0));
+  const pts = rtts.map((v, i) => `${(i * w / (rtts.length - 1)).toFixed(1)},${v < 0 ? h : (h - 2 - (h - 4) * v / max).toFixed(1)}`);
+  const lost = rtts.map((v, i) => v < 0 ? `<rect x="${(i * w / (rtts.length - 1) - 1.5).toFixed(1)}" y="0" width="3" height="${h}" fill="var(--warn)" opacity=".6"/>` : "").join("");
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${lost}<polyline points="${pts.join(" ")}" fill="none" stroke="var(--wasabi)" stroke-width="1.5"/></svg>`;
+}
 function drawTiles(st) {
-  const devs = st.devices || [];
-  if (!devs.length) {
+  const devs = st.devices || [], unis = st.universes || [];
+  $("mPTP").innerHTML = (st.ptp || []).map(p => `Clock PTP: master <b>${esc(p.ip)}</b> <span class="muted">${esc(p.kind)} · ${esc(new Date(p.since).toLocaleTimeString("it"))}</span>`).join("<br>");
+  if (!devs.length && !unis.length) {
     $("tiles").innerHTML = '<div class="mhint">Nessun dispositivo critico su questa rete.<br>Apri un dispositivo dall\'elenco e spunta <b>Critico</b>: console, switch principale, stagebox Dante, media server…</div>';
     $("mState").className = "state ok"; $("mState").textContent = "—";
     return;
@@ -1384,7 +1643,13 @@ function drawTiles(st) {
     const since = d.known && d.since ? `da ${new Date(d.since).toLocaleTimeString("it")}` : "";
     return `<div class="tile${isDown ? " down" : ""}"><div class="t nt">${kindIcon(d.kind)}${esc(d.name)}</div>
       <div class="r nt">${esc([d.role, d.ip].filter(Boolean).join(" · "))}</div>
-      <div class="s"><b>${esc(status)}</b><span class="muted">${esc(since)}</span></div></div>`;
+      <div class="s"><b>${esc(status)}</b><span class="muted">${esc(since)}</span></div>${spark(d.rtts)}</div>`;
+  }).join("") + unis.map(u => {
+    const isDown = u.known && !u.alive;
+    const status = !u.known ? "controllo…" : u.alive ? `${Math.round(u.fps)} frame/s` : "NON ARRIVA";
+    return `<div class="tile${isDown ? " down" : ""}"><div class="t">${kindIcon("lighting")}${esc(u.name)}</div>
+      <div class="r nt">${esc((u.sources || []).join(", "))}</div>
+      <div class="s"><b>${esc(status)}</b><span class="muted">${u.known && u.since ? esc((LANG === "en" ? "since " : "da ") + new Date(u.since).toLocaleTimeString("it")) : ""}</span></div></div>`;
   }).join("");
 }
 function showRemoteHint(r) {

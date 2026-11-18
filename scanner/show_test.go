@@ -149,3 +149,48 @@ func TestDMXParsers(t *testing.T) {
 		t.Errorf("sacn: %v %d %q %d %d", ok, u, name, prio, len(data))
 	}
 }
+
+func TestDanteChannels(t *testing.T) {
+	d := &devInfo{fprio: 99, mprio: 99}
+	d.addInstance("netaudio-chan", "Mic 1@CL5-FOH")
+	d.addInstance("netaudio-chan", "Mic 2@CL5-FOH")
+	if d.friendly != "CL5-FOH" || len(d.danteChans) != 2 {
+		t.Errorf("got %+v", d)
+	}
+}
+
+func TestRDMPackets(t *testing.T) {
+	uid := [6]byte{0x45, 0x4E, 0, 0, 0, 7}
+	req := rdmGet(uid, 3, pidDeviceLabel)
+	// sub start, length, dest, src, tn, port, count, subdev(2), cc, pid(2), pdl, checksum(2)
+	if req[0] != 0x01 || req[1] != 24 || req[19] != 0x20 || binary.BigEndian.Uint16(req[20:]) != pidDeviceLabel || len(req) != 25 {
+		t.Fatalf("request % x", req)
+	}
+	var sum uint16 = 0xCC
+	for _, c := range req[:23] {
+		sum += uint16(c)
+	}
+	if binary.BigEndian.Uint16(req[23:]) != sum {
+		t.Error("bad checksum")
+	}
+	// A node's reply: ACK to GET DEVICE_LABEL "Spot 1".
+	label := []byte("Spot 1")
+	m := []byte{0x01, byte(24 + len(label))}
+	m = append(m, rdmSrc[:]...)
+	m = append(m, uid[:]...)
+	m = append(m, 3, 0x00, 0, 0, 0, 0x21, 0x00, 0x82, byte(len(label)))
+	m = append(m, label...)
+	m = append(m, 0, 0)
+	pkt := append(artRdm(5, nil), m...)
+	r, ok := parseArtRdmReply(pkt)
+	if !ok || r.src != uid || r.pid != pidDeviceLabel || string(r.pd) != "Spot 1" {
+		t.Fatalf("reply %+v %v", r, ok)
+	}
+	tod := artHeader(0x8100, 28+12)
+	tod[21], tod[23], tod[27] = 0, 0x12, 2
+	copy(tod[28:], uid[:])
+	u, uids, ok := parseArtTodData(tod)
+	if !ok || u != 0x12 || len(uids) != 2 || uids[0] != uid {
+		t.Errorf("tod %d %v %v", u, uids, ok)
+	}
+}

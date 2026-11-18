@@ -205,3 +205,32 @@ func parseSACNData(b []byte) (universe int, name string, prio int, data []byte, 
 func InterfaceFor(ip net.IP) *net.Interface {
 	return interfaceFor([]net.IP{ip}, localNetworks())
 }
+
+// ListenPTP calls onMaster for every Sync/Announce heard (a clock master
+// speaking) until ctx ends. Ports 319/320 may need rights on Linux.
+func ListenPTP(ctx context.Context, iface *net.Interface, onMaster func(kind, ip string)) {
+	var wg sync.WaitGroup
+	for _, port := range []int{319, 320} {
+		c, err := net.ListenMulticastUDP("udp4", iface, &net.UDPAddr{IP: net.IPv4(224, 0, 1, 129), Port: port})
+		if err != nil {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer c.Close()
+			go func() { <-ctx.Done(); c.SetReadDeadline(time.Now()) }()
+			buf := make([]byte, 1500)
+			for ctx.Err() == nil {
+				n, from, err := c.ReadFromUDP(buf)
+				if err != nil {
+					continue
+				}
+				if kind, _ := parsePTP(buf[:n]); kind != "" {
+					onMaster(kind, from.IP.String())
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}

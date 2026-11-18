@@ -38,9 +38,11 @@ type Device struct {
 type Network struct {
 	Name      string             `json:"name,omitempty"` // set by the user, e.g. "Arena Verona"
 	Auto      string             `json:"auto"`           // description wasaping made
+	Subnet    string             `json:"subnet,omitempty"`
 	Devices   map[string]*Device `json:"devices"`
 	Scans     []time.Time        `json:"scans,omitempty"` // latest maxHistory scans
 	Plan      []PlanItem         `json:"plan,omitempty"`  // imported IP plan
+	Universes []string           `json:"critical_universes,omitempty"`
 	FirstSeen time.Time          `json:"first_seen"`
 	LastSeen  time.Time          `json:"last_seen"`
 }
@@ -51,6 +53,7 @@ const maxHistory = 200
 type HostView struct {
 	scanner.Host
 	Key       string    `json:"key"`
+	Net       string    `json:"net,omitempty"` // network id (several networks scanned at once)
 	Name      string    `json:"name,omitempty"`
 	Role      string    `json:"role,omitempty"`
 	Note      string    `json:"note,omitempty"`
@@ -64,6 +67,7 @@ type HostView struct {
 type GoneView struct {
 	Device
 	Key     string `json:"key"`
+	Net     string `json:"net,omitempty"`
 	History string `json:"history,omitempty"`
 }
 
@@ -72,6 +76,7 @@ type NetView struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name,omitempty"`
 	Auto      string    `json:"auto"`
+	Subnet    string    `json:"subnet,omitempty"`
 	Known     int       `json:"known"`
 	Scans     int       `json:"scans"`
 	FirstSeen time.Time `json:"first_seen"`
@@ -141,7 +146,7 @@ func (s *Store) saveLocked() error {
 // networkID names the network the targets are on: by the router's MAC when
 // there is a router (the same venue keeps its id even if the subnet changes),
 // else by the subnet (show networks often have no router).
-func networkID(ctx context.Context, targets []net.IP) (id, auto string) {
+func networkID(ctx context.Context, targets []net.IP) (id, auto, subnetOut string) {
 	subnet := ""
 	if ifs, err := scanner.LocalInterfaces(); err == nil && len(targets) > 0 {
 		for _, i := range ifs {
@@ -153,6 +158,7 @@ func networkID(ctx context.Context, targets []net.IP) (id, auto string) {
 	if subnet == "" && len(targets) > 0 {
 		subnet = targets[0].Mask(net.CIDRMask(24, 32)).String() + "/24"
 	}
+	defer func() { subnetOut = subnet }()
 	if gw := scanner.DefaultGateway(); gw != "" {
 		if _, n, err := net.ParseCIDR(subnet); err == nil && n.Contains(net.ParseIP(gw)) {
 			if mac := scanner.ARPSnapshot(ctx)[gw]; mac != "" {
@@ -161,12 +167,12 @@ func networkID(ctx context.Context, targets []net.IP) (id, auto string) {
 				if v != "" && !strings.HasPrefix(v, "(") {
 					desc += " (" + v + ")"
 				}
-				return "gw:" + mac, desc
+				return "gw:" + mac, desc, subnet
 			}
-			return "gw:" + gw + "@" + subnet, "Rete " + subnet + ", router " + gw
+			return "gw:" + gw + "@" + subnet, "Rete " + subnet + ", router " + gw, subnet
 		}
 	}
-	return "net:" + subnet, "Rete " + subnet + " senza router"
+	return "net:" + subnet, "Rete " + subnet + " senza router", subnet
 }
 
 // Session tracks one scan against the store.
@@ -181,7 +187,7 @@ type Session struct {
 }
 
 func (s *Store) Begin(ctx context.Context, targets []net.IP) *Session {
-	id, auto := networkID(ctx, targets)
+	id, auto, subnet := networkID(ctx, targets)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := s.Networks[id]
@@ -192,7 +198,7 @@ func (s *Store) Begin(ctx context.Context, targets []net.IP) *Session {
 		}
 		s.Networks[id] = n
 	}
-	n.Auto = auto
+	n.Auto, n.Subnet = auto, subnet
 	s.current = id
 	ss := &Session{s: s, net: n, id: id, started: time.Now(), first: len(n.Devices) == 0, seen: map[string]bool{}}
 	if len(n.Scans) > 0 {
@@ -272,7 +278,7 @@ func (ss *Session) View(h scanner.Host) HostView {
 	}
 	n.Devices[key] = d
 	ss.seen[key] = true
-	return HostView{Host: h, Key: key, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
+	return HostView{Host: h, Key: key, Net: ss.id, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
 		New: !known && !ss.first, FirstSeen: d.FirstSeen, History: hist}
 }
 
@@ -289,7 +295,7 @@ func (ss *Session) Finish(targets []net.IP) []GoneView {
 	var gone []GoneView
 	for k, d := range n.Devices {
 		if !ss.seen[k] && (inRange[d.IP] || d.Critical) && d.LastSeen.Before(ss.started) {
-			gone = append(gone, GoneView{Device: *d, Key: k, History: history(n, d, ss.started, false)})
+			gone = append(gone, GoneView{Device: *d, Key: k, Net: ss.id, History: history(n, d, ss.started, false)})
 		}
 	}
 	sort.Slice(gone, func(i, j int) bool { return ipLess(gone[i].IP, gone[j].IP) })
@@ -310,7 +316,7 @@ func (ss *Session) Network() NetView {
 }
 
 func netView(id string, n *Network, isNew bool) NetView {
-	return NetView{ID: id, Name: n.Name, Auto: n.Auto, Known: len(n.Devices), Scans: len(n.Scans), FirstSeen: n.FirstSeen, IsNew: isNew}
+	return NetView{ID: id, Name: n.Name, Auto: n.Auto, Subnet: n.Subnet, Known: len(n.Devices), Scans: len(n.Scans), FirstSeen: n.FirstSeen, IsNew: isNew}
 }
 
 // Current returns the network of the latest scan, if any.
@@ -337,11 +343,30 @@ func (s *Store) RenameNetwork(name string) bool {
 	return true
 }
 
-// Label sets the user's fields for a device of the current network.
-func (s *Store) Label(key, name, role, note string, critical bool) bool {
+// Select makes a known network the current one (tabs with several networks).
+func (s *Store) Select(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n := s.Networks[s.current]
+	if s.Networks[id] == nil {
+		return false
+	}
+	s.current = id
+	return true
+}
+
+// net returns the given network, or the current one when id is "" (s.mu held).
+func (s *Store) netLocked(id string) *Network {
+	if id == "" {
+		id = s.current
+	}
+	return s.Networks[id]
+}
+
+// Label sets the user's fields for a device (of network id, "" = current).
+func (s *Store) Label(id, key, name, role, note string, critical bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.netLocked(id)
 	if n == nil || n.Devices[key] == nil {
 		return false
 	}
@@ -351,11 +376,11 @@ func (s *Store) Label(key, name, role, note string, critical bool) bool {
 	return true
 }
 
-// Forget removes a device from the current network's known ones.
-func (s *Store) Forget(key string) {
+// Forget removes a device from a network's known ones ("" = current).
+func (s *Store) Forget(id, key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if n := s.Networks[s.current]; n != nil {
+	if n := s.netLocked(id); n != nil {
 		delete(n.Devices, key)
 		s.saveLocked()
 	}
@@ -470,6 +495,38 @@ func (s *Store) ImportVenue(v Venue) (int, error) {
 	}
 	s.saveLocked()
 	return count, nil
+}
+
+// CriticalUniverses lists the DMX universes marked critical ("sacn:1").
+func (s *Store) CriticalUniverses() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n := s.Networks[s.current]; n != nil {
+		return append([]string(nil), n.Universes...)
+	}
+	return nil
+}
+
+// SetUniverseCritical marks or unmarks a universe on the current network.
+func (s *Store) SetUniverseCritical(id string, on bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.Networks[s.current]
+	if n == nil {
+		return false
+	}
+	var out []string
+	for _, u := range n.Universes {
+		if u != id {
+			out = append(out, u)
+		}
+	}
+	if on {
+		out = append(out, id)
+	}
+	n.Universes = out
+	s.saveLocked()
+	return true
 }
 
 // CriticalDevices lists the devices marked critical on the current network.

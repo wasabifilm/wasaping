@@ -28,6 +28,7 @@ type ScanResult struct {
 	New       int        `json:"new"`
 	Fresh     []string   `json:"fresh,omitempty"`
 	Network   NetView    `json:"network"`
+	Networks  []NetView  `json:"networks,omitempty"` // several networks scanned at once
 	Issues    []string   `json:"issues"`
 }
 
@@ -92,6 +93,11 @@ type settings struct {
 	LatestVersion string    `json:"latest_version,omitempty"`
 	LatestURL     string    `json:"latest_url,omitempty"`
 	Lang          string    `json:"lang,omitempty"`
+	AlertOSC      string    `json:"alert_osc,omitempty"`
+	AlertOSCAddr  string    `json:"alert_osc_address,omitempty"`
+	AlertWebhook  string    `json:"alert_webhook,omitempty"`
+	LatestMacZip  string    `json:"latest_mac_zip,omitempty"`
+	LatestSums    string    `json:"latest_sums,omitempty"`
 }
 
 var (

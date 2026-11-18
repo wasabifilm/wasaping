@@ -73,6 +73,10 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/switchports", handleSwitchPorts)
 	mux.HandleFunc("/api/update", handleUpdate)
 	mux.HandleFunc("/api/lang", handleLang)
+	mux.HandleFunc("/api/rdm", handleRDM)
+	mux.HandleFunc("/api/universe", handleUniverse)
+	mux.HandleFunc("/api/alerts", handleAlerts)
+	mux.HandleFunc("/api/update/install", handleUpdateInstall)
 	mux.HandleFunc("/api/last", handleLast)
 	mux.HandleFunc("/api/trace", handleTrace)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +181,7 @@ func runWeb(ctx context.Context, args []string) error {
 // the network.
 var localOnly = map[string]bool{
 	"/api/save": true, "/api/helper": true, "/api/quit": true, "/api/notify": true,
-	"/api/device": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/venue": true, "/api/switchports": true, "/api/update": true, "/api/lang": true,
+	"/api/device": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/venue": true, "/api/switchports": true, "/api/update": true, "/api/lang": true, "/api/universe": true, "/api/alerts": true, "/api/rdm": true, "/api/update/install": true,
 }
 
 func fromLoopback(r *http.Request) bool {
@@ -261,6 +265,7 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 		"version":       version,
 		"interfaces":    ifs,
 		"defaultTarget": def,
+		"allTargets":    localScanTargets(),
 		"hasOUI":        scanner.HasOUI(),
 		"os":            runtime.GOOS,
 		"app":           appModeOn,
@@ -273,10 +278,19 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 // handleScan streams results as Server-Sent Events.
 func handleScan(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	ips, err := scanner.ParseTargets(q.Get("target"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	var ips []net.IP
+	var targets []string
+	if q.Get("target") == "all" {
+		if targets = localScanTargets(); len(targets) == 0 {
+			http.Error(w, "nessuna rete da scansionare", http.StatusBadRequest)
+			return
+		}
+	} else {
+		var err error
+		if ips, err = scanner.ParseTargets(q.Get("target")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	ports, err := parsePorts(q.Get("ports"))
 	if err != nil {
@@ -300,11 +314,18 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		fl.Flush()
 	}
 	lastProgress := time.Time{}
-	res, err := runCollect(r.Context(), q.Get("target"), ips, scanner.Options{
+	opt := scanner.Options{
 		Ping:       q.Get("ping") != "0",
 		ResolveDNS: q.Get("dns") != "0",
 		ScanPorts:  ports,
-	}, false, func(v HostView) {
+	}
+	collect := func(onHost func(HostView), onProgress func(scanner.Progress)) (*ScanResult, error) {
+		if targets != nil {
+			return runCollectAll(r.Context(), targets, opt, false, onHost, onProgress)
+		}
+		return runCollect(r.Context(), q.Get("target"), ips, opt, false, onHost, onProgress)
+	}
+	res, err := collect(func(v HostView) {
 		send("host", v)
 	}, func(p scanner.Progress) {
 		mu.Lock()
@@ -347,6 +368,7 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Key      string `json:"key"`
+		Net      string `json:"net"`
 		Name     string `json:"name"`
 		Role     string `json:"role"`
 		Note     string `json:"note"`
@@ -362,8 +384,8 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Forget {
-		devices().Forget(req.Key)
-	} else if !devices().Label(req.Key, req.Name, req.Role, req.Note, req.Critical) {
+		devices().Forget(req.Net, req.Key)
+	} else if !devices().Label(req.Net, req.Key, req.Name, req.Role, req.Note, req.Critical) {
 		http.Error(w, "dispositivo sconosciuto", http.StatusNotFound)
 		return
 	}
@@ -438,10 +460,20 @@ func handleNetwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
+		Select string `json:"select"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil || len(req.Name) > 200 {
 		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	if req.Select != "" {
+		if !devices().Select(req.Select) {
+			http.Error(w, "rete sconosciuta", http.StatusNotFound)
+			return
+		}
+		n, _ := devices().Current()
+		writeJSON(w, n)
 		return
 	}
 	if !devices().RenameNetwork(req.Name) {

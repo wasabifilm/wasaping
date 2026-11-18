@@ -35,7 +35,8 @@ type Host struct {
 	UPnP      string      `json:"upnp,omitempty"`      // UPnP device type, e.g. MediaRenderer
 	WebTitle  string      `json:"web_title,omitempty"` // <title> of its web page
 	NDI       []string    `json:"ndi,omitempty"`       // NDI sources it publishes
-	Kind      string      `json:"kind,omitempty"`      // see GuessKind
+	Dante     *DanteInfo  `json:"dante,omitempty"`
+	Kind      string      `json:"kind,omitempty"` // see GuessKind
 	Warnings  []string    `json:"warnings,omitempty"`
 	OffSubnet bool        `json:"off_subnet,omitempty"` // not in any network of this computer
 	Gateway   bool        `json:"gateway,omitempty"`
@@ -254,6 +255,9 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 					host.Hostname = d.name
 				}
 				host.Friendly, host.Model, host.Services, host.NDI = d.friendly, d.model, d.services, d.ndiSources
+				if len(d.danteChans) > 0 || d.danteRate > 0 {
+					host.Dante = &DanteInfo{TxChannels: len(d.danteChans), SampleRate: d.danteRate, LatencyMs: float64(d.danteLatNs) / 1e6}
+				}
 			}
 			if host.Self && opt.ResolveDNS {
 				host.Hostname = selfName
@@ -402,4 +406,11 @@ func isLetter(r rune) bool { return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z'
 func upnpSoftware(u *upnpInfo) bool {
 	s := strings.ToLower(u.maker + " " + u.model)
 	return strings.Contains(s, "minidlna") || strings.Contains(s, "justin maggard") || strings.Contains(s, "windows media connect")
+}
+
+// DanteInfo is what a Dante device announces about its transmit channels.
+type DanteInfo struct {
+	TxChannels int     `json:"tx_channels,omitempty"`
+	SampleRate int     `json:"sample_rate,omitempty"`
+	LatencyMs  float64 `json:"latency_ms,omitempty"`
 }

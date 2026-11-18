@@ -7,6 +7,7 @@ import (
 	"net"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,6 +20,9 @@ type devInfo struct {
 	model      string // e.g. "MacBookPro18,3", "Chromecast", "HP LaserJet M110"
 	services   []string
 	ndiSources []string
+	danteChans map[string]bool // Dante transmit channel names
+	danteRate  int
+	danteLatNs int
 	fprio      int // priority of the service that gave friendly (lower wins)
 	mprio      int
 }
@@ -26,7 +30,7 @@ type devInfo struct {
 // browseTypes are the DNS-SD service types asked by name: their instance
 // names and TXT records carry friendly names and models. Show gear first.
 var browseTypes = []string{
-	"_netaudio-arc._udp", "_netaudio-cmc._udp", "_ndi._tcp", "_blackmagic._tcp", "_videohub._tcp",
+	"_netaudio-arc._udp", "_netaudio-cmc._udp", "_netaudio-chan._udp", "_ndi._tcp", "_blackmagic._tcp", "_videohub._tcp",
 	"_qlab._tcp", "_qlab._udp", "_osc._udp", "_osc._tcp",
 	"_googlecast._tcp", "_airplay._tcp", "_companion-link._tcp", "_raop._tcp",
 	"_device-info._tcp", "_smb._tcp", "_afpovertcp._tcp", "_ipp._tcp", "_printer._tcp",
@@ -190,6 +194,13 @@ func absorbMDNS(b []byte, from string, out map[string]*devInfo) {
 					d.setModel(3, strings.Trim(firstNonEmpty(txt["ty"], txt["product"]), "()"))
 				case "netaudio-arc", "netaudio-cmc":
 					d.setModel(1, firstNonEmpty(txt["model"], txt["mf"]))
+				case "netaudio-chan":
+					if n, err := strconv.Atoi(txt["rate"]); err == nil {
+						d.danteRate = n
+					}
+					if n, err := strconv.Atoi(txt["latency_ns"]); err == nil {
+						d.danteLatNs = n
+					}
 				}
 			}
 		}
@@ -199,6 +210,19 @@ func absorbMDNS(b []byte, from string, out map[string]*devInfo) {
 func (d *devInfo) addInstance(svc, inst string) {
 	if inst == "" {
 		return
+	}
+	if svc == "netaudio-chan" { // "Mic 1@CL5-FOH": a channel, not a device name
+		ch, dev, ok := strings.Cut(inst, "@")
+		if d.danteChans == nil {
+			d.danteChans = map[string]bool{}
+		}
+		d.danteChans[ch] = true
+		if ok && dev != "" {
+			inst = dev
+			svc = "netaudio-arc"
+		} else {
+			return
+		}
 	}
 	if svc == "ndi" {
 		d.ndiSources = mergeUnique(d.ndiSources, []string{inst})

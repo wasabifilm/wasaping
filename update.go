@@ -65,14 +65,27 @@ func checkUpdates(ctx context.Context) {
 	}
 	defer resp.Body.Close()
 	var rel struct {
-		Tag string `json:"tag_name"`
-		URL string `json:"html_url"`
+		Tag    string `json:"tag_name"`
+		URL    string `json:"html_url"`
+		Assets []struct {
+			Name string `json:"name"`
+			URL  string `json:"browser_download_url"`
+		} `json:"assets"`
 	}
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&rel) != nil {
 		return
 	}
 	s = loadSettings()
 	s.UpdateChecked, s.LatestVersion, s.LatestURL = time.Now(), rel.Tag, rel.URL
+	s.LatestMacZip, s.LatestSums = "", ""
+	for _, a := range rel.Assets {
+		switch a.Name {
+		case "wasaping-macos.zip":
+			s.LatestMacZip = a.URL
+		case "SHA256SUMS":
+			s.LatestSums = a.URL
+		}
+	}
 	saveSettings(s)
 }
 
@@ -107,6 +120,20 @@ func handleUpdate(w http.ResponseWriter, r *http.Request) {
 	s := loadSettings()
 	writeJSON(w, map[string]any{
 		"current": version, "latest": s.LatestVersion, "url": s.LatestURL, "off": s.NoUpdateCheck,
-		"newer": !s.NoUpdateCheck && newerVersion(s.LatestVersion, version),
+		"newer":       !s.NoUpdateCheck && newerVersion(s.LatestVersion, version),
+		"can_install": canSelfUpdate() && s.LatestMacZip != "" && s.LatestSums != "",
 	})
+}
+
+// handleUpdateInstall updates wasaping.app in place (macOS) and relaunches it.
+func handleUpdateInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := selfUpdate(); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	writeJSON(w, map[string]string{"message": T("Aggiornato: wasaping si riavvia.", "Updated: wasaping restarts.")})
 }

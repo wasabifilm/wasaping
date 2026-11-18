@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
@@ -57,4 +59,25 @@ func defaultIface() *net.Interface {
 		return nil
 	}
 	return scanner.InterfaceFor(net.ParseIP(i.IP))
+}
+
+var reUniverseID = regexp.MustCompile(`^(art|sacn):\d{1,5}$`)
+
+// handleUniverse marks a universe as critical for the monitor: POST {id, critical}.
+func handleUniverse(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req struct {
+			ID       string `json:"id"`
+			Critical bool   `json:"critical"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil || !reUniverseID.MatchString(req.ID) {
+			http.Error(w, "richiesta non valida", http.StatusBadRequest)
+			return
+		}
+		if !devices().SetUniverseCritical(req.ID, req.Critical) {
+			http.Error(w, "fai prima una scansione di questa rete", http.StatusConflict)
+			return
+		}
+	}
+	writeJSON(w, devices().CriticalUniverses())
 }

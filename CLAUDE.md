@@ -4,7 +4,7 @@ Scanner IP multipiattaforma in stile LanScan. Go 1.22+, **solo libreria standard
 Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfaccia in italiano; commenti nel codice in inglese.
 
 ## Comandi
-- `go test ./...` · `go vet ./...` (anche con `GOOS=windows` e `GOOS=darwin`)
+- `go test ./...` · `go vet ./...` anche con `GOOS=windows`, `GOOS=darwin` e **`GOOS=linux GOARCH=amd64`** (il Mac è arm64: alcune costanti di `syscall`, es. SO_REUSEPORT, esistono solo su certe architetture)
 - `go run . app`: finestra (su Mac nativa, serve cgo) · `go run . web`: browser · `go run .`: terminale
 - `make oui`: aggiorna il database produttori incorporato · `make release`: tutti gli eseguibili + `dist/wasaping-macos.zip` · `make macapp` (solo su macOS) · `make icon`
 - Go sul Mac del proprietario: Homebrew, `/opt/homebrew/bin/go` (aggiungerlo al PATH se manca)

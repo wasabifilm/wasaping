@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -69,8 +70,28 @@ func portOpen(ctx context.Context, ip string, port int, timeout time.Duration) b
 	return true
 }
 
+// reTime matches the round-trip time in ping output in any language:
+// "time=12.3 ms", "time<1ms", "durata=3ms", "Zeit=4ms".
+var reTime = regexp.MustCompile(`[=<]\s*([0-9]+(?:[.,][0-9]+)?)\s*ms`)
+
+// pingRTT extracts the round-trip time from ping output (0 if not found).
+func pingRTT(out string) time.Duration {
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(strings.ToUpper(line), "TTL") {
+			continue
+		}
+		if m := reTime.FindStringSubmatch(line); m != nil {
+			if f, err := strconv.ParseFloat(strings.Replace(m[1], ",", ".", 1), 64); err == nil {
+				return time.Duration(f * float64(time.Millisecond))
+			}
+		}
+	}
+	return 0
+}
+
 // systemPing uses the OS ping command (ICMP without needing admin rights).
-func systemPing(ctx context.Context, ip string, timeout time.Duration) bool {
+// The time is the one ping measured, not counting the process start-up.
+func systemPing(ctx context.Context, ip string, timeout time.Duration) (bool, time.Duration) {
 	secs := int(timeout.Round(time.Second) / time.Second)
 	if secs < 1 {
 		secs = 1
@@ -91,9 +112,13 @@ func systemPing(ctx context.Context, ip string, timeout time.Duration) bool {
 	out, err := cmd.Output()
 	if runtime.GOOS == "windows" {
 		// Windows can exit 0 on "destination unreachable": require a real reply.
-		return strings.Contains(strings.ToUpper(string(out)), "TTL=")
+		if !strings.Contains(strings.ToUpper(string(out)), "TTL=") {
+			return false, 0
+		}
+	} else if err != nil {
+		return false, 0
 	}
-	return err == nil
+	return true, pingRTT(string(out))
 }
 
 // reverseDNS looks up a hostname for ip with a short timeout.

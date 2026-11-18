@@ -19,6 +19,8 @@ import (
 
 var version = "dev"
 
+const macHiddenNote = "Nota: macOS nasconde gli indirizzi MAC dei dispositivi ai programmi non firmati da uno sviluppatore registrato, quindi MAC e produttore restano vuoti."
+
 const usage = `wasaping %s — a spicy little IP scanner 🟢
 
 Uso:
@@ -35,7 +37,12 @@ Opzioni di scan:
 `
 
 func main() {
-	args := os.Args[1:]
+	var args []string
+	for _, a := range os.Args[1:] {
+		if !strings.HasPrefix(a, "-psn_") { // process serial number added by old macOS
+			args = append(args, a)
+		}
+	}
 	cmd := "scan"
 	if len(args) == 0 && launchedByDoubleClick() {
 		cmd = "app"
@@ -235,7 +242,9 @@ func runScan(ctx context.Context, args []string) error {
 		}
 		tw.Flush()
 		fmt.Fprintf(os.Stderr, "\n%d dispositivi trovati in %s\n", len(hosts), time.Since(start).Round(100*time.Millisecond))
-		if !scanner.HasOUI() {
+		if scanner.MACsHidden(hosts) {
+			fmt.Fprintln(os.Stderr, macHiddenNote)
+		} else if !scanner.HasOUI() {
 			fmt.Fprintln(os.Stderr, "Suggerimento: esegui `wasaping update-oui` per vedere i produttori dei dispositivi.")
 		}
 	}

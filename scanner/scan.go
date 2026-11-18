@@ -6,6 +6,7 @@ package scanner
 import (
 	"context"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -86,10 +87,9 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 					alive[ip] = hit{"tcp", rtt}
 					mu.Unlock()
 				} else if opt.Ping && ctx.Err() == nil {
-					start := time.Now()
-					if systemPing(ctx, ip, opt.Timeout) {
+					if ok, rtt := systemPing(ctx, ip, opt.Timeout); ok {
 						mu.Lock()
-						alive[ip] = hit{"ping", time.Since(start)}
+						alive[ip] = hit{"ping", rtt}
 						mu.Unlock()
 					}
 				}
@@ -139,6 +139,23 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 		emitMu  sync.Mutex
 		sem     = make(chan struct{}, 32)
 	)
+	// Local names (mDNS, NetBIOS) are asked for all hosts at once, while
+	// each host does its DNS lookup and port checks.
+	var names map[string]string
+	namesReady := make(chan struct{})
+	if opt.ResolveDNS {
+		ips := make([]string, 0, len(alive))
+		for ip := range alive {
+			if _, self := selfIPs[ip]; !self {
+				ips = append(ips, ip)
+			}
+		}
+		go func() { names = localNames(ctx, ips, 1500*time.Millisecond); close(namesReady) }()
+	} else {
+		close(namesReady)
+	}
+	selfName, _ := os.Hostname()
+
 	var wg2 sync.WaitGroup
 	for ip, h := range alive {
 		wg2.Add(1)
@@ -153,11 +170,18 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				host.MAC = arp[ip]
 			}
 			host.Vendor = Vendor(host.MAC)
-			if opt.ResolveDNS {
+			if opt.ResolveDNS && !host.Self {
 				host.Hostname = reverseDNS(ctx, ip, 2*time.Second)
 			}
 			if len(opt.ScanPorts) > 0 {
 				host.Ports = scanPorts(ctx, ip, opt.ScanPorts, opt.Timeout)
+			}
+			<-namesReady
+			if host.Hostname == "" {
+				host.Hostname = names[ip]
+			}
+			if host.Self && opt.ResolveDNS {
+				host.Hostname = selfName
 			}
 			emitMu.Lock()
 			results = append(results, host)

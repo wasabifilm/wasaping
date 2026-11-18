@@ -30,4 +30,4 @@ icon:
 	python3 scripts/make_icon.py
 
 clean:
-	rm -rf dist wasaping
+	rm -rf dist wasaping wasaping.exe

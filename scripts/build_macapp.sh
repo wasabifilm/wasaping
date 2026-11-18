@@ -1,24 +1,26 @@
 #!/bin/sh
-# Build dist/wasaping.app (Apple Silicon + Intel) and dist/wasaping-macos.zip.
-# Works from any OS: Go cross-compiles, and the arm64 binary is ad-hoc signed by the Go linker.
+# Build dist/wasaping.app (universal: Apple Silicon + Intel) and dist/wasaping-macos.zip.
+# Needs macOS with the Xcode command line tools: the app window uses Cocoa and
+# WebKit through cgo, so it cannot be cross-compiled from Linux or Windows.
 set -e
+if [ "$(uname -s)" != Darwin ]; then
+  echo "build_macapp.sh va eseguito su macOS (serve clang per la finestra nativa)" >&2
+  exit 1
+fi
 VERSION="${VERSION:-dev}"
 APP=dist/wasaping.app
-rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+TMP=dist/.macapp
+rm -rf "$APP" "$TMP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$TMP"
 
 for arch in arm64 amd64; do
-  name=$arch; [ "$arch" = amd64 ] && name=x86_64
-  CGO_ENABLED=0 GOOS=darwin GOARCH=$arch go build -trimpath \
-    -ldflags "-s -w -X main.version=$VERSION" -o "$APP/Contents/MacOS/wasaping-$name" .
+  carch=$arch; [ "$arch" = amd64 ] && carch=x86_64
+  CGO_ENABLED=1 GOOS=darwin GOARCH=$arch \
+    CC="clang -arch $carch" \
+    CGO_CFLAGS="-mmacosx-version-min=13.0" CGO_LDFLAGS="-mmacosx-version-min=13.0" \
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$TMP/wasaping-$arch" .
 done
-
-cat > "$APP/Contents/MacOS/wasaping" <<'SH'
-#!/bin/sh
-# Launcher: picks the binary for this Mac and opens the interface in the browser.
-DIR="$(cd "$(dirname "$0")" && pwd)"
-exec "$DIR/wasaping-$(uname -m)" app
-SH
-chmod +x "$APP/Contents/MacOS/"*
+lipo -create -output "$APP/Contents/MacOS/wasaping" "$TMP/wasaping-arm64" "$TMP/wasaping-amd64"
+rm -rf "$TMP"
 cp assets/wasaping.icns "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -34,26 +36,18 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>wasaping</string>
   <key>CFBundleIconFile</key><string>wasaping</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>LSMinimumSystemVersion</key><string>11.0</string>
-  <key>LSUIElement</key><true/>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSHumanReadableCopyright</key><string>a spicy little IP scanner</string>
+  <key>NSLocalNetworkUsageDescription</key><string>wasaping cerca i dispositivi sulla tua rete locale.</string>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict>
 </plist>
 PLIST
 
-# zip keeping the executable bits
-python3 - "$APP" dist/wasaping-macos.zip <<'PY'
-import os, sys, zipfile
-src, out = sys.argv[1], sys.argv[2]
-base = os.path.dirname(src)
-with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    for root, dirs, files in os.walk(src):
-        for f in sorted(files):
-            p = os.path.join(root, f)
-            import time; info = zipfile.ZipInfo(os.path.relpath(p, base), time.localtime(os.stat(p).st_mtime)[:6])
-            info.external_attr = (os.stat(p).st_mode & 0xFFFF) << 16
-            info.compress_type = zipfile.ZIP_DEFLATED
-            with open(p, "rb") as fh:
-                z.writestr(info, fh.read())
-PY
+# Ad-hoc signature for the whole bundle (no Apple Developer ID yet).
+codesign --force --sign - "$APP"
+rm -f dist/wasaping-macos.zip
+ditto -c -k --keepParent "$APP" dist/wasaping-macos.zip
 echo "→ $APP e dist/wasaping-macos.zip"

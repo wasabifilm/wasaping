@@ -23,10 +23,13 @@
   h1 { font-family: Assistant, "Open Sans", sans-serif; font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -.3px; }
   h1 b { color: var(--wasabi-text); }
   .tag { color: var(--muted); font-size: 13px; }
-  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 24px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 24px; }
+  .group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .group.tools { flex: 1 1 320px; justify-content: flex-end; }
   select, input, button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
   input#target { width: 190px; font-family: ui-monospace, Menlo, Consolas, monospace; }
-  input#filter { flex: 1; min-width: 160px; }
+  input#filter { flex: 1; min-width: 160px; max-width: 360px; }
+  input#custom { width: 130px; font-family: ui-monospace, Menlo, Consolas, monospace; }
   button { cursor: pointer; }
   button.primary { background: var(--wasabi); border-color: var(--wasabi); color: var(--wasabi-ink); font-weight: 600; min-width: 92px; }
   button.primary.stop { background: var(--warn); border-color: var(--warn); color: #fff; }
@@ -35,12 +38,14 @@
   .progress div { height: 100%; width: 0; background: var(--wasabi); transition: width .15s; }
   .status { padding: 8px 24px; color: var(--muted); font-size: 13px; min-height: 30px; }
   .notice { margin: 0 24px 10px; padding: 9px 12px; border-radius: 8px; background: var(--wasabi-soft); font-size: 13px; display: none; align-items: center; gap: 10px; }
+  .notice.info { background: transparent; border: 1px solid var(--line); color: var(--muted); }
   .wrap { margin: 0 24px 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: auto; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
   tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: var(--wasabi-soft); }
+  td.ports { white-space: normal; min-width: 140px; }
   td.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--wasabi); margin-right: 8px; }
   .me { font-size: 11px; background: var(--wasabi); color: var(--wasabi-ink); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
@@ -58,24 +63,32 @@
 </header>
 
 <div class="bar">
-  <select id="iface" title="Interfaccia di rete"></select>
-  <input id="target" placeholder="192.168.1.0/24" spellcheck="false">
-  <select id="ports" title="Porte da controllare">
-    <option value="common">Porte comuni</option>
-    <option value="none">Nessuna porta (più veloce)</option>
-    <option value="custom">Porte personalizzate…</option>
-  </select>
-  <button id="scan" class="primary">Scansiona</button>
-  <input id="filter" placeholder="Filtra per IP, nome, produttore…">
-  <button id="csv" disabled>CSV</button>
-  <button id="json" disabled>JSON</button>
-  <button id="quit" hidden title="Chiude wasaping">Esci</button>
+  <div class="group">
+    <select id="iface" title="Interfaccia di rete"></select>
+    <input id="target" placeholder="192.168.1.0/24" spellcheck="false">
+    <select id="ports" title="Porte da controllare">
+      <option value="common">Porte comuni</option>
+      <option value="none">Nessuna porta (più veloce)</option>
+      <option value="custom">Porte personalizzate…</option>
+    </select>
+    <input id="custom" hidden placeholder="22,80,443 o 1-1024" spellcheck="false" title="Porte da controllare">
+    <button id="scan" class="primary">Scansiona</button>
+  </div>
+  <div class="group tools">
+    <input id="filter" placeholder="Filtra per IP, nome, produttore…">
+    <button id="csv" disabled>CSV</button>
+    <button id="json" disabled>JSON</button>
+    <button id="quit" hidden title="Chiude wasaping">Esci</button>
+  </div>
 </div>
 <div class="progress"><div id="prog"></div></div>
 <div class="status" id="status">Pronto.</div>
 <div class="notice" id="oui">
   <span>Scarica il database dei produttori (IEEE) per vedere chi ha fatto ogni dispositivo.</span>
   <button id="ouiBtn">Scarica</button>
+</div>
+<div class="notice info" id="machidden">
+  <span>macOS nasconde gli indirizzi MAC dei dispositivi ai programmi non firmati da uno sviluppatore registrato: per ora MAC e produttore restano vuoti. IP, nomi e porte funzionano.</span>
 </div>
 
 <div class="wrap">
@@ -92,7 +105,7 @@
 const $ = id => document.getElementById(id);
 const PORT_NAMES = {21:"FTP",22:"SSH",23:"Telnet",53:"DNS",80:"HTTP",139:"NetBIOS",443:"HTTPS",445:"SMB",548:"AFP",554:"RTSP",631:"IPP",1883:"MQTT",3389:"RDP",5000:"UPnP",5900:"VNC",8000:"HTTP",8080:"HTTP",8443:"HTTPS",9100:"Stampante",32400:"Plex",62078:"iPhone"};
 const WEB = {80:"http",8000:"http",8080:"http",443:"https",8443:"https"};
-let hosts = [], es = null, sortKey = "ip", sortDir = 1, customPorts = "22,80,443";
+let hosts = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser";
 
 const ipNum = ip => ip.split(".").reduce((a, b) => a * 256 + +b, 0);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -108,7 +121,8 @@ async function init() {
   $("iface").add(new Option("Personalizzato…", ""));
   $("target").value = info.defaultTarget;
   if (!info.hasOUI) $("oui").style.display = "flex";
-  if (info.app) {
+  ui = info.ui || "browser";
+  if (info.app && ui === "browser") {
     $("quit").hidden = false;
     const ping = () => fetch("api/ping", {method: "POST"}).catch(() => {});
     ping(); setInterval(ping, 10000);
@@ -123,23 +137,24 @@ $("quit").onclick = async () => {
 
 $("iface").onchange = e => { if (e.target.value) $("target").value = e.target.value; else $("target").focus(); };
 $("ports").onchange = e => {
-  if (e.target.value === "custom") {
-    const v = prompt("Porte (es. 22,80,443 oppure 1-1024):", customPorts);
-    if (v) customPorts = v; else e.target.value = "common";
-  }
+  const custom = e.target.value === "custom";
+  $("custom").hidden = !custom;
+  if (custom) { if (!$("custom").value) $("custom").value = "22,80,443"; $("custom").select(); }
 };
+for (const id of ["target", "custom"]) $(id).onkeydown = e => { if (e.key === "Enter" && !es) start(); };
 
 $("scan").onclick = () => es ? stop("Scansione interrotta.") : start();
 
 function start() {
   const target = $("target").value.trim();
   if (!target) return;
-  hosts = []; render();
-  const ports = $("ports").value === "custom" ? customPorts : $("ports").value;
+  hosts = [];
+  const ports = $("ports").value === "custom" ? ($("custom").value.trim() || "none") : $("ports").value;
   $("scan").textContent = "Stop"; $("scan").classList.add("stop");
   $("status").textContent = `Scansione di ${target}…`;
   $("prog").style.width = "0";
   es = new EventSource(`api/scan?target=${encodeURIComponent(target)}&ports=${encodeURIComponent(ports)}`);
+  render();
   es.addEventListener("progress", e => {
     const p = JSON.parse(e.data);
     $("prog").style.width = (100 * p.done / p.total) + "%";
@@ -148,6 +163,8 @@ function start() {
   es.addEventListener("host", e => { hosts.push(JSON.parse(e.data)); render(); });
   es.addEventListener("done", e => {
     const d = JSON.parse(e.data);
+    $("machidden").style.display = d.macHidden ? "flex" : "none";
+    if (d.macHidden) $("oui").style.display = "none"; // no MACs, no vendors to look up
     stop(`${d.count} dispositivi trovati in ${d.seconds.toFixed(1)} s.`);
   });
   es.addEventListener("failure", e => stop("Errore: " + JSON.parse(e.data).error));
@@ -182,7 +199,7 @@ function render() {
     <td>${h.hostname ? esc(h.hostname) : '<span class="muted">—</span>'}</td>
     <td class="mono">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
-    <td>${(h.ports||[]).map(p => WEB[p]
+    <td class="ports">${(h.ports||[]).map(p => WEB[p]
         ? `<a class="port" href="${WEB[p]}://${h.ip}:${p}/" target="_blank" rel="noopener" title="${PORT_NAMES[p]||""}">${p}</a>`
         : `<span class="port" title="${PORT_NAMES[p]||""}">${p}</span>`).join("")}</td>
     <td class="muted">${h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? "ARP" : ""}</td>
@@ -195,7 +212,12 @@ document.querySelectorAll("th").forEach(th => th.onclick = () => {
 });
 $("filter").oninput = render;
 
-function download(name, text, type) {
+async function download(name, text, type) {
+  if (ui !== "browser") { // app windows: the server saves into Downloads
+    const r = await fetch("api/save", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({name, data: text})});
+    $("status").textContent = r.ok ? `Salvato: ${(await r.json()).path}` : "Salvataggio non riuscito: " + await r.text();
+    return;
+  }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], {type}));
   a.download = name; a.click();
@@ -218,7 +240,7 @@ $("ouiBtn").onclick = async () => {
     $("oui").innerHTML = `<span>✓ ${d.vendors.toLocaleString("it")} produttori scaricati. Rifai la scansione per vederli.</span>`;
   } else {
     $("ouiBtn").disabled = false; $("ouiBtn").textContent = "Riprova";
-    alert("Download non riuscito: " + await r.text());
+    $("status").textContent = "Download non riuscito: " + await r.text();
   }
 };
 

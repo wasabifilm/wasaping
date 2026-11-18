@@ -27,7 +27,7 @@ func runWeb(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("web", flag.ExitOnError)
 	addr := fset.String("addr", "127.0.0.1:0", "indirizzo di ascolto")
 	noOpen := fset.Bool("no-open", false, "non aprire il browser automaticamente")
-	appMode := fset.Bool("app", false, "modalità app: si chiude quando la pagina viene chiusa")
+	appMode := fset.Bool("app", false, "modalità app: finestra propria, si chiude con la finestra")
 	fset.Parse(args)
 	ctx, quit := context.WithCancel(ctx)
 	defer quit()
@@ -38,6 +38,8 @@ func runWeb(ctx context.Context, args []string) error {
 		return err
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
+	host, _, _ := net.SplitHostPort(*addr)
+	public := !isLoopbackHost(host)
 	allowedHosts := map[string]bool{
 		fmt.Sprintf("127.0.0.1:%d", port): true,
 		fmt.Sprintf("localhost:%d", port): true,
@@ -50,6 +52,7 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/info", handleInfo)
 	mux.HandleFunc("/api/scan", handleScan)
 	mux.HandleFunc("/api/update-oui", handleUpdateOUI)
+	mux.HandleFunc("/api/save", handleSave)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
 		lastPing.Store(time.Now().UnixNano())
 		w.WriteHeader(http.StatusNoContent)
@@ -64,10 +67,15 @@ func runWeb(ctx context.Context, args []string) error {
 	})
 
 	srv := &http.Server{
-		// Block DNS-rebinding: only answer requests addressed to localhost.
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !allowedHosts[r.Host] && !strings.HasPrefix(*addr, "0.0.0.0") {
+			// Block DNS rebinding: only answer requests addressed to localhost.
+			if !public && !allowedHosts[r.Host] {
 				http.Error(w, "host non consentito", http.StatusForbidden)
+				return
+			}
+			// Block other websites open in the browser from driving the API.
+			if crossSite(r) {
+				http.Error(w, "richiesta da un altro sito non consentita", http.StatusForbidden)
 				return
 			}
 			mux.ServeHTTP(w, r)
@@ -75,31 +83,84 @@ func runWeb(ctx context.Context, args []string) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
-	if *appMode {
-		fmt.Printf("🟢 wasaping è aperto nel browser: %s\n   Per uscire usa il pulsante «Esci» nella pagina, o chiudi questa finestra.\n", url)
-	} else {
-		fmt.Printf("🟢 wasaping è pronto su %s  (Ctrl+C per uscire)\n", url)
+	if public {
+		fmt.Fprintf(os.Stderr, "⚠️  Attenzione: wasaping è raggiungibile da altri computer su %s, senza password.\n"+
+			"   Chiunque sulla rete può usarlo per scansionarla. Usa -addr 127.0.0.1:0 per tenerlo privato.\n", ln.Addr())
 	}
-	if !*noOpen {
-		openBrowser(url)
-	}
-	if *appMode {
-		go watchHeartbeat(ctx, quit)
-	}
+
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(ln) }()
 	go func() {
 		<-ctx.Done()
 		sctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		srv.Shutdown(sctx)
 	}()
-	if err := srv.Serve(ln); err != http.ErrServerClosed {
+
+	switch {
+	case *appMode && hasNativeWindow:
+		uiMode.Store("native")
+		// Ctrl+C or /api/quit while the window is open: leave right away.
+		go func() { <-ctx.Done(); os.Exit(0) }()
+		nativeWindow(url) // blocks on the main thread until the window closes
+		quit()
+	case *appMode:
+		if cmd := startAppWindow(url); cmd != nil {
+			uiMode.Store("window")
+			fmt.Printf("🟢 wasaping è aperto in una finestra: %s\n   Per uscire chiudi la finestra.\n", url)
+			go func() {
+				began := time.Now()
+				cmd.Wait()
+				if time.Since(began) > 5*time.Second {
+					quit() // the window was ours and it is closed
+				} else {
+					go watchHeartbeat(ctx, quit) // handed over to a running browser
+				}
+			}()
+		} else {
+			uiMode.Store("browser")
+			fmt.Printf("🟢 wasaping è aperto nel browser: %s\n   Per uscire usa il pulsante «Esci» nella pagina, o chiudi questa finestra.\n", url)
+			openBrowser(url)
+			go watchHeartbeat(ctx, quit)
+		}
+	default:
+		uiMode.Store("browser")
+		fmt.Printf("🟢 wasaping è pronto su %s  (Ctrl+C per uscire)\n", url)
+		if !*noOpen {
+			openBrowser(url)
+		}
+	}
+	if err := <-served; err != http.ErrServerClosed {
 		return err
 	}
 	return nil
 }
 
+func isLoopbackHost(h string) bool {
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// crossSite reports requests started by another website (CSRF), using the
+// Fetch Metadata and Origin headers that browsers attach.
+func crossSite(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+	default:
+		return true
+	}
+	if o := r.Header.Get("Origin"); o != "" && o != "null" {
+		return strings.TrimPrefix(strings.TrimPrefix(o, "http://"), "https://") != r.Host
+	}
+	return false
+}
+
 var (
 	appModeOn  bool
+	uiMode     atomic.Value // "native", "window" or "browser"
 	lastPing   atomic.Int64
 	activeScan atomic.Int32
 )
@@ -151,6 +212,7 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 		"hasOUI":        scanner.HasOUI(),
 		"os":            runtime.GOOS,
 		"app":           appModeOn,
+		"ui":            uiMode.Load(),
 	})
 }
 
@@ -209,7 +271,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		send("failure", map[string]string{"error": err.Error()})
 		return
 	}
-	send("done", map[string]any{"count": len(hosts), "seconds": time.Since(start).Seconds()})
+	send("done", map[string]any{"count": len(hosts), "seconds": time.Since(start).Seconds(), "macHidden": scanner.MACsHidden(hosts)})
 }
 
 func handleUpdateOUI(w http.ResponseWriter, r *http.Request) {

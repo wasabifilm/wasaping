@@ -5,14 +5,17 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
 
 ## Comandi
 - `go test ./...` · `go vet ./...` (anche con `GOOS=windows` e `GOOS=darwin`)
-- `go run . web`: interfaccia nel browser · `go run .`: scansione da terminale
-- `make release`: tutti gli eseguibili + `dist/wasaping-macos.zip` · `make macapp` · `make icon`
+- `go run . app`: finestra (su Mac nativa, serve cgo) · `go run . web`: browser · `go run .`: terminale
+- `make release`: tutti gli eseguibili + `dist/wasaping-macos.zip` · `make macapp` (solo su macOS) · `make icon`
+- Go sul Mac del proprietario: Homebrew, `/opt/homebrew/bin/go` (aggiungerlo al PATH se manca)
 
 ## Architettura
-- `scanner/`: motore. `Scan()` lavora in 3 fasi: (1) sonde TCP in parallelo, dove anche ECONNREFUSED vuol dire host vivo, con il ping di sistema come ripiego; (2) lettura della cache ARP del sistema operativo (`/proc/net/arp` su Linux, `arp -a` altrove); (3) arricchimento: DNS inverso, produttore dal file IEEE OUI in cache, porte.
+- `scanner/`: motore. `Scan()` lavora in 3 fasi: (1) sonde TCP in parallelo, dove anche ECONNREFUSED vuol dire host vivo, con il ping di sistema come ripiego (RTT letto dall'output del ping); (2) lettura della cache ARP del sistema operativo (`/proc/net/arp` su Linux, `arp -a` altrove); (3) arricchimento: DNS inverso, poi mDNS + NetBIOS (`names.go`, tutti gli host insieme), produttore dal file IEEE OUI in cache, porte.
+- macOS 27: la tabella ARP arriva **vuota** ai processi non firmati da Apple/Developer ID (verificato: zsh/perl → `arp -an` dà tutto, wasaping/Python di Homebrew → niente; `02:00:00:00:00:00` è il segnaposto). `MACsHidden()` lo rileva e l'interfaccia lo spiega. Probabile soluzione: firma Developer ID, da verificare.
 - `main.go`: riga di comando. Sottocomandi: scan (default), web, app, interfaces, update-oui, version.
-- `web.go` + `web/index.html`: server su 127.0.0.1 con porta casuale, risultati in streaming via SSE (`/api/scan`). Controlla l'header Host per bloccare il DNS rebinding. In modalità `app` riceve un heartbeat dalla pagina (`/api/ping`) e si chiude con `/api/quit` o quando la pagina sparisce.
-- Doppio clic: su Windows `launch_windows.go` (GetConsoleProcessList == 1 → modalità app); su macOS c'è il bundle `wasaping.app` (scripts/build_macapp.sh), il cui launcher esegue `wasaping-$(uname -m) app`.
+- `web.go` + `web/index.html`: server su 127.0.0.1 con porta casuale, risultati in streaming via SSE (`/api/scan`). Blocca DNS rebinding (header Host) e richieste da altri siti (Sec-Fetch-Site/Origin). `/api/save` scrive le esportazioni in Download (le finestre app non scaricano blob).
+- Modalità `app`, in ordine: finestra nativa Cocoa+WKWebView (`native_darwin.go`, build tag `darwin && cgo`, deve girare sul main thread: `init()` fa LockOSThread) → finestra `--app=` di Edge/Chrome con profilo proprio (`window.go`, si chiude quando il processo esce) → browser predefinito con heartbeat (`/api/ping`) e pulsante Esci. La pagina sa quale da `/api/info` → `ui`.
+- Doppio clic: su Windows `launch_windows.go` (GetConsoleProcessList == 1); su macOS `launch_darwin.go` (eseguibile dentro `.app/Contents/MacOS/`). `wasaping.app` contiene un binario universale (lipo arm64+x86_64, cgo, macOS ≥ 13) firmato ad hoc; la release della CI quindi gira su macos-latest.
 
 ## Brand
 - Nome sempre **minuscolo**: `wasaping`. Slogan: "a spicy little IP scanner".
@@ -20,7 +23,7 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
 - Nel tema chiaro, il testo verde usa `#3f7a17` per il contrasto; il testo sopra pulsanti verdi è scuro, non bianco.
 
 ## Stato e prossimi passi
-- v0.1 funzionante. Non ancora provato su hardware Mac/Windows reale: verificare per prima cosa (doppio clic, ARP, ping).
+- v0.1 pubblicata. Provato su Mac reale (macOS 27, arm64): finestra nativa, scansione, nomi mDNS/NetBIOS, esportazione. Windows ancora da provare su hardware reale (finestra Edge, ARP, ping).
 - Modulo: `github.com/wasabifilm/wasaping`. Repository pubblico: https://github.com/wasabifilm/wasaping
 - Nuova release: `git tag vX.Y.Z && git push --tags` fa partire la CI, che crea la release.
-- Idee: mDNS/NetBIOS per i nomi, confronto tra scansioni, nomi personalizzati, icona Windows (.syso), notarizzazione Apple.
+- Idee: confronto tra scansioni, nomi personalizzati, icona Windows (.syso), firma/notarizzazione Apple (anche per i MAC), WebView2 su Windows.

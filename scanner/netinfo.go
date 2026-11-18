@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -189,8 +190,44 @@ func normalizeMAC(s string) string {
 		}
 	}
 	m := strings.Join(parts, ":")
-	if m == "00:00:00:00:00:00" || m == "ff:ff:ff:ff:ff:ff" {
+	switch m {
+	case "00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff",
+		"02:00:00:00:00:00": // placeholder macOS returns when it hides the real address
 		return ""
 	}
 	return m
+}
+
+// MACsHidden reports the macOS privacy case: devices on our own LAN were
+// found but the system gave us no MAC address for any of them. Recent macOS
+// versions hide the ARP table from apps that are not signed by Apple or by a
+// registered developer.
+func MACsHidden(hosts []Host) bool {
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	ifs, _ := LocalInterfaces()
+	var nets []*net.IPNet
+	for _, i := range ifs {
+		if _, n, err := net.ParseCIDR(i.Network); err == nil {
+			nets = append(nets, n)
+		}
+	}
+	onLAN := 0
+	for _, h := range hosts {
+		if h.Self {
+			continue
+		}
+		ip := net.ParseIP(h.IP)
+		for _, n := range nets {
+			if n.Contains(ip) {
+				if h.MAC != "" {
+					return false
+				}
+				onLAN++
+				break
+			}
+		}
+	}
+	return onLAN > 0
 }

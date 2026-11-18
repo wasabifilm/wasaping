@@ -1,0 +1,5 @@
+/wasaping
+/wasaping.exe
+/dist/
+*.tmp
+.DS_Store

@@ -221,7 +221,7 @@ func runScan(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	sess := devices().Begin()
+	sess := devices().Begin(ctx, ips)
 	views := make([]HostView, len(hosts))
 	var fresh []string
 	for i, h := range hosts {
@@ -238,15 +238,16 @@ func runScan(ctx context.Context, args []string) error {
 		return enc.Encode(views)
 	case "csv":
 		w := csv.NewWriter(os.Stdout)
-		w.Write([]string{"ip", "nome", "hostname", "mac", "vendor", "tipo", "ports", "method", "rtt_ms", "new", "note"})
+		w.Write([]string{"ip", "nome", "ruolo", "nome_rete", "hostname", "mac", "produttore", "modello", "tipo", "protocolli", "universi", "porte", "metodo", "rtt_ms", "nuovo", "critico", "note"})
 		for _, v := range views {
-			w.Write([]string{v.IP, v.Name, v.Hostname, v.MAC, v.Vendor, v.Kind, joinPorts(v.Ports), v.Method, strconv.FormatInt(v.RTTms, 10), strconv.FormatBool(v.New), v.Note})
+			w.Write([]string{v.IP, v.Name, v.Role, v.Friendly, v.Hostname, v.MAC, v.Vendor, v.Model, v.Kind, strings.Join(v.Protocols, " "), universes(v.Host),
+				joinPorts(v.Ports), v.Method, strconv.FormatInt(v.RTTms, 10), strconv.FormatBool(v.New), strconv.FormatBool(v.Critical), v.Note})
 		}
 		w.Flush()
 		return w.Error()
 	default:
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "IP\tNOME\tTIPO\tMAC\tPRODUTTORE\tPORTE APERTE")
+		fmt.Fprintln(tw, "IP\tNOME\tTIPO\tMAC\tMODELLO/PRODUTTORE\tPROTOCOLLI\tPORTE APERTE")
 		for _, v := range views {
 			ip := v.IP
 			if v.Self {
@@ -255,12 +256,20 @@ func runScan(ctx context.Context, args []string) error {
 			if v.New {
 				ip += " ★"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", ip, dash(firstNonEmpty(v.Name, v.Hostname)), dash(kindNames[v.Kind]), dash(v.MAC), dash(v.Vendor), dash(joinPorts(v.Ports)))
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", ip, dash(firstNonEmpty(v.Name, v.Friendly, v.Hostname)), dash(kindNames[v.Kind]), dash(v.MAC), dash(firstNonEmpty(v.Model, v.Vendor)), dash(strings.Join(v.Protocols, ", ")), dash(joinPorts(v.Ports)))
 		}
 		tw.Flush()
 		fmt.Fprintf(os.Stderr, "\n%d dispositivi trovati in %s\n", len(hosts), time.Since(start).Round(100*time.Millisecond))
 		if len(fresh) > 0 {
 			fmt.Fprintf(os.Stderr, "★ Nuovi dall'ultima scansione: %s\n", strings.Join(fresh, ", "))
+		}
+		for _, v := range views {
+			for _, w := range v.Warnings {
+				fmt.Fprintf(os.Stderr, "⚠️  %s: %s\n", firstNonEmpty(v.Name, v.Friendly, v.Hostname, v.IP), w)
+			}
+		}
+		for _, w := range scanner.NetworkIssues(hosts) {
+			fmt.Fprintln(os.Stderr, "⚠️ ", w)
 		}
 		if len(gone) > 0 {
 			var g []string
@@ -285,7 +294,30 @@ var kindNames = map[string]string{
 	scanner.KindRouter: "router", scanner.KindComputer: "computer", scanner.KindPhone: "telefono",
 	scanner.KindTablet: "tablet", scanner.KindPrinter: "stampante", scanner.KindTV: "TV/media",
 	scanner.KindSpeaker: "altoparlante", scanner.KindNAS: "NAS", scanner.KindCamera: "videocamera",
-	scanner.KindIoT: "domotica",
+	scanner.KindIoT: "domotica", scanner.KindLightDesk: "console luci", scanner.KindLighting: "luci (nodo)",
+	scanner.KindAudio: "audio", scanner.KindVideo: "video", scanner.KindProjector: "proiettore", scanner.KindSwitch: "switch",
+}
+
+// universes summarizes the DMX universes a device sends or receives.
+func universes(h scanner.Host) string {
+	var p []string
+	list := func(label string, u []int) {
+		if len(u) > 0 {
+			var n []string
+			for _, x := range u {
+				n = append(n, strconv.Itoa(x))
+			}
+			p = append(p, label+" "+strings.Join(n, ","))
+		}
+	}
+	if h.ArtNet != nil {
+		list("Art-Net out", h.ArtNet.Out)
+		list("Art-Net in", h.ArtNet.In)
+	}
+	if h.SACN != nil {
+		list("sACN", h.SACN.Universes)
+	}
+	return strings.Join(p, "; ")
 }
 
 func runHelper(args []string) error {

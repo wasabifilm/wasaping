@@ -143,7 +143,12 @@ func Vendor(mac string) string {
 	if len(key) < 6 {
 		return ""
 	}
-	return ouiDB[key[:6]]
+	v := ouiDB[key[:6]]
+	if v == "IEEE Registration Authority" {
+		// Block split into smaller ones (MA-M/MA-S): the real maker is unknown here.
+		return ""
+	}
+	return v
 }
 
 // HasOUI reports whether a vendor database is available (always, since

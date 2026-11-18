@@ -74,6 +74,42 @@
   #ctx .hint:hover { background: none; color: var(--muted); }
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; }
   #toast.show { opacity: 1; }
+  .proto { display: inline-block; font-size: 11px; padding: 1px 6px; margin: 1px 2px 1px 0; border-radius: 4px; border: 1px solid var(--wasabi-text); color: var(--wasabi-text); white-space: nowrap; }
+  .badge.warn { background: #f2994a; color: #171717; font-weight: 600; cursor: help; }
+  .badge.crit { border: 1px solid var(--warn); color: var(--warn); }
+  .netbar { padding: 0 24px 8px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .netbar b { font-weight: 600; }
+  .netbar a { color: var(--wasabi-text); cursor: pointer; font-size: 12px; }
+  .notice.warn { background: transparent; border: 1px solid #f2994a; color: var(--ink); flex-direction: column; align-items: flex-start; gap: 4px; }
+  .warnlist { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; }
+  .warnlist li { padding: 6px 8px; border-left: 3px solid #f2994a; background: rgba(242,153,74,.08); margin-bottom: 6px; border-radius: 0 6px 6px 0; }
+  .hist { display: flex; gap: 2px; margin-top: 6px; flex-wrap: wrap; }
+  .hist i { width: 7px; height: 14px; border-radius: 2px; background: var(--line); }
+  .hist i.y { background: var(--wasabi); }
+  .hist i.n { background: var(--warn); opacity: .7; }
+  .check, #detail label.check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; text-transform: none; letter-spacing: 0; color: var(--ink); cursor: pointer; }
+  .check input, #detail .check input { width: auto; margin: 0; }
+  ::placeholder { color: var(--muted); opacity: .8; }
+  @media (min-width: 1100px) { body.detail-open .bar, body.detail-open .status, body.detail-open .netbar, body.detail-open .notice, body.detail-open .progress, body.detail-open .wrap, body.detail-open .foot { margin-right: 404px; } body.detail-open .bar, body.detail-open .status, body.detail-open .netbar { margin-right: 380px; } }
+  /* Show monitor */
+  #monitor { position: fixed; inset: 0; background: var(--bg); z-index: 20; display: none; flex-direction: column; }
+  #monitor.open { display: flex; }
+  #monitor header { padding: 14px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  #monitor .state { font-size: 15px; font-weight: 700; padding: 4px 12px; border-radius: 6px; }
+  #monitor .state.ok { background: var(--wasabi); color: var(--wasabi-ink); }
+  #monitor .state.bad { background: var(--warn); color: #fff; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .55; } }
+  #monitor .spacer { flex: 1; }
+  #tiles { flex: 1; overflow: auto; padding: 20px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; align-content: start; }
+  .tile { border-radius: 12px; padding: 14px 16px; border: 2px solid var(--wasabi); background: var(--panel); }
+  .tile.down { border-color: var(--warn); background: rgba(214,63,63,.12); }
+  .tile .t { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
+  .tile .r { font-size: 13px; color: var(--muted); }
+  .tile .s { margin-top: 10px; font-size: 13px; display: flex; justify-content: space-between; }
+  .tile .s b { color: var(--wasabi-text); }
+  .tile.down .s b { color: var(--warn); }
+  .mhint { grid-column: 1 / -1; color: var(--muted); padding: 40px; text-align: center; }
+  @media print { body > *:not(#printable) { display: none !important; } }
   .foot { margin: -12px 24px 24px; font-size: 12px; color: var(--muted); }
   .foot a { color: var(--wasabi-text); cursor: pointer; }
   .empty { padding: 48px; text-align: center; color: var(--muted); cursor: default; }
@@ -122,6 +158,8 @@
       <option value="15">Ogni 15 min</option>
       <option value="60">Ogni ora</option>
     </select>
+    <button id="monBtn" title="Tiene d'occhio i dispositivi critici e suona se uno sparisce">Monitor</button>
+    <button id="printBtn" disabled title="Elenco IP da stampare o salvare in PDF">Stampa</button>
     <button id="csv" disabled>CSV</button>
     <button id="json" disabled>JSON</button>
     <button id="quit" hidden title="Chiude wasaping">Esci</button>
@@ -129,6 +167,8 @@
 </div>
 <div class="progress"><div id="prog"></div></div>
 <div class="status"><span id="status">Pronto.</span><span id="extra"></span></div>
+<div class="netbar" id="netbar"></div>
+<div class="notice warn" id="issues"></div>
 <div class="notice" id="oui">
   <span>Scarica il database dei produttori (IEEE) per vedere chi ha fatto ogni dispositivo.</span>
   <button id="ouiBtn">Scarica</button>
@@ -142,9 +182,9 @@
   <table>
     <thead><tr>
       <th data-k="label">Dispositivo</th><th data-k="ip">IP</th><th data-k="mac">MAC</th>
-      <th data-k="vendor">Produttore</th><th data-k="ports">Porte aperte</th><th data-k="rtt_ms">Risposta</th>
+      <th data-k="model">Modello / produttore</th><th data-k="protocols">Protocolli</th><th data-k="ports">Porte aperte</th><th data-k="rtt_ms">Risposta</th>
     </tr></thead>
-    <tbody id="rows"><tr><td colspan="6" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr></tbody>
+    <tbody id="rows"><tr><td colspan="7" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr></tbody>
   </table>
 </div>
 
@@ -155,10 +195,14 @@
   <h2 id="dTitle"></h2>
   <div class="sub" id="dSub"></div>
   <label for="dName">Nome personalizzato</label>
-  <input id="dName" maxlength="200" placeholder="es. TV del salotto">
+  <input id="dName" maxlength="200" placeholder="es. Console FOH">
+  <label for="dRole">Ruolo</label>
+  <input id="dRole" maxlength="200" placeholder="es. luci palco SX, universi 1–4">
   <label for="dNote">Note</label>
-  <textarea id="dNote" maxlength="2000" placeholder="es. password Wi-Fi ospiti sul retro"></textarea>
+  <textarea id="dNote" maxlength="2000" placeholder="es. patch su switch 2 porta 14"></textarea>
+  <label class="check"><input type="checkbox" id="dCrit"> Critico: tienilo d'occhio nel Monitor</label>
   <div class="actions"><button class="primary" id="dSave">Salva</button></div>
+  <ul class="warnlist" id="dWarn"></ul>
   <dl id="dInfo"></dl>
   <div class="actions">
     <button id="dWol" title="Accende il dispositivo, se la sua scheda di rete lo supporta">Sveglia (Wake-on-LAN)</button>
@@ -167,6 +211,22 @@
   </div>
   <div class="msg" id="dMsg"></div>
 </aside>
+
+<section id="monitor" aria-hidden="true">
+  <header>
+    <div class="logo"></div>
+    <h1>Monitor</h1>
+    <span class="state ok" id="mState">TUTTO OK</span>
+    <span class="tag" id="mInfo"></span>
+    <span class="spacer"></span>
+    <select id="mEvery" title="Ogni quanto controllare">
+      <option value="3">ogni 3 s</option><option value="5" selected>ogni 5 s</option><option value="10">ogni 10 s</option><option value="30">ogni 30 s</option>
+    </select>
+    <label class="check" style="margin:0"><input type="checkbox" id="mSound" checked> Allarme sonoro</label>
+    <button id="mClose">Chiudi monitor</button>
+  </header>
+  <div id="tiles"></div>
+</section>
 
 <div id="ctx"></div>
 <div id="toast"></div>
@@ -201,18 +261,42 @@ const KIND = {
   speaker:  ["Altoparlante",  '<rect x="6" y="2.5" width="12" height="19" rx="2"/><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="6.5" r="1"/>'],
   nas:      ["NAS / archivio",'<rect x="4" y="3" width="16" height="8" rx="1.5"/><rect x="4" y="13" width="16" height="8" rx="1.5"/><path d="M8 7h.01M8 17h.01"/>'],
   camera:   ["Videocamera",   '<path d="M3 7h12v10H3z"/><path d="M15 10l6-3v10l-6-3"/>'],
+  lightdesk:["Console luci",  '<rect x="2.5" y="8" width="19" height="11" rx="1.5"/><path d="M6 11v5M10 11v5M14 11v5M18 11v5"/><path d="M5 14h2M9 12h2M13 15h2M17 13h2"/><path d="M7 8l2-4h6l2 4"/>'],
+  lighting: ["Luci (nodo / proiettore)", '<path d="M9 3h6l2 7H7z"/><path d="M12 10v3"/><path d="M8 21l4-8 4 8"/><path d="M5 6l-2-1M19 6l2-1"/>'],
+  audio:    ["Audio",         '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>'],
+  video:    ["Video",         '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>'],
+  projector:["Proiettore",    '<rect x="2.5" y="8" width="19" height="9" rx="2"/><circle cx="16" cy="12.5" r="2.5"/><path d="M6 12h4M5 17v2M19 17v2"/>'],
+  switch:   ["Switch di rete", '<rect x="2.5" y="8" width="19" height="8" rx="1.5"/><path d="M6 12h.01M9 12h.01M12 12h.01M15 12h.01M18 12h.01"/>'],
   iot:      ["Domotica / IoT",'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>'],
   "":       ["Dispositivo",   '<circle cx="12" cy="12" r="4"/>'],
 };
-const SERVICES = {airplay:"AirPlay", raop:"AirPlay audio", ipp:"Stampa", ipps:"Stampa", printer:"Stampa", "pdl-datastream":"Stampa", scanner:"Scanner", uscan:"Scanner", smb:"Condivisione file", afpovertcp:"Condivisione file (AFP)", ssh:"SSH", "sftp-ssh":"SFTP", rfb:"Condivisione schermo", googlecast:"Chromecast", http:"Pagina web", https:"Pagina web", hap:"HomeKit", homekit:"HomeKit", matter:"Matter", matterc:"Matter", "companion-link":"Dispositivo Apple", "spotify-connect":"Spotify", sonos:"Sonos", "device-info":"", "sleep-proxy":"Sleep proxy", "apple-mobdev2":"Sincronizzazione Apple"};
+const SERVICES = {"netaudio-arc":"Dante", "netaudio-cmc":"Dante", "netaudio-dbc":"Dante", "netaudio-chan":"Dante", ndi:"NDI", blackmagic:"Blackmagic", videohub:"Videohub", qlab:"QLab", osc:"OSC", workstation:"", airplay:"AirPlay", raop:"AirPlay audio", ipp:"Stampa", ipps:"Stampa", printer:"Stampa", "pdl-datastream":"Stampa", scanner:"Scanner", uscan:"Scanner", smb:"Condivisione file", afpovertcp:"Condivisione file (AFP)", ssh:"SSH", "sftp-ssh":"SFTP", rfb:"Condivisione schermo", googlecast:"Chromecast", http:"Pagina web", https:"Pagina web", hap:"HomeKit", homekit:"HomeKit", matter:"Matter", matterc:"Matter", "companion-link":"Dispositivo Apple", "spotify-connect":"Spotify", sonos:"Sonos", "device-info":"", "sleep-proxy":"Sleep proxy", "apple-mobdev2":"Sincronizzazione Apple"};
 
 let hosts = [], gone = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser", showGone = true;
-let repeatTimer = null, selected = null, autoRun = false;
+let repeatTimer = null, selected = null, autoRun = false, network = null, issues = [];
 
 const ipNum = ip => ip.split(".").reduce((a, b) => a * 256 + +b, 0);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const kindIcon = k => `<span class="kind" title="${esc((KIND[k] || KIND[""])[0])}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${(KIND[k] || KIND[""])[1]}</svg></span>`;
-const label = h => h.name || h.hostname || "";
+const label = h => h.name || h.friendly || h.hostname || "";
+// [1,2,3,7] -> "1–3, 7"
+const ranges = a => {
+  const out = []; const v = [...new Set(a || [])].sort((x, y) => x - y);
+  for (let i = 0; i < v.length; i++) {
+    let j = i; while (j + 1 < v.length && v[j + 1] === v[j] + 1) j++;
+    out.push(j > i ? `${v[i]}–${v[j]}` : `${v[i]}`); i = j;
+  }
+  return out.join(", ");
+};
+function protoChips(h) {
+  return (h.protocols || []).map(p => {
+    let extra = "";
+    if (p === "Art-Net" && h.artnet) { const u = [...(h.artnet.out || []), ...(h.artnet.in || [])]; if (u.length) extra = " " + ranges(u); }
+    if (p === "sACN" && h.sacn && (h.sacn.universes || []).length) extra = " " + ranges(h.sacn.universes);
+    if (p === "PTP master" && h.ptp) extra = " " + h.ptp.replace("PTPv", "v").replace(" dominio ", " d");
+    return `<span class="proto" title="${esc(p + extra)}">${esc(p + extra)}</span>`;
+  }).join("");
+}
 const when = t => {
   if (!t || t.startsWith("0001")) return "";
   const d = new Date(t), now = new Date();
@@ -316,10 +400,16 @@ function start(auto = false) {
   es.addEventListener("done", e => {
     const d = JSON.parse(e.data);
     gone = d.gone || [];
+    network = d.network || null; issues = d.issues || [];
+    showNetwork();
     fetch("api/info").then(r => r.json()).then(i => showHelper(i.helper)).catch(() => {});
     $("machidden").style.display = d.macHidden ? "flex" : "none";
     if (d.macHidden) $("oui").style.display = "none"; // no MACs, no vendors to look up
     stop(`${d.count} dispositivi trovati in ${d.seconds.toFixed(1)} s.`);
+    if (autoRun && d.gone) {
+      const lost = d.gone.filter(g => g.critical);
+      if (lost.length) alarm(lost.map(g => g.name || g.friendly || g.ip));
+    }
     const bits = [];
     if (d.new) bits.push(`<b>${d.new} ${d.new === 1 ? "nuovo" : "nuovi"}</b>`);
     if (gone.length) bits.push(`<a id="toggleGone">${gone.length} non ${gone.length === 1 ? "risponde" : "rispondono"} (${showGone ? "nascondi" : "mostra"})</a>`);
@@ -337,13 +427,36 @@ function stop(msg) {
   $("scan").textContent = "Scansiona"; $("scan").classList.remove("stop");
   $("prog").style.width = "100%";
   $("status").textContent = msg;
-  $("csv").disabled = $("json").disabled = hosts.length === 0;
+  $("csv").disabled = $("json").disabled = $("printBtn").disabled = hosts.length === 0;
   render();
   schedule();
 }
 
+function showNetwork() {
+  const nb = $("netbar");
+  if (!network) { nb.innerHTML = ""; } else {
+    const name = network.name || network.auto;
+    nb.innerHTML = `Rete: <b>${esc(name)}</b>${network.name ? ` <span class="muted">· ${esc(network.auto)}</span>` : ""}${network.is_new ? ' <span class="badge new">rete nuova</span>' : ""} <a id="netRename">${network.name ? "rinomina" : "dai un nome a questo locale"}</a>`;
+    $("netRename").onclick = async () => {
+      nb.innerHTML = `Rete: <input id="netName" maxlength="200" value="${esc(network.name || "")}" placeholder="es. Arena Verona, tour 2027" style="width:260px"> <button id="netSave">Salva</button>`;
+      $("netName").focus();
+      const save = async () => {
+        try { network = await post("api/network", {name: $("netName").value}).then(r => r.json()); } catch (e) { toast("Non salvato: " + e.message); }
+        showNetwork();
+      };
+      $("netSave").onclick = save;
+      $("netName").onkeydown = e => { if (e.key === "Enter") save(); if (e.key === "Escape") showNetwork(); };
+    };
+  }
+  const box = $("issues");
+  box.style.display = issues.length ? "flex" : "none";
+  box.innerHTML = issues.map(i => `<span>⚠️ ${esc(i)}</span>`).join("");
+}
+
 function sortValue(h, k) {
   switch (k) {
+    case "protocols": return (h.protocols || []).join(" ").toLowerCase();
+    case "model": return (h.model || h.vendor || "").toLowerCase();
     case "ip": return ipNum(h.ip);
     case "ports": return (h.ports || []).length;
     case "rtt_ms": return h.rtt_ms || 0;
@@ -354,7 +467,7 @@ function sortValue(h, k) {
 
 function render() {
   const f = $("filter").value.toLowerCase();
-  const match = h => !f || [h.ip, h.name, h.note, h.hostname, h.mac, h.vendor, (KIND[h.kind] || KIND[""])[0], (h.ports || []).join(" ")].join(" ").toLowerCase().includes(f);
+  const match = h => !f || [h.ip, h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "), (KIND[h.kind] || KIND[""])[0], (h.ports || []).join(" ")].join(" ").toLowerCase().includes(f);
   const list = hosts.filter(match);
   list.sort((a, b) => {
     const x = sortValue(a, sortKey), y = sortValue(b, sortKey);
@@ -363,16 +476,19 @@ function render() {
   });
   const off = es || !showGone ? [] : gone.filter(match);
   if (!list.length && !off.length) {
-    $("rows").innerHTML = `<tr><td colspan="6" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
+    $("rows").innerHTML = `<tr><td colspan="7" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
     return;
   }
   const row = (h, isGone) => {
-    const main = label(h), sub = h.name && h.hostname ? h.hostname : "";
+    const main = label(h);
+    const sub = [h.role, h.name ? (h.friendly || h.hostname) : (h.friendly && h.hostname && h.friendly !== h.hostname ? h.hostname : "")].filter(Boolean).join(" · ");
+    const warns = (h.warnings || []).length;
     return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${selected === h.key ? " sel" : ""}">
-    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${sub ? `<span class="sub">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
+    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${h.critical ? '<span class="badge crit">critico</span>' : ""}${warns ? `<span class="badge warn" title="${esc(h.warnings.join("\n"))}">⚠ ${warns}</span>` : ""}${sub ? `<span class="sub">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
     <td class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
-    <td>${h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
+    <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
+    <td>${isGone ? "" : protoChips(h)}</td>
     <td class="ports">${isGone ? "" : portLinks(h)}</td>
     <td class="muted">${isGone ? "" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? "ARP" : ""}</td>
   </tr>`;
@@ -466,29 +582,71 @@ function openDetail(key) {
   const isGone = !hosts.includes(h);
   $("dTitle").innerHTML = kindIcon(h.kind) + esc(label(h) || h.ip);
   $("dSub").textContent = (KIND[h.kind] || KIND[""])[0] + (isGone ? " · non risponde" : "");
-  if (changed) { $("dName").value = h.name || ""; $("dNote").value = h.note || ""; $("dMsg").textContent = ""; }
+  if (changed) { $("dName").value = h.name || ""; $("dRole").value = h.role || ""; $("dNote").value = h.note || ""; $("dCrit").checked = !!h.critical; $("dMsg").textContent = ""; }
+  $("dName").placeholder = (h.friendly || h.hostname) ? `vuoto = ${h.friendly || h.hostname}` : "es. Console FOH";
+  $("dWarn").innerHTML = (h.warnings || []).map(w => `<li>${esc(w)}</li>`).join("");
   const svcs = [...new Set((h.services || []).map(s => SERVICES[s] ?? s).filter(Boolean))];
   const rows = [
     ["IP", `<span class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</span>`],
     ["MAC", h.mac ? `<span class="mono" data-copy="${esc(h.mac)}">${esc(h.mac)}</span>` : "—"],
     ["Produttore", esc(h.vendor) || "—"],
+    ...(h.model ? [["Modello", esc(h.model)]] : []),
+    ...(h.friendly ? [["Nome del dispositivo", esc(h.friendly)]] : []),
     ["Nome in rete", esc(h.hostname) || "—"],
+    ...(h.protocols && h.protocols.length ? [["Protocolli", protoChips(h)]] : []),
+    ...showFacts(h),
     ["Servizi", svcs.length ? svcs.map(s => `<span class="svc">${esc(s)}</span>`).join("") : "—"],
     ["Porte aperte", isGone ? "—" : portLinks(h) || "nessuna tra quelle controllate"],
     ["Risposta", isGone ? "—" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? "solo tabella ARP" : "—"],
     ["Visto la prima volta", esc(when(h.first_seen)) || "—"],
   ];
   if (isGone) rows.push(["Visto l'ultima volta", esc(when(h.last_seen))]);
+  if (h.history) {
+    const cells = [...h.history].map(c => `<i class="${c === "1" ? "y" : c === "0" ? "n" : ""}"></i>`).join("");
+    const n = [...h.history].filter(c => c !== "-"), y = n.filter(c => c === "1").length;
+    rows.push(["Presenza", `${y} su ${n.length} scansioni<div class="hist" title="ultime scansioni, la più recente a destra">${cells}</div>`]);
+  }
   $("dInfo").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   $("dWol").disabled = !h.mac || h.self;
   $("dPorts").disabled = isGone;
   $("dForget").hidden = !isGone;
   $("detail").classList.add("open"); $("detail").setAttribute("aria-hidden", "false");
+  document.body.classList.add("detail-open");
   render();
 }
+function showFacts(h) {
+  const f = [];
+  if (h.artnet) {
+    const a = h.artnet;
+    f.push(["Art-Net", esc([a.short_name, a.style].filter(Boolean).join(" · "))]);
+    if ((a.out || []).length) f.push(["Universi in uscita", esc(ranges(a.out)) + ' <span class="muted">(port-address)</span>']);
+    if ((a.in || []).length) f.push(["Universi in ingresso", esc(ranges(a.in))]);
+    if (a.report) f.push(["Stato del nodo", esc(a.report)]);
+    if (a.firmware) f.push(["Firmware", esc(a.firmware)]);
+  }
+  if (h.sacn) {
+    f.push(["Sorgente sACN", esc(h.sacn.name || "—")]);
+    if ((h.sacn.universes || []).length) f.push(["Universi sACN", esc(ranges(h.sacn.universes))]);
+    if (h.sacn.priority) f.push(["Priorità sACN", esc(h.sacn.priority)]);
+  }
+  if (h.ptp) f.push(["Clock PTP", `master ${esc(h.ptp)}${h.ptp === "PTPv1" ? ' <span class="muted">(Dante)</span>' : ""}`]);
+  if ((h.ndi || []).length) f.push(["Sorgenti NDI", h.ndi.map(n => `<span class="svc">${esc(n)}</span>`).join("")]);
+  if (h.pjlink) {
+    const p = h.pjlink;
+    if (p.needs_login) f.push(["PJLink", "protetto da password"]);
+    else {
+      if (p.power) f.push(["Stato proiettore", esc(p.power)]);
+      if ((p.lamp_hours || []).length) f.push(["Ore lampada", esc(p.lamp_hours.join(" / "))]);
+      if (p.errors) f.push(["Errori", esc(p.errors)]);
+    }
+  }
+  return f;
+}
+
 function closeDetail() {
   selected = null;
   $("detail").classList.remove("open"); $("detail").setAttribute("aria-hidden", "true");
+  document.body.classList.remove("detail-open");
   render();
 }
 $("dClose").onclick = closeDetail;
@@ -505,15 +663,15 @@ async function post(url, body) {
 
 $("dSave").onclick = async () => {
   const h = findHost(selected); if (!h) return;
-  const name = $("dName").value.trim(), note = $("dNote").value.trim();
+  const name = $("dName").value.trim(), role = $("dRole").value.trim(), note = $("dNote").value.trim(), critical = $("dCrit").checked;
   try {
-    await post("api/device", {key: h.key, name, note});
-    h.name = name; h.note = note;
+    await post("api/device", {key: h.key, name, role, note, critical});
+    Object.assign(h, {name, role, note, critical});
     $("dMsg").textContent = "✓ Salvato.";
     openDetail(h.key);
   } catch (e) { $("dMsg").textContent = "Non salvato: " + e.message; }
 };
-for (const id of ["dName"]) $(id).onkeydown = e => { if (e.key === "Enter") $("dSave").click(); };
+for (const id of ["dName", "dRole"]) $(id).onkeydown = e => { if (e.key === "Enter") $("dSave").click(); };
 
 $("dWol").onclick = async () => {
   const h = findHost(selected); if (!h) return;
@@ -560,10 +718,114 @@ const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
 $("json").onclick = () => download(`wasaping-${stamp()}.json`, JSON.stringify(hosts, null, 2), "application/json");
 $("csv").onclick = () => {
   const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = [["ip","nome","hostname","mac","vendor","tipo","ports","method","rtt_ms","note"].join(",")]
-    .concat(hosts.map(h => [h.ip, h.name, h.hostname, h.mac, h.vendor, (KIND[h.kind] || KIND[""])[0], (h.ports||[]).join(" "), h.method, h.rtt_ms || "", h.note].map(q).join(",")));
+  const lines = [["ip","nome","ruolo","nome dispositivo","hostname","mac","produttore","modello","tipo","protocolli","universi","porte","rtt_ms","critico","note"].join(",")]
+    .concat(hosts.map(h => [h.ip, h.name, h.role, h.friendly, h.hostname, h.mac, h.vendor, h.model, (KIND[h.kind] || KIND[""])[0], (h.protocols || []).join(" "), universeText(h), (h.ports||[]).join(" "), h.rtt_ms || "", h.critical ? "sì" : "", h.note].map(q).join(",")));
   download(`wasaping-${stamp()}.csv`, lines.join("\n"), "text/csv");
 };
+
+function universeText(h) {
+  const p = [];
+  if (h.artnet && (h.artnet.out || []).length) p.push("Art-Net out " + ranges(h.artnet.out));
+  if (h.artnet && (h.artnet.in || []).length) p.push("Art-Net in " + ranges(h.artnet.in));
+  if (h.sacn && (h.sacn.universes || []).length) p.push("sACN " + ranges(h.sacn.universes));
+  return p.join("; ");
+}
+
+// Printable IP list for the crew / the venue: saved as a web page and
+// opened in the browser, where it can be printed or saved as PDF.
+$("printBtn").onclick = () => {
+  const title = network ? (network.name || network.auto) : "Rete";
+  const list = [...hosts].sort((a, b) => ipNum(a.ip) - ipNum(b.ip));
+  const rows = list.map(h => `<tr><td>${esc(h.ip)}</td><td><b>${esc(label(h) || "—")}</b>${h.critical ? " ●" : ""}</td><td>${esc(h.role || "")}</td><td>${esc((KIND[h.kind] || KIND[""])[0])}</td><td>${esc(h.model || h.vendor || "")}</td><td>${esc(h.mac || "")}</td><td>${esc((h.protocols || []).join(", "))}</td><td>${esc(universeText(h))}</td><td>${esc(h.note || "")}</td></tr>`).join("");
+  const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>${esc(title)} — elenco IP</title>
+<style>body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:11px;color:#171717;margin:24px}h1{font-size:18px;margin:0}p{color:#666;margin:4px 0 14px}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left;vertical-align:top}th{font-size:10px;text-transform:uppercase;color:#666}
+td:first-child,td:nth-child(6){font-family:Menlo,Consolas,monospace}tr:nth-child(even) td{background:#f6f8f3}@page{size:A4 landscape;margin:12mm}</style></head>
+<body><h1>${esc(title)}</h1><p>Elenco IP · ${list.length} dispositivi · ${esc(new Date().toLocaleString("it"))} · wasaping · ● = critico</p>
+<table><thead><tr><th>IP</th><th>Dispositivo</th><th>Ruolo</th><th>Tipo</th><th>Modello</th><th>MAC</th><th>Protocolli</th><th>Universi</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table>
+<script>addEventListener("load",()=>setTimeout(()=>print(),300))<\/script></body></html>`;
+  if (ui === "browser") {
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); return; }
+  }
+  post("api/save", {name: `wasaping-elenco-${stamp()}.html`, data: html, open: true})
+    .then(r => r.json()).then(d => toast("Elenco aperto nel browser: " + d.path))
+    .catch(e => toast("Non salvato: " + e.message));
+};
+
+// ---- Show monitor: critical devices, checked every few seconds ----
+let monTimer = null, monState = {}, monDevices = [], audioCtx = null;
+$("monBtn").onclick = openMonitor;
+$("mClose").onclick = closeMonitor;
+$("mEvery").onchange = () => { if (monTimer) { clearTimeout(monTimer); monTick(); } };
+
+async function openMonitor() {
+  try { monDevices = await fetch("api/critical").then(r => r.json()) || []; } catch { monDevices = []; }
+  // Devices marked critical in this session but not saved yet are in hosts too.
+  monState = {};
+  $("monitor").classList.add("open"); $("monitor").setAttribute("aria-hidden", "false");
+  $("mInfo").textContent = network ? (network.name || network.auto) : "";
+  drawTiles();
+  if (monDevices.length) monTick();
+  // Browsers need a user gesture to allow sound later.
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
+}
+function closeMonitor() {
+  clearTimeout(monTimer); monTimer = null;
+  $("monitor").classList.remove("open"); $("monitor").setAttribute("aria-hidden", "true");
+}
+function drawTiles() {
+  if (!monDevices.length) {
+    $("tiles").innerHTML = '<div class="mhint">Nessun dispositivo critico su questa rete.<br>Apri un dispositivo dall\'elenco e spunta <b>Critico</b>: console, switch principale, stagebox Dante, media server…</div>';
+    $("mState").className = "state ok"; $("mState").textContent = "—";
+    return;
+  }
+  const down = monDevices.filter(d => monState[d.ip] && !monState[d.ip].alive);
+  $("mState").className = "state " + (down.length ? "bad" : "ok");
+  $("mState").textContent = down.length ? `${down.length} ${down.length === 1 ? "NON RISPONDE" : "NON RISPONDONO"}` : "TUTTO OK";
+  $("tiles").innerHTML = monDevices.map(d => {
+    const st = monState[d.ip], isDown = st && !st.alive;
+    const status = !st ? "controllo…" : st.alive ? (st.rtt_ms ? st.rtt_ms + " ms" : "ok") : "NON RISPONDE";
+    const since = st && st.since ? `da ${new Date(st.since).toLocaleTimeString("it")}` : "";
+    return `<div class="tile${isDown ? " down" : ""}"><div class="t">${kindIcon(d.kind)}${esc(d.name || d.friendly || d.hostname || d.ip)}</div>
+      <div class="r">${esc([d.role, d.ip].filter(Boolean).join(" · "))}</div>
+      <div class="s"><b>${esc(status)}</b><span class="muted">${esc(since)}</span></div></div>`;
+  }).join("");
+}
+async function monTick() {
+  const ports = {};
+  for (const d of monDevices) if ((d.ports || []).length) ports[d.ip] = d.ports.slice(0, 8);
+  try {
+    const res = await post("api/check", {ips: monDevices.map(d => d.ip), ports}).then(r => r.json());
+    const lost = [], back = [];
+    for (const r of res) {
+      const prev = monState[r.ip];
+      const changed = !prev || prev.alive !== r.alive;
+      monState[r.ip] = {...r, since: changed ? Date.now() : prev.since};
+      const d = monDevices.find(x => x.ip === r.ip), name = d ? (d.name || d.friendly || d.ip) : r.ip;
+      if (prev && prev.alive && !r.alive) lost.push(name);
+      if (prev && !prev.alive && r.alive) back.push(name);
+    }
+    drawTiles();
+    if (lost.length) alarm(lost);
+    if (back.length) post("api/notify", {title: "wasaping: di nuovo in linea", body: back.join(", ")}).catch(() => {});
+  } catch {}
+  if ($("monitor").classList.contains("open")) monTimer = setTimeout(monTick, +$("mEvery").value * 1000);
+}
+function alarm(names) {
+  post("api/notify", {title: "⚠️ wasaping: non risponde", body: names.join(", ")}).catch(() => {});
+  toast("Non risponde: " + names.join(", "));
+  if (!$("mSound").checked || !audioCtx) return;
+  try {
+    const t = audioCtx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = "square"; o.frequency.value = i % 2 ? 660 : 880;
+      g.gain.setValueAtTime(0.15, t + i * 0.25); g.gain.setValueAtTime(0, t + i * 0.25 + 0.18);
+      o.connect(g).connect(audioCtx.destination); o.start(t + i * 0.25); o.stop(t + i * 0.25 + 0.2);
+    }
+  } catch {}
+}
 
 $("ouiBtn").onclick = async () => {
   $("ouiBtn").disabled = true; $("ouiBtn").textContent = "Scarico…";

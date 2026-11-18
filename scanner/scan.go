@@ -1,6 +1,7 @@
 // Package scanner discovers devices on a local network without needing
-// administrator rights: it combines TCP probes, the system ping command and
-// the operating system ARP cache.
+// administrator rights: it combines TCP probes, the system ping command,
+// the operating system ARP cache, Bonjour/NetBIOS names and the show
+// protocols (Art-Net, sACN, PTP, PJLink).
 package scanner
 
 import (
@@ -15,17 +16,27 @@ import (
 
 // Host is a device found on the network.
 type Host struct {
-	IP       string   `json:"ip"`
-	MAC      string   `json:"mac,omitempty"`
-	Vendor   string   `json:"vendor,omitempty"`
-	Hostname string   `json:"hostname,omitempty"`
-	Method   string   `json:"method"` // tcp, ping, arp, self
-	RTTms    int64    `json:"rtt_ms,omitempty"`
-	Ports    []int    `json:"ports,omitempty"`
-	Services []string `json:"services,omitempty"` // Bonjour service types
-	Kind     string   `json:"kind,omitempty"`     // see GuessKind
-	Gateway  bool     `json:"gateway,omitempty"`
-	Self     bool     `json:"self,omitempty"`
+	IP        string      `json:"ip"`
+	MAC       string      `json:"mac,omitempty"`
+	Vendor    string      `json:"vendor,omitempty"`
+	Hostname  string      `json:"hostname,omitempty"`
+	Friendly  string      `json:"friendly,omitempty"` // name the owner gave it (Bonjour, Dante, Art-Net…)
+	Model     string      `json:"model,omitempty"`
+	Method    string      `json:"method"` // tcp, ping, arp, artnet, sacn, ptp, self
+	RTTms     int64       `json:"rtt_ms,omitempty"`
+	Ports     []int       `json:"ports,omitempty"`
+	Services  []string    `json:"services,omitempty"`  // Bonjour service types
+	Protocols []string    `json:"protocols,omitempty"` // Art-Net, sACN, Dante, NDI, PTP master…
+	ArtNet    *ArtNetNode `json:"artnet,omitempty"`
+	SACN      *SACNSource `json:"sacn,omitempty"`
+	PTP       string      `json:"ptp,omitempty"` // set when this device is a PTP clock master
+	PJLink    *PJLink     `json:"pjlink,omitempty"`
+	NDI       []string    `json:"ndi,omitempty"`  // NDI sources it publishes
+	Kind      string      `json:"kind,omitempty"` // see GuessKind
+	Warnings  []string    `json:"warnings,omitempty"`
+	OffSubnet bool        `json:"off_subnet,omitempty"` // not in any network of this computer
+	Gateway   bool        `json:"gateway,omitempty"`
+	Self      bool        `json:"self,omitempty"`
 }
 
 // Options controls a scan.
@@ -37,6 +48,7 @@ type Options struct {
 	Ping       bool
 	ScanPorts  []int // ports checked on alive hosts (empty = none)
 	ResolveDNS bool
+	NoShow     bool // skip Art-Net/sACN/PTP discovery
 }
 
 // Progress is reported while probing.
@@ -66,6 +78,19 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 	inTargets := make(map[string]bool, total)
 	for _, ip := range opt.Targets {
 		inTargets[ip.String()] = true
+	}
+	localNets := localNetworks()
+
+	// Show protocols are heard while the probes run.
+	var show map[string]*showInfo
+	showReady := make(chan struct{})
+	if opt.NoShow {
+		close(showReady)
+	} else {
+		go func() {
+			show = showDiscover(ctx, interfaceFor(opt.Targets, localNets), 2500*time.Millisecond)
+			close(showReady)
+		}()
 	}
 
 	// Phase 1: liveness probes.
@@ -114,17 +139,36 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 	}
 	close(jobs)
 	wg.Wait()
+	<-showReady
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
 	// Phase 2: the probes above filled the ARP cache, even for hosts
-	// whose ports are all filtered. Any target with a MAC is alive.
+	// whose ports are all filtered. Any target with a MAC is alive, and so
+	// is anyone who spoke a show protocol.
 	arp := ARPTable(ctx)
 	for ip := range arp {
 		if _, ok := alive[ip]; !ok && inTargets[ip] {
 			alive[ip] = hit{method: "arp"}
 		}
+	}
+	for ip, s := range show {
+		if _, ok := alive[ip]; ok {
+			continue
+		}
+		// Outside the scanned range: keep it only when it is outside every
+		// local network too — the classic "fixture on the wrong subnet".
+		if !inTargets[ip] && inNets(ip, localNets) {
+			continue
+		}
+		m := "ptp"
+		if s.artnet != nil {
+			m = "artnet"
+		} else if s.sacn != nil {
+			m = "sacn"
+		}
+		alive[ip] = hit{method: m}
 	}
 	selfIPs := map[string]string{}
 	if ifs, err := LocalInterfaces(); err == nil {
@@ -136,19 +180,14 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 		}
 	}
 
-	// Phase 3: enrich each alive host (DNS, vendor, ports).
+	// Phase 3: enrich each alive host (DNS, names, vendor, ports, show gear).
 	var (
 		results []Host
 		emitMu  sync.Mutex
 		sem     = make(chan struct{}, 32)
 	)
-	// Local names (mDNS, NetBIOS) are asked for all hosts at once, while
-	// each host does its DNS lookup and port checks.
-	var (
-		names    map[string]string
-		services map[string][]string
-	)
-	namesReady := make(chan struct{})
+	var info map[string]*devInfo
+	infoReady := make(chan struct{})
 	if opt.ResolveDNS {
 		ips := make([]string, 0, len(alive))
 		for ip := range alive {
@@ -156,9 +195,9 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				ips = append(ips, ip)
 			}
 		}
-		go func() { names, services = localNames(ctx, ips, 1500*time.Millisecond); close(namesReady) }()
+		go func() { info = localNames(ctx, ips, 1500*time.Millisecond); close(infoReady) }()
 	} else {
-		close(namesReady)
+		close(infoReady)
 	}
 	selfName, _ := os.Hostname()
 	gateway := DefaultGateway()
@@ -176,6 +215,10 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			} else {
 				host.MAC = arp[ip]
 			}
+			s := show[ip]
+			if host.MAC == "" && s != nil && s.artnet != nil {
+				host.MAC = s.artnet.MAC
+			}
 			host.Vendor = Vendor(host.MAC)
 			if opt.ResolveDNS && !host.Self {
 				host.Hostname = reverseDNS(ctx, ip, 2*time.Second)
@@ -183,20 +226,40 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			if len(opt.ScanPorts) > 0 {
 				host.Ports = scanPorts(ctx, ip, opt.ScanPorts, opt.Timeout)
 			}
-			<-namesReady
-			if host.Hostname == "" {
-				host.Hostname = names[ip]
+			if containsInt(host.Ports, 4352) {
+				host.PJLink = queryPJLink(ctx, ip, opt.Timeout+time.Second)
+			}
+			<-infoReady
+			if d := info[ip]; d != nil {
+				if host.Hostname == "" {
+					host.Hostname = d.name
+				}
+				host.Friendly, host.Model, host.Services, host.NDI = d.friendly, d.model, d.services, d.ndiSources
 			}
 			if host.Self && opt.ResolveDNS {
 				host.Hostname = selfName
 			}
-			host.Services = services[ip]
+			if s != nil {
+				host.ArtNet, host.SACN, host.PTP = s.artnet, s.sacn, s.ptp
+				if len(s.artMACs) > 1 {
+					host.Warnings = append(host.Warnings, "Conflitto di IP: su Art-Net rispondono più dispositivi con questo indirizzo ("+joinStrings(s.artMACs)+").")
+				}
+			}
+			if host.PJLink != nil && host.Model == "" {
+				host.Model = joinNonEmpty(host.PJLink.Maker, host.PJLink.Model)
+			}
+			if host.Friendly == "" {
+				host.Friendly = showName(host)
+			}
 			host.Gateway = ip == gateway
+			host.OffSubnet = !inNets(ip, localNets)
+			host.Protocols = protocolsOf(host)
 			if host.Self {
 				host.Kind = KindComputer
 			} else {
 				host.Kind = GuessKind(host)
 			}
+			host.Warnings = append(host.Warnings, Exposure(host)...)
 			emitMu.Lock()
 			results = append(results, host)
 			if onHost != nil {
@@ -211,6 +274,67 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 		return ipToU32(net.ParseIP(results[i].IP)) < ipToU32(net.ParseIP(results[j].IP))
 	})
 	return results, ctx.Err()
+}
+
+func showName(h Host) string {
+	switch {
+	case h.ArtNet != nil && h.ArtNet.LongName != "":
+		return h.ArtNet.LongName
+	case h.ArtNet != nil:
+		return h.ArtNet.ShortName
+	case h.SACN != nil:
+		return h.SACN.Name
+	case h.PJLink != nil:
+		return h.PJLink.Name
+	}
+	return ""
+}
+
+func localNetworks() []*net.IPNet {
+	var nets []*net.IPNet
+	if ifs, err := LocalInterfaces(); err == nil {
+		for _, i := range ifs {
+			if _, n, err := net.ParseCIDR(i.Network); err == nil {
+				nets = append(nets, n)
+			}
+		}
+	}
+	return nets
+}
+
+func inNets(ip string, nets []*net.IPNet) bool {
+	p := net.ParseIP(ip)
+	for _, n := range nets {
+		if n.Contains(p) {
+			return true
+		}
+	}
+	return false
+}
+
+// interfaceFor returns the local interface on the targets' network, used to
+// join the sACN and PTP multicast groups (nil = let the system choose).
+func interfaceFor(targets []net.IP, nets []*net.IPNet) *net.Interface {
+	if len(targets) == 0 {
+		return nil
+	}
+	ifs, err := LocalInterfaces()
+	if err != nil {
+		return nil
+	}
+	for _, i := range ifs {
+		if _, n, err := net.ParseCIDR(i.Network); err == nil && n.Contains(targets[0]) {
+			if ifi, err := net.InterfaceByName(i.Name); err == nil {
+				return ifi
+			}
+		}
+	}
+	if d, err := DefaultInterface(); err == nil {
+		if ifi, err := net.InterfaceByName(d.Name); err == nil {
+			return ifi
+		}
+	}
+	return nil
 }
 
 func scanPorts(ctx context.Context, ip string, ports []int, timeout time.Duration) []int {

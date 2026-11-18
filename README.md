@@ -7,6 +7,28 @@
 
 ## Cosa fa
 
+### Per chi lavora negli spettacoli
+
+- Riconosce l'**attrezzatura show** e la chiama per nome:
+  - **Art-Net**: nodi, dimmer e console, con nome, tipo e universi in ingresso e in uscita.
+  - **sACN**: sorgenti, universi e priorità.
+  - **Dante** e **NDI**, con le sorgenti NDI.
+  - **Blackmagic**: ATEM, HyperDeck e Videohub.
+  - **QLab**, **OSC**, **grandMA**, **Yamaha**, **Allen & Heath**, **Shure**.
+  - **Proiettori via PJLink**: modello, ore lampada, stato ed errori.
+- Trova il **master del clock PTP**, importante per Dante e AES67.
+- **Problemi che rovinano lo show**:
+  - dispositivi fuori sottorete (ad esempio un nodo a `2.x` mentre sei a `10.x`);
+  - conflitti di IP;
+  - più master PTP;
+  - lo stesso universo sACN inviato da più sorgenti;
+  - rete senza router.
+- **Monitor**: segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso e suona e avvisa appena uno smette di rispondere.
+- **Un elenco per ogni locale**: ogni rete (riconosciuta dal router, o dalla sottorete sulle reti show senza router) ha i suoi dispositivi, nomi, ruoli e note. Gli dai un nome ("Arena Verona") e alla volta successiva vedi cosa c'è di nuovo e cosa manca.
+- **Elenco IP da stampare** o salvare in PDF per la crew e il rider: dispositivo, ruolo, IP, MAC, modello, protocolli, universi e note.
+
+### In generale
+
 - Trova la tua rete locale da solo e la scansiona in pochi secondi (256 host in circa 1 s)
 - Per ogni dispositivo mostra **IP, nome host, indirizzo MAC, produttore e porte aperte**
 - Riconosce i **MAC privati/casuali** di iPhone e Android
@@ -16,6 +38,7 @@
 - **Nomi e note personalizzati** per ogni dispositivo ("TV del salotto"), salvati sul tuo computer
 - **Ripetizione automatica** ogni 5, 15 o 60 minuti, con una notifica quando arriva un dispositivo nuovo
 - **Wake-on-LAN** per accendere un computer dalla rete, e controllo di tutte le porte 1–1024 di un dispositivo
+- **Storico della presenza** di ogni dispositivo nelle ultime scansioni, e avvisi sulle porte rischiose (Telnet, FTP sul router, pannello solo in HTTP…)
 - Ha un'**interfaccia grafica** in una finestra propria (tema chiaro e scuro) e una **riga di comando** con output in tabella, JSON o CSV
 - Le porte web (80, 443, 8080…) sono cliccabili e aprono il pannello del dispositivo
 
@@ -24,6 +47,7 @@
 1. **Sonde TCP** in parallelo su porte comuni. Anche una connessione *rifiutata* dimostra che l'host è acceso.
 2. Il **ping di sistema** per i dispositivi che non rispondono via TCP.
 3. La **tabella ARP** del sistema operativo: le sonde precedenti la riempiono, così si vedono anche i dispositivi con tutte le porte chiuse da un firewall.
+4. I **protocolli show**: un ArtPoll Art-Net, l'ascolto di sACN e PTP in multicast. Così si vedono anche i nodi su un'altra sottorete.
 
 ## Download
 

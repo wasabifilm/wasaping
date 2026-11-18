@@ -57,6 +57,10 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/wol", handleWOL)
 	mux.HandleFunc("/api/ports", handlePorts)
 	mux.HandleFunc("/api/helper", handleHelper)
+	mux.HandleFunc("/api/network", handleNetwork)
+	mux.HandleFunc("/api/check", handleCheck)
+	mux.HandleFunc("/api/critical", handleCritical)
+	mux.HandleFunc("/api/notify", handleNotify)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
 		lastPing.Store(time.Now().UnixNano())
 		w.WriteHeader(http.StatusNoContent)
@@ -261,7 +265,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 	lastProgress := time.Time{}
 	start := time.Now()
-	sess := devices().Begin()
+	sess := devices().Begin(r.Context(), ips)
 	var fresh []string
 	hosts, err := scanner.Scan(r.Context(), scanner.Options{
 		Targets:    ips,
@@ -301,6 +305,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		"macHidden": scanner.MACsHidden(hosts),
 		"gone":      gone,
 		"new":       len(fresh),
+		"network":   sess.Network(),
+		"issues":    scanner.NetworkIssues(hosts),
 	})
 }
 
@@ -324,22 +330,24 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Key    string `json:"key"`
-		Name   string `json:"name"`
-		Note   string `json:"note"`
-		Forget bool   `json:"forget"`
+		Key      string `json:"key"`
+		Name     string `json:"name"`
+		Role     string `json:"role"`
+		Note     string `json:"note"`
+		Critical bool   `json:"critical"`
+		Forget   bool   `json:"forget"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || req.Key == "" {
 		http.Error(w, "richiesta non valida", http.StatusBadRequest)
 		return
 	}
-	if len(req.Name) > 200 || len(req.Note) > 2000 {
+	if len(req.Name) > 200 || len(req.Role) > 200 || len(req.Note) > 2000 {
 		http.Error(w, "testo troppo lungo", http.StatusBadRequest)
 		return
 	}
 	if req.Forget {
 		devices().Forget(req.Key)
-	} else if !devices().Label(req.Key, req.Name, req.Note) {
+	} else if !devices().Label(req.Key, req.Name, req.Role, req.Note, req.Critical) {
 		http.Error(w, "dispositivo sconosciuto", http.StatusNotFound)
 		return
 	}
@@ -401,6 +409,84 @@ func handleHelper(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"helper": helperState.Load()})
+}
+
+// handleNetwork renames the current network ("Arena Verona").
+func handleNetwork(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		if n, ok := devices().Current(); ok {
+			writeJSON(w, n)
+		} else {
+			writeJSON(w, nil)
+		}
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil || len(req.Name) > 200 {
+		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	if !devices().RenameNetwork(req.Name) {
+		http.Error(w, "fai prima una scansione", http.StatusConflict)
+		return
+	}
+	n, _ := devices().Current()
+	writeJSON(w, n)
+}
+
+// handleCritical lists the devices marked critical on the current network.
+func handleCritical(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, devices().CriticalDevices())
+}
+
+// handleCheck answers which of the given devices are up (show monitor).
+func handleCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		IPs   []string         `json:"ips"`
+		Ports map[string][]int `json:"ports"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil || len(req.IPs) > 512 {
+		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	var ips []string
+	for _, ip := range req.IPs {
+		if p := net.ParseIP(ip).To4(); p != nil {
+			ips = append(ips, p.String())
+		}
+	}
+	for ip, ports := range req.Ports {
+		if len(ports) > 32 {
+			req.Ports[ip] = ports[:32]
+		}
+	}
+	activeScan.Add(1)
+	defer activeScan.Add(-1)
+	writeJSON(w, scanner.Check(r.Context(), ips, req.Ports))
+}
+
+// handleNotify shows a system notification (monitor alarms).
+func handleNotify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Title string `json:"title"`
+		Body  string `json:"body"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	notify(firstNonEmpty(req.Title, "wasaping"), req.Body)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func firstNonEmpty(s ...string) string {

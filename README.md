@@ -11,6 +11,11 @@
 - Per ogni dispositivo mostra **IP, nome host, indirizzo MAC, produttore e porte aperte**
 - Riconosce i **MAC privati/casuali** di iPhone e Android
 - Trova i **nomi dei dispositivi** anche senza DNS: mDNS/Bonjour (Mac, iPhone, Android, stampanti) e NetBIOS (PC Windows, NAS)
+- Riconosce il **tipo di dispositivo** (router, computer, telefono, stampante, TV, NAS, videocamera, domotica…) e i **servizi** che annuncia (AirPlay, stampa, condivisione file…)
+- **Si ricorda dei dispositivi**: segna quelli **nuovi** dall'ultima scansione e quelli che **non rispondono più**
+- **Nomi e note personalizzati** per ogni dispositivo ("TV del salotto"), salvati sul tuo computer
+- **Ripetizione automatica** ogni 5, 15 o 60 minuti, con una notifica quando arriva un dispositivo nuovo
+- **Wake-on-LAN** per accendere un computer dalla rete, e controllo di tutte le porte 1–1024 di un dispositivo
 - Ha un'**interfaccia grafica** in una finestra propria (tema chiaro e scuro) e una **riga di comando** con output in tabella, JSON o CSV
 - Le porte web (80, 443, 8080…) sono cliccabili e aprono il pannello del dispositivo
 
@@ -40,7 +45,7 @@ Se non trova nessuna di queste, usa il browser predefinito e si chiude con il pu
 
 > **macOS, la prima volta:** l'app non è firmata da Apple, quindi macOS la blocca. Apri *Impostazioni di Sistema → Privacy e sicurezza* e premi **Apri comunque**. In alternativa, dal Terminale: `xattr -cr /Applications/wasaping.app`
 >
-> **macOS, indirizzi MAC:** le versioni recenti di macOS non danno gli indirizzi MAC degli altri dispositivi ai programmi non firmati da uno sviluppatore Apple registrato. Finché wasaping non sarà firmato, su Mac le colonne MAC e Produttore restano vuote (IP, nomi, porte e tempi funzionano). Su Windows e Linux non c'è questo limite.
+> **macOS, indirizzi MAC:** le versioni recenti di macOS non danno gli indirizzi MAC degli altri dispositivi ai programmi non firmati da uno sviluppatore Apple registrato. Per questo, al primo avvio, wasaping.app chiede **una sola volta** la password di amministratore (con la finestra standard di macOS: wasaping non la vede mai) e installa un piccolo servizio di sistema che copia la tabella ARP. Il servizio gira **solo mentre wasaping è aperto** e si ferma da solo entro 30 secondi dalla chiusura: a wasaping chiuso non usa né CPU né memoria. Lo usa anche la riga di comando. Per toglierlo: link *Disinstalla* in fondo alla finestra, oppure `wasaping helper uninstall`. Se annulli, tutto funziona lo stesso ma senza MAC e produttori. Su Windows e Linux non serve.
 >
 > **Windows, la prima volta:** se compare SmartScreen, premi *Ulteriori informazioni → Esegui comunque*.
 
@@ -54,7 +59,8 @@ wasaping 192.168.1.0/24      # una rete precisa
 wasaping 10.0.0.1-50 -p none # un intervallo, senza controllare le porte
 wasaping -o csv > rete.csv   # esporta in CSV (oppure -o json)
 wasaping interfaces          # elenca le interfacce di rete
-wasaping update-oui          # scarica il database dei produttori (IEEE)
+wasaping update-oui          # aggiorna il database dei produttori (è già incorporato)
+wasaping helper install      # macOS: installa l'aiuto per leggere i MAC (anche: uninstall, status)
 ```
 
 Opzioni principali:
@@ -69,7 +75,9 @@ Opzioni principali:
 | `-no-dns` | | non risolve i nomi host |
 | `-o` | `table` | `table`, `json`, `csv` |
 
-Il database dei produttori (circa 6 MB, dall'IEEE) si scarica una volta sola con `wasaping update-oui` o dal pulsante nell'interfaccia, e resta salvato nella cartella cache dell'utente.
+Clicca su un dispositivo per aprire il pannello di dettaglio: nome personalizzato, note, servizi, prima volta che è stato visto, Wake-on-LAN e controllo completo delle porte. I dispositivi conosciuti si trovano in `devices.json` nella cartella delle impostazioni dell'utente (su Mac `~/Library/Application Support/wasaping/`, su Windows `%AppData%\wasaping\`, su Linux `~/.config/wasaping/`).
+
+Il database dei produttori (IEEE, circa 40.000 marche) è **già dentro wasaping**: funziona subito e senza internet. Per averne una copia più recente usa `wasaping update-oui`; chi sviluppa può rigenerare quella incorporata con `make oui`.
 
 ## Compilare dai sorgenti
 
@@ -90,6 +98,8 @@ go test ./...
 main.go            riga di comando
 web.go             server locale + API (SSE) per l'interfaccia
 window.go          finestra app di Edge/Chrome, salvataggio delle esportazioni
+devices.go         dispositivi conosciuti: nomi, note, nuovi e spariti
+arphelper_darwin.go  servizio launchd per leggere la tabella ARP (macOS)
 native_darwin.go   finestra nativa macOS (Cocoa + WebKit, cgo)
 web/index.html     interfaccia grafica (incorporata nell'eseguibile)
 launch_*.go        rileva l'avvio con doppio clic (Windows, app macOS)
@@ -100,10 +110,7 @@ scanner/           motore: rilevamento reti, sonde, ARP, nomi (DNS, mDNS, NetBIO
 
 ## Idee per le prossime versioni
 
-- [ ] Scansioni salvate e confronto ("nuovi dispositivi dall'ultima volta")
-- [ ] Nomi personalizzati per i dispositivi
 - [ ] IPv6
-- [ ] Wake-on-LAN
 - [ ] Icona dell'eseguibile Windows (risorsa .syso)
 - [ ] Firma e notarizzazione Apple (serve un account Apple Developer): toglie l'avviso di Gatekeeper e dovrebbe restituire gli indirizzi MAC su macOS
 - [ ] Finestra nativa anche su Windows (WebView2)

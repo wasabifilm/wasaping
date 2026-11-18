@@ -15,14 +15,17 @@ import (
 
 // Host is a device found on the network.
 type Host struct {
-	IP       string `json:"ip"`
-	MAC      string `json:"mac,omitempty"`
-	Vendor   string `json:"vendor,omitempty"`
-	Hostname string `json:"hostname,omitempty"`
-	Method   string `json:"method"` // tcp, ping, arp, self
-	RTTms    int64  `json:"rtt_ms,omitempty"`
-	Ports    []int  `json:"ports,omitempty"`
-	Self     bool   `json:"self,omitempty"`
+	IP       string   `json:"ip"`
+	MAC      string   `json:"mac,omitempty"`
+	Vendor   string   `json:"vendor,omitempty"`
+	Hostname string   `json:"hostname,omitempty"`
+	Method   string   `json:"method"` // tcp, ping, arp, self
+	RTTms    int64    `json:"rtt_ms,omitempty"`
+	Ports    []int    `json:"ports,omitempty"`
+	Services []string `json:"services,omitempty"` // Bonjour service types
+	Kind     string   `json:"kind,omitempty"`     // see GuessKind
+	Gateway  bool     `json:"gateway,omitempty"`
+	Self     bool     `json:"self,omitempty"`
 }
 
 // Options controls a scan.
@@ -141,7 +144,10 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 	)
 	// Local names (mDNS, NetBIOS) are asked for all hosts at once, while
 	// each host does its DNS lookup and port checks.
-	var names map[string]string
+	var (
+		names    map[string]string
+		services map[string][]string
+	)
 	namesReady := make(chan struct{})
 	if opt.ResolveDNS {
 		ips := make([]string, 0, len(alive))
@@ -150,11 +156,12 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				ips = append(ips, ip)
 			}
 		}
-		go func() { names = localNames(ctx, ips, 1500*time.Millisecond); close(namesReady) }()
+		go func() { names, services = localNames(ctx, ips, 1500*time.Millisecond); close(namesReady) }()
 	} else {
 		close(namesReady)
 	}
 	selfName, _ := os.Hostname()
+	gateway := DefaultGateway()
 
 	var wg2 sync.WaitGroup
 	for ip, h := range alive {
@@ -182,6 +189,13 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			}
 			if host.Self && opt.ResolveDNS {
 				host.Hostname = selfName
+			}
+			host.Services = services[ip]
+			host.Gateway = ip == gateway
+			if host.Self {
+				host.Kind = KindComputer
+			} else {
+				host.Kind = GuessKind(host)
 			}
 			emitMu.Lock()
 			results = append(results, host)

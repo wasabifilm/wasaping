@@ -28,6 +28,7 @@ Uso:
   wasaping web [-addr 127.0.0.1:0]     apre l'interfaccia grafica nel browser
   wasaping app                        come web, ma si chiude con la pagina (doppio clic)
   wasaping interfaces                  elenca le interfacce di rete
+  wasaping helper install|uninstall    macOS: aiuto per leggere i MAC (password una volta)
   wasaping update-oui                  scarica il database dei produttori (IEEE)
   wasaping version
 
@@ -61,6 +62,8 @@ func main() {
 		err = runWeb(ctx, args)
 	case "app":
 		err = runWeb(ctx, append([]string{"-app"}, args...))
+	case "helper":
+		err = runHelper(args)
 	case "interfaces", "if":
 		err = runInterfaces()
 	case "update-oui":
@@ -196,6 +199,7 @@ func runScan(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	helper := setupARP(false)
 	tty := c.format == "table" && isTerminal(os.Stderr)
 	fmt.Fprintf(os.Stderr, "🟢 wasaping: scansiono %s (%d indirizzi)...\n", target, len(ips))
 	start := time.Now()
@@ -217,36 +221,101 @@ func runScan(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	sess := devices().Begin()
+	views := make([]HostView, len(hosts))
+	var fresh []string
+	for i, h := range hosts {
+		views[i] = sess.View(h)
+		if views[i].New {
+			fresh = append(fresh, firstNonEmpty(views[i].Name, views[i].Hostname, h.IP))
+		}
+	}
+	gone := sess.Finish(ips)
 	switch c.format {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(hosts)
+		return enc.Encode(views)
 	case "csv":
 		w := csv.NewWriter(os.Stdout)
-		w.Write([]string{"ip", "hostname", "mac", "vendor", "ports", "method", "rtt_ms"})
-		for _, h := range hosts {
-			w.Write([]string{h.IP, h.Hostname, h.MAC, h.Vendor, joinPorts(h.Ports), h.Method, strconv.FormatInt(h.RTTms, 10)})
+		w.Write([]string{"ip", "nome", "hostname", "mac", "vendor", "tipo", "ports", "method", "rtt_ms", "new", "note"})
+		for _, v := range views {
+			w.Write([]string{v.IP, v.Name, v.Hostname, v.MAC, v.Vendor, v.Kind, joinPorts(v.Ports), v.Method, strconv.FormatInt(v.RTTms, 10), strconv.FormatBool(v.New), v.Note})
 		}
 		w.Flush()
 		return w.Error()
 	default:
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "IP\tHOSTNAME\tMAC\tPRODUTTORE\tPORTE APERTE")
-		for _, h := range hosts {
-			ip := h.IP
-			if h.Self {
+		fmt.Fprintln(tw, "IP\tNOME\tTIPO\tMAC\tPRODUTTORE\tPORTE APERTE")
+		for _, v := range views {
+			ip := v.IP
+			if v.Self {
 				ip += " (tu)"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", ip, dash(h.Hostname), dash(h.MAC), dash(h.Vendor), dash(joinPorts(h.Ports)))
+			if v.New {
+				ip += " ★"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", ip, dash(firstNonEmpty(v.Name, v.Hostname)), dash(kindNames[v.Kind]), dash(v.MAC), dash(v.Vendor), dash(joinPorts(v.Ports)))
 		}
 		tw.Flush()
 		fmt.Fprintf(os.Stderr, "\n%d dispositivi trovati in %s\n", len(hosts), time.Since(start).Round(100*time.Millisecond))
+		if len(fresh) > 0 {
+			fmt.Fprintf(os.Stderr, "★ Nuovi dall'ultima scansione: %s\n", strings.Join(fresh, ", "))
+		}
+		if len(gone) > 0 {
+			var g []string
+			for _, d := range gone {
+				g = append(g, fmt.Sprintf("%s (%s)", firstNonEmpty(d.Name, d.Hostname, d.MAC, d.IP), d.IP))
+			}
+			fmt.Fprintf(os.Stderr, "Non rispondono più: %s\n", strings.Join(g, ", "))
+		}
 		if scanner.MACsHidden(hosts) {
 			fmt.Fprintln(os.Stderr, macHiddenNote)
+			if helper == "missing" {
+				fmt.Fprintln(os.Stderr, "Per vederli: wasaping helper install (chiede la password una sola volta).")
+			}
 		} else if !scanner.HasOUI() {
 			fmt.Fprintln(os.Stderr, "Suggerimento: esegui `wasaping update-oui` per vedere i produttori dei dispositivi.")
 		}
+	}
+	return nil
+}
+
+var kindNames = map[string]string{
+	scanner.KindRouter: "router", scanner.KindComputer: "computer", scanner.KindPhone: "telefono",
+	scanner.KindTablet: "tablet", scanner.KindPrinter: "stampante", scanner.KindTV: "TV/media",
+	scanner.KindSpeaker: "altoparlante", scanner.KindNAS: "NAS", scanner.KindCamera: "videocamera",
+	scanner.KindIoT: "domotica",
+}
+
+func runHelper(args []string) error {
+	if !helperSupported {
+		fmt.Println("Su questo sistema l'aiuto non serve: i MAC si leggono già.")
+		return nil
+	}
+	action := "status"
+	if len(args) > 0 {
+		action = args[0]
+	}
+	switch action {
+	case "install":
+		if err := installHelper(); err != nil {
+			return err
+		}
+		fmt.Println("✓ Aiuto installato: wasaping ora vede i MAC senza chiedere più la password.")
+	case "uninstall", "remove":
+		if err := uninstallHelper(); err != nil {
+			return err
+		}
+		fmt.Println("✓ Aiuto rimosso.")
+	case "status":
+		if helperInstalled() {
+			fmt.Println("Aiuto per i MAC: installato (" + helperPlist + ")")
+		} else {
+			fmt.Println("Aiuto per i MAC: non installato. Per installarlo: wasaping helper install")
+		}
+	default:
+		return fmt.Errorf("uso: wasaping helper [install|uninstall|status]")
 	}
 	return nil
 }

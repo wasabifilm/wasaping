@@ -105,3 +105,44 @@ func TestNetbiosStatus(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestWindowsRoute(t *testing.T) {
+	out := `===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0      192.168.1.1     192.168.1.20     25
+        127.0.0.0        255.0.0.0         On-link         127.0.0.1    331`
+	if got := parseWindowsRoute(out); got != "192.168.1.1" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestGuessKind(t *testing.T) {
+	cases := []struct {
+		h    Host
+		want string
+	}{
+		{Host{Gateway: true}, KindRouter},
+		{Host{Hostname: "Android_46GKIU2H.local"}, KindPhone},
+		{Host{Ports: []int{62078}}, KindPhone},
+		{Host{Hostname: "MacBook-Pro.local"}, KindComputer},
+		{Host{Services: []string{"ipp"}}, KindPrinter},
+		{Host{Ports: []int{554}}, KindCamera},
+		{Host{}, ""},
+	}
+	for _, c := range cases {
+		if got := GuessKind(c.h); got != c.want {
+			t.Errorf("%+v: got %q, want %q", c.h, got, c.want)
+		}
+	}
+}
+
+func TestEmbeddedOUI(t *testing.T) {
+	db := loadEmbeddedOUI()
+	if len(db) < 10000 {
+		t.Fatalf("embedded OUI has only %d vendors", len(db))
+	}
+	if v := db["44a8fc"]; v != "Apple, Inc." {
+		t.Errorf("44a8fc = %q", v)
+	}
+}

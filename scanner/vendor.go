@@ -1,7 +1,11 @@
 package scanner
 
 import (
+	"bufio"
+	"bytes"
+	"compress/gzip"
 	"context"
+	_ "embed"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -17,10 +21,32 @@ import (
 // OUIURL is the official IEEE registry of MAC address prefixes.
 const OUIURL = "https://standards-oui.ieee.org/oui/oui.csv"
 
+// embeddedOUI is a compact copy of the IEEE registry built into wasaping
+// (regenerate with `make oui`), so vendors work offline from the first scan.
+//
+//go:embed oui.txt.gz
+var embeddedOUI []byte
+
 var (
 	ouiOnce sync.Once
 	ouiDB   map[string]string
 )
+
+// loadEmbeddedOUI decodes the built-in "aabbcc<TAB>Vendor" list.
+func loadEmbeddedOUI() map[string]string {
+	db := make(map[string]string, 41000)
+	zr, err := gzip.NewReader(bytes.NewReader(embeddedOUI))
+	if err != nil {
+		return db
+	}
+	sc := bufio.NewScanner(zr)
+	for sc.Scan() {
+		if k, v, ok := strings.Cut(sc.Text(), "\t"); ok && len(k) == 6 {
+			db[k] = v
+		}
+	}
+	return db
+}
 
 // OUIPath is where the vendor database is cached.
 func OUIPath() string {
@@ -105,7 +131,12 @@ func Vendor(mac string) string {
 	}
 	ouiOnce.Do(func() {
 		if ouiDB == nil {
-			ouiDB, _ = loadOUI(OUIPath())
+			// A copy downloaded with update-oui is newer than the built-in one.
+			if db, err := loadOUI(OUIPath()); err == nil && len(db) > 0 {
+				ouiDB = db
+			} else {
+				ouiDB = loadEmbeddedOUI()
+			}
 		}
 	})
 	key := strings.ReplaceAll(mac, ":", "")
@@ -115,11 +146,9 @@ func Vendor(mac string) string {
 	return ouiDB[key[:6]]
 }
 
-// HasOUI reports whether the vendor database has been downloaded.
-func HasOUI() bool {
-	_, err := os.Stat(OUIPath())
-	return err == nil
-}
+// HasOUI reports whether a vendor database is available (always, since
+// one is built in; kept for the interface).
+func HasOUI() bool { return len(embeddedOUI) > 0 }
 
 // IsRandomMAC reports a locally administered address (e.g. iPhone/Android private Wi-Fi address).
 func IsRandomMAC(mac string) bool {

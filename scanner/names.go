@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 )
@@ -15,19 +17,29 @@ import (
 //     as one-shot multicast queries (RFC 6762 §5.5, §6.7);
 //   - NetBIOS node status (Windows PCs, NAS, Samba) on port 137.
 //
-// It returns IP -> name; it never needs admin rights.
-func localNames(ctx context.Context, ips []string, wait time.Duration) map[string]string {
+// It also collects the Bonjour service types each device announces
+// (AirPlay, printers, file sharing…). It returns IP -> name and
+// IP -> services; it never needs admin rights.
+func localNames(ctx context.Context, ips []string, wait time.Duration) (map[string]string, map[string][]string) {
 	out := map[string]string{}
+	services := map[string][]string{}
 	if len(ips) == 0 {
-		return out
+		return out, services
 	}
 	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
-	type found struct{ ip, name, src string }
+	type found struct {
+		ip, name, src string
+		svcs          []string
+	}
 	ch := make(chan found, 64)
 	done := make(chan struct{})
 	go func() {
 		for f := range ch {
+			if f.src == "svc" {
+				services[f.ip] = mergeUnique(services[f.ip], f.svcs)
+				continue
+			}
 			// mDNS wins over NetBIOS: it is the name users see in Finder.
 			if cur, ok := out[f.ip]; !ok || (f.src == "mdns" && !strings.HasSuffix(cur, ".local")) {
 				out[f.ip] = f.name
@@ -58,10 +70,16 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 				end := min(i+20, len(questions))
 				c.WriteToUDP(dnsQuery(questions[i:end], 12), mcast)
 			}
+			c.WriteToUDP(dnsQuery([]string{serviceEnum}, 12), mcast)
 			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
 				for ip, name := range parseMDNSPTR(b) {
 					if want[ip] {
-						ch <- found{ip, name, "mdns"}
+						ch <- found{ip: ip, name: name, src: "mdns"}
+					}
+				}
+				if ip := from.IP.String(); want[ip] {
+					if svcs := parseServiceTypes(b); len(svcs) > 0 {
+						ch <- found{ip: ip, src: "svc", svcs: svcs}
 					}
 				}
 			})
@@ -79,7 +97,7 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
 				if ip := from.IP.String(); want[ip] {
 					if name := parseNetbiosStatus(b); name != "" {
-						ch <- found{ip, name, "netbios"}
+						ch <- found{ip: ip, name: name, src: "netbios"}
 					}
 				}
 			})
@@ -91,7 +109,43 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 	}
 	close(ch)
 	<-done
+	for ip := range services {
+		sort.Strings(services[ip])
+	}
+	return out, services
+}
+
+// serviceEnum is the DNS-SD meta-query listing every service type a host offers.
+const serviceEnum = "_services._dns-sd._udp.local"
+
+// parseServiceTypes returns the service types ("airplay", "ipp", "smb"…)
+// from the answers to the DNS-SD meta-query.
+func parseServiceTypes(msg []byte) []string {
+	var out []string
+	for _, rr := range parseRecords(msg) {
+		if rr.typ != 12 || !strings.EqualFold(rr.name, serviceEnum) {
+			continue
+		}
+		t, _, err := readName(msg, rr.data)
+		if err != nil {
+			continue
+		}
+		// "_airplay._tcp.local" -> "airplay"
+		label, _, _ := strings.Cut(t, ".")
+		if label = strings.TrimPrefix(label, "_"); label != "" {
+			out = mergeUnique(out, []string{strings.ToLower(label)})
+		}
+	}
 	return out
+}
+
+func mergeUnique(a, b []string) []string {
+	for _, x := range b {
+		if !slices.Contains(a, x) {
+			a = append(a, x)
+		}
+	}
+	return a
 }
 
 func readUntil(ctx context.Context, c *net.UDPConn, handle func([]byte, *net.UDPAddr)) {
@@ -171,42 +225,59 @@ func readName(msg []byte, off int) (string, int, error) {
 	}
 }
 
+type record struct {
+	name string
+	typ  uint16
+	data int // offset of the RDATA in the message
+}
+
+// parseRecords returns the resource records of every section of a DNS
+// response (questions are skipped). It stops at the first malformed record.
+func parseRecords(msg []byte) []record {
+	if len(msg) < 12 || msg[2]&0x80 == 0 { // not a response
+		return nil
+	}
+	qd := int(binary.BigEndian.Uint16(msg[4:]))
+	n := int(binary.BigEndian.Uint16(msg[6:])) + int(binary.BigEndian.Uint16(msg[8:])) + int(binary.BigEndian.Uint16(msg[10:]))
+	off := 12
+	for i := 0; i < qd; i++ {
+		_, next, err := readName(msg, off)
+		if err != nil {
+			return nil
+		}
+		off = next + 4
+	}
+	var out []record
+	for i := 0; i < n; i++ {
+		name, next, err := readName(msg, off)
+		if err != nil || next+10 > len(msg) {
+			return out
+		}
+		typ := binary.BigEndian.Uint16(msg[next:])
+		rdlen := int(binary.BigEndian.Uint16(msg[next+8:]))
+		data := next + 10
+		if data+rdlen > len(msg) {
+			return out
+		}
+		out = append(out, record{name, typ, data})
+		off = data + rdlen
+	}
+	return out
+}
+
 // parseMDNSPTR returns IP -> host name from the reverse PTR records found
 // in any section of a DNS/mDNS response.
 func parseMDNSPTR(msg []byte) map[string]string {
 	out := map[string]string{}
-	if len(msg) < 12 || msg[2]&0x80 == 0 { // not a response
-		return out
-	}
-	qd := int(binary.BigEndian.Uint16(msg[4:]))
-	rr := int(binary.BigEndian.Uint16(msg[6:])) + int(binary.BigEndian.Uint16(msg[8:])) + int(binary.BigEndian.Uint16(msg[10:]))
-	off := 12
-	for i := 0; i < qd; i++ {
-		_, n, err := readName(msg, off)
-		if err != nil {
-			return out
+	for _, rr := range parseRecords(msg) {
+		if rr.typ != 12 || !strings.HasSuffix(strings.ToLower(rr.name), ".in-addr.arpa") {
+			continue
 		}
-		off = n + 4
-	}
-	for i := 0; i < rr; i++ {
-		name, n, err := readName(msg, off)
-		if err != nil || n+10 > len(msg) {
-			return out
-		}
-		typ := binary.BigEndian.Uint16(msg[n:])
-		rdlen := int(binary.BigEndian.Uint16(msg[n+8:]))
-		data := n + 10
-		if data+rdlen > len(msg) {
-			return out
-		}
-		if typ == 12 && strings.HasSuffix(strings.ToLower(name), ".in-addr.arpa") {
-			if target, _, err := readName(msg, data); err == nil && target != "" {
-				if ip := ipFromReverse(name); ip != "" {
-					out[ip] = target
-				}
+		if target, _, err := readName(msg, rr.data); err == nil && target != "" {
+			if ip := ipFromReverse(rr.name); ip != "" {
+				out[ip] = target
 			}
 		}
-		off = data + rdlen
 	}
 	return out
 }

@@ -53,6 +53,10 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/scan", handleScan)
 	mux.HandleFunc("/api/update-oui", handleUpdateOUI)
 	mux.HandleFunc("/api/save", handleSave)
+	mux.HandleFunc("/api/device", handleDevice)
+	mux.HandleFunc("/api/wol", handleWOL)
+	mux.HandleFunc("/api/ports", handlePorts)
+	mux.HandleFunc("/api/helper", handleHelper)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
 		lastPing.Store(time.Now().UnixNano())
 		w.WriteHeader(http.StatusNoContent)
@@ -97,6 +101,12 @@ func runWeb(ctx context.Context, args []string) error {
 		srv.Shutdown(sctx)
 	}()
 
+	if *appMode {
+		// macOS: install (password, once) or switch on the ARP helper.
+		go func() { helperState.Store(setupARP(true)) }()
+	} else {
+		go func() { helperState.Store(setupARP(false)) }()
+	}
 	switch {
 	case *appMode && hasNativeWindow:
 		uiMode.Store("native")
@@ -159,10 +169,11 @@ func crossSite(r *http.Request) bool {
 }
 
 var (
-	appModeOn  bool
-	uiMode     atomic.Value // "native", "window" or "browser"
-	lastPing   atomic.Int64
-	activeScan atomic.Int32
+	appModeOn   bool
+	uiMode      atomic.Value // "native", "window" or "browser"
+	helperState atomic.Value // "notneeded", "installed", "missing"
+	lastPing    atomic.Int64
+	activeScan  atomic.Int32
 )
 
 // watchHeartbeat stops the app when the page has been gone for a while.
@@ -213,6 +224,7 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 		"os":            runtime.GOOS,
 		"app":           appModeOn,
 		"ui":            uiMode.Load(),
+		"helper":        helperState.Load(),
 	})
 }
 
@@ -249,13 +261,19 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 	lastProgress := time.Time{}
 	start := time.Now()
+	sess := devices().Begin()
+	var fresh []string
 	hosts, err := scanner.Scan(r.Context(), scanner.Options{
 		Targets:    ips,
 		Ping:       q.Get("ping") != "0",
 		ResolveDNS: q.Get("dns") != "0",
 		ScanPorts:  ports,
 	}, func(h scanner.Host) {
-		send("host", h)
+		v := sess.View(h)
+		if v.New {
+			fresh = append(fresh, firstNonEmpty(v.Name, v.Hostname, v.IP))
+		}
+		send("host", v)
 	}, func(p scanner.Progress) {
 		mu.Lock()
 		due := time.Since(lastProgress) > 150*time.Millisecond || p.Done == p.Total
@@ -271,7 +289,19 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		send("failure", map[string]string{"error": err.Error()})
 		return
 	}
-	send("done", map[string]any{"count": len(hosts), "seconds": time.Since(start).Seconds(), "macHidden": scanner.MACsHidden(hosts)})
+	gone := sess.Finish(ips)
+	if len(fresh) > 0 && appModeOn && q.Get("auto") == "1" {
+		// Background re-scan found someone new: tell the user even if the
+		// window is not in front.
+		notify("wasaping: nuovi dispositivi", strings.Join(fresh, ", "))
+	}
+	send("done", map[string]any{
+		"count":     len(hosts),
+		"seconds":   time.Since(start).Seconds(),
+		"macHidden": scanner.MACsHidden(hosts),
+		"gone":      gone,
+		"new":       len(fresh),
+	})
 }
 
 func handleUpdateOUI(w http.ResponseWriter, r *http.Request) {
@@ -285,6 +315,101 @@ func handleUpdateOUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]int{"vendors": n})
+}
+
+// handleDevice saves the user's name and note for a device, or forgets it.
+func handleDevice(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Key    string `json:"key"`
+		Name   string `json:"name"`
+		Note   string `json:"note"`
+		Forget bool   `json:"forget"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || req.Key == "" {
+		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	if len(req.Name) > 200 || len(req.Note) > 2000 {
+		http.Error(w, "testo troppo lungo", http.StatusBadRequest)
+		return
+	}
+	if req.Forget {
+		devices().Forget(req.Key)
+	} else if !devices().Label(req.Key, req.Name, req.Note) {
+		http.Error(w, "dispositivo sconosciuto", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleWOL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := scanner.WakeOnLAN(r.URL.Query().Get("mac")); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handlePorts checks a list of ports on one device, on request.
+func handlePorts(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	ip := net.ParseIP(q.Get("ip")).To4()
+	if ip == nil {
+		http.Error(w, "indirizzo non valido", http.StatusBadRequest)
+		return
+	}
+	ports, err := parsePorts(q.Get("ports"))
+	if err != nil || len(ports) == 0 {
+		http.Error(w, "porte non valide", http.StatusBadRequest)
+		return
+	}
+	activeScan.Add(1)
+	defer activeScan.Add(-1)
+	open := scanner.ScanPorts(r.Context(), ip.String(), ports, time.Second)
+	writeJSON(w, map[string]any{"ip": ip.String(), "checked": len(ports), "open": open})
+}
+
+// handleHelper installs or removes the macOS ARP helper (password dialog).
+func handleHelper(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var err error
+	switch r.URL.Query().Get("do") {
+	case "install":
+		if err = installHelper(); err == nil {
+			helperState.Store(setupARP(false))
+		}
+	case "uninstall":
+		if err = uninstallHelper(); err == nil {
+			helperState.Store("missing")
+		}
+	default:
+		err = fmt.Errorf("azione sconosciuta")
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]any{"helper": helperState.Load()})
+}
+
+func firstNonEmpty(s ...string) string {
+	for _, x := range s {
+		if x != "" {
+			return x
+		}
+	}
+	return ""
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

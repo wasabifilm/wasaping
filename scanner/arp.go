@@ -61,6 +61,16 @@ var (
 	reMAC  = regexp.MustCompile(`(?i)\b([0-9a-f]{1,2}(?:[:-][0-9a-f]{1,2}){5})\b`)
 )
 
+// ARPSnapshot is ARPTable without waiting for the helper's next copy: for
+// lookups that do not follow fresh probes (e.g. the router's MAC).
+func ARPSnapshot(ctx context.Context) map[string]string {
+	table := map[string]string{}
+	if p, ok := arpFile.Load().(string); ok && p != "" && readARPFile(ctx, p, time.Time{}, table) {
+		return table
+	}
+	return ARPTable(ctx)
+}
+
 // ARPTable returns the OS neighbour cache as IP -> MAC.
 // Linux reads /proc/net/arp; macOS, BSD and Windows parse `arp -a`.
 func ARPTable(ctx context.Context) map[string]string {

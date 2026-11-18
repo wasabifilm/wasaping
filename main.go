@@ -104,7 +104,7 @@ func scanFlags(c *scanConfig) *flag.FlagSet {
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	fs.StringVar(&c.iface, "i", "", "interfaccia da usare (es. en0, eth0, Wi-Fi)")
 	fs.DurationVar(&c.timeout, "timeout", 800*time.Millisecond, "timeout per singolo tentativo")
-	fs.IntVar(&c.workers, "workers", 128, "host scansionati in parallelo")
+	fs.IntVar(&c.workers, "workers", 256, "host scansionati in parallelo")
 	fs.StringVar(&c.ports, "p", "common", `porte da controllare sugli host attivi: "common", "none" o lista "22,80,443"`)
 	fs.BoolVar(&c.noPing, "no-ping", false, "non usare il comando ping di sistema")
 	fs.BoolVar(&c.noDNS, "no-dns", false, "non risolvere i nomi host")

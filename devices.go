@@ -122,7 +122,8 @@ func deviceKey(h scanner.Host) string {
 }
 
 func (s *Store) saveLocked() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	// Notes may hold private details: readable only by this user.
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(s, "", "  ")
@@ -130,7 +131,7 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)
@@ -153,7 +154,7 @@ func networkID(ctx context.Context, targets []net.IP) (id, auto string) {
 	}
 	if gw := scanner.DefaultGateway(); gw != "" {
 		if _, n, err := net.ParseCIDR(subnet); err == nil && n.Contains(net.ParseIP(gw)) {
-			if mac := scanner.ARPTable(ctx)[gw]; mac != "" {
+			if mac := scanner.ARPSnapshot(ctx)[gw]; mac != "" {
 				v := scanner.Vendor(mac)
 				desc := "Rete " + subnet + ", router " + gw
 				if v != "" && !strings.HasPrefix(v, "(") {

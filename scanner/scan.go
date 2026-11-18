@@ -65,7 +65,7 @@ func (o *Options) defaults() {
 		o.Timeout = 800 * time.Millisecond
 	}
 	if o.Workers <= 0 {
-		o.Workers = 128
+		o.Workers = 256
 	}
 	if len(o.ProbePorts) == 0 {
 		o.ProbePorts = DefaultProbePorts
@@ -91,7 +91,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 		close(showReady)
 	} else {
 		go func() {
-			show = showDiscover(ctx, interfaceFor(opt.Targets, localNets), 2500*time.Millisecond)
+			show = showDiscover(ctx, interfaceFor(opt.Targets, localNets), 2*time.Second)
 			close(showReady)
 		}()
 	}
@@ -194,7 +194,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 	infoReady := make(chan struct{})
 	upnpReady := make(chan struct{})
 	if opt.ResolveDNS {
-		go func() { upnp = upnpDiscover(ctx, 1500*time.Millisecond); close(upnpReady) }()
+		go func() { upnp = upnpDiscover(ctx, 1200*time.Millisecond); close(upnpReady) }()
 	} else {
 		close(upnpReady)
 	}
@@ -205,7 +205,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				ips = append(ips, ip)
 			}
 		}
-		go func() { info = localNames(ctx, ips, 1500*time.Millisecond); close(infoReady) }()
+		go func() { info = localNames(ctx, ips, 1200*time.Millisecond); close(infoReady) }()
 	} else {
 		close(infoReady)
 	}
@@ -231,7 +231,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			}
 			host.Vendor = Vendor(host.MAC)
 			if opt.ResolveDNS && !host.Self {
-				host.Hostname = reverseDNS(ctx, ip, 2*time.Second)
+				host.Hostname = reverseDNS(ctx, ip, 1500*time.Millisecond)
 			}
 			if len(opt.ScanPorts) > 0 {
 				host.Ports = scanPorts(ctx, ip, opt.ScanPorts, opt.Timeout)

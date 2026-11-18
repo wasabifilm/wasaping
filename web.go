@@ -28,6 +28,7 @@ func runWeb(ctx context.Context, args []string) error {
 	addr := fset.String("addr", "127.0.0.1:0", "indirizzo di ascolto")
 	noOpen := fset.Bool("no-open", false, "non aprire il browser automaticamente")
 	appMode := fset.Bool("app", false, "modalità app: finestra propria, si chiude con la finestra")
+	hidden := fset.Bool("hidden", false, "macOS: parte solo nella barra dei menu, senza finestra (apertura al login)")
 	fset.Parse(args)
 	ctx, quit := context.WithCancel(ctx)
 	defer quit()
@@ -63,6 +64,7 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/notify", handleNotify)
 	mux.HandleFunc("/api/pingtest", handlePingTest)
 	mux.HandleFunc("/api/bg", handleBackground)
+	mux.HandleFunc("/api/login", handleLogin)
 	mux.HandleFunc("/api/last", handleLast)
 	mux.HandleFunc("/api/trace", handleTrace)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +92,12 @@ func runWeb(ctx context.Context, args []string) error {
 				http.Error(w, "richiesta da un altro sito non consentita", http.StatusForbidden)
 				return
 			}
+			// Reachable from the network (-addr 0.0.0.0): what acts on this
+			// computer (files, password dialog, quitting, archive) stays local.
+			if public && localOnly[r.URL.Path] && !fromLoopback(r) {
+				http.Error(w, "consentito solo da questo computer", http.StatusForbidden)
+				return
+			}
 			mux.ServeHTTP(w, r)
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -109,19 +117,16 @@ func runWeb(ctx context.Context, args []string) error {
 		srv.Shutdown(sctx)
 	}()
 
-	if *appMode {
-		// macOS: install (password, once) or switch on the ARP helper.
-		go func() { helperState.Store(setupARP(true)) }()
-	} else {
-		go func() { helperState.Store(setupARP(false)) }()
-	}
+	// macOS: switch on the ARP helper if it is installed. Installing it
+	// (password) is the user's choice, from the page.
+	helperState.Store(setupARP(false))
 	go backgroundLoop(ctx)
 	switch {
 	case *appMode && hasNativeWindow:
 		uiMode.Store("native")
 		// Ctrl+C or /api/quit while the window is open: leave right away.
 		go func() { <-ctx.Done(); os.Exit(0) }()
-		nativeWindow(url) // blocks on the main thread until the window closes
+		nativeWindow(url, *hidden) // blocks on the main thread until the user quits
 		quit()
 	case *appMode:
 		if cmd := startAppWindow(url); cmd != nil {
@@ -155,6 +160,18 @@ func runWeb(ctx context.Context, args []string) error {
 	return nil
 }
 
+// localOnly are the endpoints that change this computer, not just look at
+// the network.
+var localOnly = map[string]bool{
+	"/api/save": true, "/api/helper": true, "/api/quit": true, "/api/notify": true,
+	"/api/device": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true,
+}
+
+func fromLoopback(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	return err == nil && isLoopbackHost(host)
+}
+
 func isLoopbackHost(h string) bool {
 	if h == "localhost" {
 		return true
@@ -171,7 +188,9 @@ func crossSite(r *http.Request) bool {
 	default:
 		return true
 	}
-	if o := r.Header.Get("Origin"); o != "" && o != "null" {
+	if o := r.Header.Get("Origin"); o == "null" {
+		return true // sandboxed frames, local files: never our page
+	} else if o != "" {
 		return strings.TrimPrefix(strings.TrimPrefix(o, "http://"), "https://") != r.Host
 	}
 	return false
@@ -449,8 +468,8 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 			req.Ports[ip] = ports[:32]
 		}
 	}
-	activeScan.Add(1)
-	defer activeScan.Add(-1)
+	// Not counted as a scan: the monitor checks every few seconds and must
+	// not keep background scans from running.
 	writeJSON(w, scanner.Check(r.Context(), ips, req.Ports))
 }
 
@@ -470,6 +489,24 @@ func handleNotify(w http.ResponseWriter, r *http.Request) {
 	}
 	notify(firstNonEmpty(req.Title, "wasaping"), req.Body)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleLogin reads or sets "Apri al login" (macOS).
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+			http.Error(w, "richiesta non valida", http.StatusBadRequest)
+			return
+		}
+		if err := setLogin(req.Enabled); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+	}
+	writeJSON(w, map[string]bool{"available": loginAvailable(), "enabled": loginEnabled()})
 }
 
 func firstNonEmpty(s ...string) string {

@@ -137,7 +137,7 @@ var reTitle = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 // webTitle reads the <title> of a device's web page (router, switch,
 // console, NAS panel…), trying the given web ports in order.
 func webTitle(ctx context.Context, ip string, ports []int) string {
-	client := deviceHTTPClient(2 * time.Second)
+	client := deviceHTTPClient(1500 * time.Millisecond)
 	for _, p := range ports {
 		scheme := "http"
 		if p == 443 || p == 8443 {

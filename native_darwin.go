@@ -23,6 +23,7 @@ static NSStatusItem *gStatus;
 static NSMenuItem *gInfo1, *gInfo2;
 static NSString *gBase;
 static BOOL gAlert;
+static NSMenuItem *gLogin;
 
 // A round wasaping dot for the menu bar: green, red when a critical device is down.
 static NSImage *dotImage(BOOL alert) {
@@ -67,6 +68,20 @@ static void runJS(NSString *js) {
 	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:[gBase stringByAppendingString:@"api/bg?now=1"]]];
 	req.HTTPMethod = @"POST";
 	[[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+}
+// "Apri al login": the program writes or deletes the LaunchAgent.
+- (void)toggleLogin:(id)sender {
+	BOOL want = gLogin.state != NSControlStateValueOn;
+	NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:[gBase stringByAppendingString:@"api/login"]]];
+	req.HTTPMethod = @"POST";
+	[req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+	req.HTTPBody = [(want ? @"{\"enabled\":true}" : @"{\"enabled\":false}") dataUsingEncoding:NSUTF8StringEncoding];
+	[[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *d, NSURLResponse *resp, NSError *err) {
+		NSInteger code = [(NSHTTPURLResponse *)resp statusCode];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (!err && code == 200) gLogin.state = want ? NSControlStateValueOn : NSControlStateValueOff;
+		});
+	}] resume];
 }
 - (void)findInList:(id)sender { [self showWindow:nil]; runJS(@"window.wasapingFind && wasapingFind()"); }
 - (void)openMonitor:(id)sender { [self showWindow:nil]; runJS(@"window.wasapingMonitor && wasapingMonitor()"); }
@@ -160,7 +175,7 @@ static void buildMenu(void) {
 	NSApp.windowsMenu = win;
 }
 
-static void buildStatusItem(void) {
+static void buildStatusItem(int login) {
 	gStatus = [[NSStatusBar systemStatusBar] statusItemWithLength:NSSquareStatusItemLength];
 	gStatus.button.image = dotImage(NO);
 	gStatus.button.toolTip = @"wasaping";
@@ -176,6 +191,11 @@ static void buildStatusItem(void) {
 	[m addItem:gInfo1];
 	[m addItem:gInfo2];
 	[m addItem:[NSMenuItem separatorItem]];
+	if (login >= 0) {
+		gLogin = mine(@"Apri al login", @selector(toggleLogin:), @"");
+		gLogin.state = login ? NSControlStateValueOn : NSControlStateValueOff;
+		[m addItem:gLogin];
+	}
 	[m addItem:item(@"Esci da wasaping", @selector(terminate:), @"q")];
 	m.autoenablesItems = NO;
 	for (NSMenuItem *i in m.itemArray) if (i.action) i.enabled = YES;
@@ -194,15 +214,15 @@ static void setStatus(const char *l1, const char *l2, int alert) {
 	});
 }
 
-static void runWindow(const char *curl, const char *cbase) {
+static void runWindow(const char *curl, const char *cbase, int hidden, int login) {
 	@autoreleasepool {
 		[NSApplication sharedApplication];
-		[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+		[NSApp setActivationPolicy:hidden ? NSApplicationActivationPolicyAccessory : NSApplicationActivationPolicyRegular];
 		gDelegate = [WPDelegate new];
 		NSApp.delegate = gDelegate;
 		gBase = [NSString stringWithUTF8String:cbase];
 		buildMenu();
-		buildStatusItem();
+		buildStatusItem(login);
 
 		gWin = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1120, 720)
 			styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
@@ -223,8 +243,10 @@ static void runWindow(const char *curl, const char *cbase) {
 		gWin.contentView = gWeb;
 		[gWeb loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[NSString stringWithUTF8String:curl]]]];
 
-		[gWin makeKeyAndOrderFront:nil];
-		[NSApp activateIgnoringOtherApps:YES];
+		if (!hidden) {
+			[gWin makeKeyAndOrderFront:nil];
+			[NSApp activateIgnoringOtherApps:YES];
+		}
 		[NSApp run];
 	}
 }
@@ -246,12 +268,23 @@ const hasNativeWindow = true
 // nativeWindow shows the interface in a WebKit window, with an icon in the
 // menu bar, and returns only when the user quits. It must be called from
 // the main goroutine.
-func nativeWindow(url string) {
+func nativeWindow(url string, hidden bool) {
 	onScanDone = updateMenuBar
 	cu, cb := C.CString(url), C.CString(url)
 	defer C.free(unsafe.Pointer(cu))
 	defer C.free(unsafe.Pointer(cb))
-	C.runWindow(cu, cb)
+	login := -1 // no menu item outside wasaping.app
+	if loginAvailable() {
+		login = 0
+		if loginEnabled() {
+			login = 1
+		}
+	}
+	h := 0
+	if hidden {
+		h = 1
+	}
+	C.runWindow(cu, cb, C.int(h), C.int(login))
 }
 
 // updateMenuBar shows the latest scan in the menu bar icon's menu.

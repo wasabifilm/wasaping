@@ -114,7 +114,7 @@ func saveSettings(s settings) {
 	setCache = &s
 	os.MkdirAll(filepath.Dir(settingsPath()), 0o755)
 	if b, err := json.MarshalIndent(s, "", "  "); err == nil {
-		os.WriteFile(settingsPath(), b, 0o644)
+		os.WriteFile(settingsPath(), b, 0o600)
 	}
 }
 

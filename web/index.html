@@ -187,8 +187,9 @@
   <button id="ouiBtn">Scarica</button>
 </div>
 <div class="notice info" id="machidden">
-  <span>macOS nasconde gli indirizzi MAC dei dispositivi ai programmi non firmati da uno sviluppatore registrato: MAC e produttore restano vuoti.</span>
-  <button id="helperBtn">Mostra i MAC</button>
+  <span><b>macOS nasconde gli indirizzi MAC</b> ai programmi non firmati da uno sviluppatore Apple registrato, quindi MAC e produttori restano vuoti.
+  wasaping può installare un piccolo aiuto di sistema che li legge: serve la password di amministratore <b>una sola volta</b>, la inserisci nella finestra di macOS (wasaping non la vede) e l'aiuto lavora solo mentre wasaping è aperto. Lo togli quando vuoi con «Disinstalla» in fondo alla pagina.</span>
+  <span style="display:flex;gap:8px;flex:none"><button id="helperBtn" class="primary">Mostra i MAC</button><button id="helperNo">Non ora</button></span>
 </div>
 
 <div class="wrap">
@@ -351,6 +352,9 @@ async function init() {
   try { const last = await fetch("api/last").then(r => r.json()); if (last && !hosts.length) applyResult(last); } catch {}
   setInterval(pollLast, 15000);
   showHelper(info.helper);
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("wasaping.helperNo") === "1"; } catch {}
+  if (info.helper === "missing" && !dismissed) $("machidden").style.display = "flex";
 }
 
 // macOS ARP helper: a system service installed once with the password.
@@ -370,6 +374,7 @@ async function helper(what) {
   if (r.ok) {
     const d = await r.json();
     showHelper(d.helper);
+    if (d.helper === "installed") $("machidden").style.display = "none";
     if (what === "install") $("status").textContent = "✓ Aiuto installato: rifai la scansione per vedere i MAC.";
   } else {
     showHelper(what === "install" ? "missing" : "installed");
@@ -377,6 +382,10 @@ async function helper(what) {
   }
 }
 $("helperBtn").onclick = () => helper("install");
+$("helperNo").onclick = () => {
+  $("machidden").style.display = "none";
+  try { localStorage.setItem("wasaping.helperNo", "1"); } catch {}
+};
 
 $("quit").onclick = async () => {
   if (es) stop("");
@@ -470,7 +479,8 @@ function finish(d, msg) {
     network = d.network || null; issues = d.issues || [];
     showNetwork();
     fetch("api/info").then(r => r.json()).then(i => showHelper(i.helper)).catch(() => {});
-    $("machidden").style.display = d.macHidden ? "flex" : "none";
+    let no = false; try { no = localStorage.getItem("wasaping.helperNo") === "1"; } catch {}
+    $("machidden").style.display = d.macHidden && !no ? "flex" : "none";
     if (d.macHidden) $("oui").style.display = "none"; // no MACs, no vendors to look up
     stop(msg || `${d.count} dispositivi trovati in ${d.seconds.toFixed(1)} s.`);
     const bits = [];

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"slices"
 	"sort"
@@ -298,7 +299,7 @@ func queryPJLinkAddr(ctx context.Context, addr string, timeout time.Duration) *P
 	}
 	defer c.Close()
 	c.SetDeadline(time.Now().Add(3 * timeout))
-	r := bufio.NewReader(c)
+	r := bufio.NewReader(io.LimitReader(c, 16<<10)) // a projector says little: cap what we read
 	line := func() string { s, _ := r.ReadString('\r'); return strings.TrimSpace(s) }
 	hello := line()
 	if !strings.HasPrefix(strings.ToUpper(hello), "PJLINK") {

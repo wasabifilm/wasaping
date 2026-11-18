@@ -4,4 +4,4 @@ package main
 
 const hasNativeWindow = false
 
-func nativeWindow(string) {}
+func nativeWindow(string, bool) {}

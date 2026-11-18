@@ -21,6 +21,6 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
 
 ## Stato e prossimi passi
 - v0.1 funzionante. Non ancora provato su hardware Mac/Windows reale: verificare per prima cosa (doppio clic, ARP, ping).
-- Il modulo si chiama ancora `github.com/USERNAME/wasaping`: sostituire USERNAME con l'utente GitHub reale (go.mod, import in main.go e web.go, commento in main.go).
-- Pubblicazione: `gh repo create wasaping --public --source . --push`, poi `git tag v0.1.0 && git push --tags` per far partire la CI, che crea la release.
+- Modulo: `github.com/wasabifilm/wasaping`. Repository pubblico: https://github.com/wasabifilm/wasaping
+- Nuova release: `git tag vX.Y.Z && git push --tags` fa partire la CI, che crea la release.
 - Idee: mDNS/NetBIOS per i nomi, confronto tra scansioni, nomi personalizzati, icona Windows (.syso), notarizzazione Apple.

@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/USERNAME/wasaping/scanner"
+	"github.com/wasabifilm/wasaping/scanner"
 )
 
 //go:embed web

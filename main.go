@@ -1,4 +1,4 @@
-// wasaping — a spicy little cross-platform IP scanner (https://github.com/USERNAME/wasaping).
+// wasaping — a spicy little cross-platform IP scanner (https://github.com/wasabifilm/wasaping).
 package main
 
 import (
@@ -14,7 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/USERNAME/wasaping/scanner"
+	"github.com/wasabifilm/wasaping/scanner"
 )
 
 var version = "dev"

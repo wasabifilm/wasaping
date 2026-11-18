@@ -1,3 +1,3 @@
-module github.com/USERNAME/wasaping
+module github.com/wasabifilm/wasaping
 
 go 1.22

@@ -23,19 +23,23 @@
 
 Prendi l'eseguibile per il tuo sistema dalla pagina [Releases](../../releases).
 
-| Sistema | File |
-|---|---|
-| Windows | `wasaping-windows-amd64.exe` |
-| macOS (Apple Silicon) | `wasaping-darwin-arm64` |
-| macOS (Intel) | `wasaping-darwin-amd64` |
-| Linux | `wasaping-linux-amd64` / `-arm64` |
+| Sistema | File | Come si apre |
+|---|---|---|
+| macOS (Apple Silicon e Intel) | `wasaping-macos.zip` | estrai, sposta **wasaping.app** in Applicazioni, doppio clic |
+| Windows | `wasaping-windows-amd64.exe` | doppio clic |
+| Linux | `wasaping-linux-amd64` / `-arm64` | `./wasaping-linux-amd64 web` |
 
-> **macOS:** la prima volta il sistema blocca il file perché non è firmato. Esegui `xattr -d com.apple.quarantine wasaping-darwin-arm64`, oppure fai clic destro → Apri.
+Con il doppio clic si apre l'interfaccia nel browser. wasaping si chiude con il pulsante **Esci**, oppure da solo un paio di minuti dopo che hai chiuso la pagina.
+
+> **macOS, la prima volta:** l'app non è firmata da Apple, quindi macOS la blocca. Apri *Impostazioni di Sistema → Privacy e sicurezza* e premi **Apri comunque**. In alternativa, dal Terminale: `xattr -cr /Applications/wasaping.app`
+>
+> **Windows, la prima volta:** se compare SmartScreen, premi *Ulteriori informazioni → Esegui comunque*.
 
 ## Uso
 
 ```sh
-wasaping web                 # apre l'interfaccia grafica nel browser
+wasaping web                 # apre l'interfaccia grafica nel browser (Ctrl+C per uscire)
+wasaping app                 # come web, ma si chiude da solo con la pagina
 wasaping                     # scansiona la tua LAN dal terminale
 wasaping 192.168.1.0/24      # una rete precisa
 wasaping 10.0.0.1-50 -p none # un intervallo, senza controllare le porte
@@ -64,7 +68,9 @@ Ti serve [Go](https://go.dev/dl/) 1.22 o successivo. Non ci sono dipendenze este
 
 ```sh
 go build -o wasaping .
-make release        # crea gli eseguibili di tutti i sistemi in dist/
+make release        # crea gli eseguibili di tutti i sistemi + wasaping-macos.zip in dist/
+make macapp         # solo dist/wasaping.app
+make icon           # rigenera le icone in assets/ (serve Python + Pillow)
 go test ./...
 ```
 
@@ -74,6 +80,9 @@ go test ./...
 main.go            riga di comando
 web.go             server locale + API (SSE) per l'interfaccia
 web/index.html     interfaccia grafica (incorporata nell'eseguibile)
+launch_*.go        rileva l'avvio con doppio clic (Windows)
+assets/            icone (PNG, .icns)
+scripts/           build dell'app macOS, generatore icone
 scanner/           motore: rilevamento reti, sonde, ARP, porte, produttori
 ```
 
@@ -84,7 +93,9 @@ scanner/           motore: rilevamento reti, sonde, ARP, porte, produttori
 - [ ] Nomi personalizzati per i dispositivi
 - [ ] IPv6
 - [ ] Wake-on-LAN
-- [ ] App desktop nativa (Wails) con icona nel dock e nella barra di sistema
+- [ ] Icona dell'eseguibile Windows (risorsa .syso)
+- [ ] Firma e notarizzazione Apple (serve un account Apple Developer)
+- [ ] Finestra nativa (Wails) invece del browser, con icona nella barra di sistema
 
 ## Licenza
 

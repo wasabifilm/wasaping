@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/USERNAME/wasaping/scanner"
@@ -26,7 +27,11 @@ func runWeb(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("web", flag.ExitOnError)
 	addr := fset.String("addr", "127.0.0.1:0", "indirizzo di ascolto")
 	noOpen := fset.Bool("no-open", false, "non aprire il browser automaticamente")
+	appMode := fset.Bool("app", false, "modalità app: si chiude quando la pagina viene chiusa")
 	fset.Parse(args)
+	ctx, quit := context.WithCancel(ctx)
+	defer quit()
+	appModeOn = *appMode
 
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
@@ -45,6 +50,18 @@ func runWeb(ctx context.Context, args []string) error {
 	mux.HandleFunc("/api/info", handleInfo)
 	mux.HandleFunc("/api/scan", handleScan)
 	mux.HandleFunc("/api/update-oui", handleUpdateOUI)
+	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
+		lastPing.Store(time.Now().UnixNano())
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/api/quit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		go func() { time.Sleep(200 * time.Millisecond); quit() }()
+	})
 
 	srv := &http.Server{
 		// Block DNS-rebinding: only answer requests addressed to localhost.
@@ -58,9 +75,16 @@ func runWeb(ctx context.Context, args []string) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
-	fmt.Printf("🟢 wasaping è pronto su %s  (Ctrl+C per uscire)\n", url)
+	if *appMode {
+		fmt.Printf("🟢 wasaping è aperto nel browser: %s\n   Per uscire usa il pulsante «Esci» nella pagina, o chiudi questa finestra.\n", url)
+	} else {
+		fmt.Printf("🟢 wasaping è pronto su %s  (Ctrl+C per uscire)\n", url)
+	}
 	if !*noOpen {
 		openBrowser(url)
+	}
+	if *appMode {
+		go watchHeartbeat(ctx, quit)
 	}
 	go func() {
 		<-ctx.Done()
@@ -72,6 +96,43 @@ func runWeb(ctx context.Context, args []string) error {
 		return err
 	}
 	return nil
+}
+
+var (
+	appModeOn  bool
+	lastPing   atomic.Int64
+	activeScan atomic.Int32
+)
+
+// watchHeartbeat stops the app when the page has been gone for a while.
+// Browsers slow down timers in background tabs (down to once a minute),
+// so the grace period is generous.
+func watchHeartbeat(ctx context.Context, quit context.CancelFunc) {
+	started := time.Now()
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if activeScan.Load() > 0 {
+			continue
+		}
+		last := lastPing.Load()
+		if last == 0 {
+			if time.Since(started) > 3*time.Minute {
+				fmt.Println("Nessuna pagina aperta: chiudo wasaping.")
+				quit()
+			}
+			continue
+		}
+		if time.Since(time.Unix(0, last)) > 150*time.Second {
+			fmt.Println("Pagina chiusa: chiudo wasaping.")
+			quit()
+		}
+	}
 }
 
 func handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +150,7 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 		"defaultTarget": def,
 		"hasOUI":        scanner.HasOUI(),
 		"os":            runtime.GOOS,
+		"app":           appModeOn,
 	})
 }
 
@@ -110,6 +172,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming non supportato", http.StatusInternalServerError)
 		return
 	}
+	activeScan.Add(1)
+	defer activeScan.Add(-1)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 

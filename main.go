@@ -24,6 +24,7 @@ const usage = `wasaping %s — a spicy little IP scanner 🟢
 Uso:
   wasaping [scan] [opzioni] [target]   scansiona la rete (default: la tua LAN)
   wasaping web [-addr 127.0.0.1:0]     apre l'interfaccia grafica nel browser
+  wasaping app                        come web, ma si chiude con la pagina (doppio clic)
   wasaping interfaces                  elenca le interfacce di rete
   wasaping update-oui                  scarica il database dei produttori (IEEE)
   wasaping version
@@ -36,6 +37,9 @@ Opzioni di scan:
 func main() {
 	args := os.Args[1:]
 	cmd := "scan"
+	if len(args) == 0 && launchedByDoubleClick() {
+		cmd = "app"
+	}
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") && !looksLikeTarget(args[0]) {
 		cmd, args = args[0], args[1:]
 	}
@@ -48,6 +52,8 @@ func main() {
 		err = runScan(ctx, args)
 	case "web", "gui":
 		err = runWeb(ctx, args)
+	case "app":
+		err = runWeb(ctx, append([]string{"-app"}, args...))
 	case "interfaces", "if":
 		err = runInterfaces()
 	case "update-oui":

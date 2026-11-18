@@ -69,6 +69,7 @@
   <input id="filter" placeholder="Filtra per IP, nome, produttore…">
   <button id="csv" disabled>CSV</button>
   <button id="json" disabled>JSON</button>
+  <button id="quit" hidden title="Chiude wasaping">Esci</button>
 </div>
 <div class="progress"><div id="prog"></div></div>
 <div class="status" id="status">Pronto.</div>
@@ -107,7 +108,18 @@ async function init() {
   $("iface").add(new Option("Personalizzato…", ""));
   $("target").value = info.defaultTarget;
   if (!info.hasOUI) $("oui").style.display = "flex";
+  if (info.app) {
+    $("quit").hidden = false;
+    const ping = () => fetch("api/ping", {method: "POST"}).catch(() => {});
+    ping(); setInterval(ping, 10000);
+  }
 }
+
+$("quit").onclick = async () => {
+  if (es) stop("");
+  await fetch("api/quit", {method: "POST"}).catch(() => {});
+  document.body.innerHTML = '<div class="empty" style="padding-top:120px"><div class="logo" style="margin:0 auto 16px"></div>wasaping è chiuso. Puoi chiudere questa scheda.</div>';
+};
 
 $("iface").onchange = e => { if (e.target.value) $("target").value = e.target.value; else $("target").focus(); };
 $("ports").onchange = e => {

@@ -403,15 +403,17 @@ async function planView() {
   if (!(pc.plan || []).length) {
     openSheet("Piano IP", `<p>Importa l'elenco dei dispositivi previsti (il patch o il piano IP preparato per lo show) e wasaping lo confronta con la rete: chi manca, chi ha l'IP sbagliato, chi non era previsto.</p>
       <p class="muted">Un file CSV da Excel, Numbers o Fogli Google, con le colonne <b>Nome</b>, <b>IP</b> e, se vuoi, <b>Ruolo</b> e <b>MAC</b>. Va bene sia la virgola sia il punto e virgola.</p>
-      <div class="row"><button class="primary" id="plImport">Importa CSV</button><button id="plTemplate">Scarica un modello</button><button id="plFromNet" ${hosts.length ? "" : "disabled"}>Crea il piano da questa scansione</button></div>`);
+      <div class="row"><button class="primary" id="plEdit">Scrivilo qui</button><button id="plImport">Importa CSV</button><button id="plTemplate">Scarica un modello</button><button id="plFromNet" ${hosts.length ? "" : "disabled"}>Crea il piano da questa scansione</button></div>`);
   } else {
     openSheet("Piano IP", planHTML(pc));
     if ($("plApply")) $("plApply").onclick = () => applyPlanNames(pc);
     $("plClear").onclick = async () => { await post("api/plan", {clear: true}); planView(); };
   }
+  if ($("plEdit")) $("plEdit").onclick = () => planEditor(pc.plan || []);
   $("plImport").onclick = () => pickFile(".csv,.txt", async text => {
     try { await post("api/plan", {csv: text}); planView(); } catch (e) { toast("Piano non importato: " + e.message); }
   });
+  if ($("plCSV")) $("plCSV").onclick = () => download(`wasaping-piano-${stamp()}.csv`, planCSV(pc.plan || []), "text/csv");
   if ($("plTemplate")) $("plTemplate").onclick = () => download(`wasaping-piano-modello.csv`, "Nome;IP;Ruolo;MAC\ngrandMA3 FOH;10.0.0.10;Console luci;\nLuminode Palco SX;10.0.0.21;Universi 1-4;\n", "text/csv");
   if ($("plFromNet")) $("plFromNet").onclick = async () => {
     const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -427,7 +429,56 @@ function planHTML(pc) {
   ${pc.rows.map(r => `<tr><td class="st-${r.class}">${scanned ? (r.class === "ok" ? "✓ ok" : esc(r.status)) : "—"}</td><td class="nt"><b>${esc(r.name || "—")}</b></td><td class="mono">${esc(r.ip)}</td><td class="nt">${esc(r.role || "")}</td><td class="nt">${esc(r.found || "")}</td></tr>`).join("")}
   ${scanned ? pc.extra.map(h => `<tr><td class="st-warn">non previsto</td><td>—</td><td class="mono">${esc(h.ip)}</td><td></td><td class="nt">${esc(label(h) || h.mac || "")}</td></tr>`).join("") : ""}
   </tbody></table></div>
-  <div class="row"><button id="plImport">Importa un altro CSV</button>${scanned ? '<button id="plApply" title="Dà ai dispositivi trovati il nome e il ruolo del piano, se non ne hanno già uno">Usa nomi e ruoli del piano</button>' : ""}<button id="plClear" class="danger">Togli il piano</button></div>`;
+  <div class="row"><button class="primary" id="plEdit">Modifica il piano</button><button id="plImport">Importa un altro CSV</button><button id="plCSV">Esporta CSV</button>${scanned ? '<button id="plApply" title="Dà ai dispositivi trovati il nome e il ruolo del piano, se non ne hanno già uno">Usa nomi e ruoli del piano</button>' : ""}<button id="plClear" class="danger">Togli il piano</button></div>`;
+}
+const planCSV = items => ["Nome;IP;Ruolo;MAC"].concat(items.map(it => [it.name, it.ip, it.role, it.mac].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"))).join("\n");
+// The plan as an editable table: name, IP, role, MAC.
+function planEditor(items) {
+  const rows = items.map(it => ({...it}));
+  if (!rows.length) rows.push({name: "", ip: "", role: "", mac: ""});
+  const validIP = ip => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(ip) && ip.split(".").every(x => +x <= 255);
+  const nextIP = ip => { if (!validIP(ip)) return ""; const p = ip.split(".").map(Number); p[3] = Math.min(254, p[3] + 1); return p.join("."); };
+  const draw = () => {
+    openSheet("Modifica il piano IP", `<p class="muted">Una riga per dispositivo previsto. Invio nell'ultima riga ne aggiunge un'altra con l'IP successivo. Le righe vuote non vengono salvate.</p>
+      <div class="wrap" style="margin:0"><table class="pledit"><thead><tr><th>Nome</th><th>IP</th><th>Ruolo</th><th>MAC (facoltativo)</th><th></th></tr></thead><tbody>
+      ${rows.map((r, i) => `<tr data-i="${i}"><td><input class="nt" data-f="name" value="${esc(r.name || "")}"></td><td><input class="mono" data-f="ip" value="${esc(r.ip || "")}" style="width:120px" spellcheck="false"></td>
+        <td><input class="nt" data-f="role" value="${esc(r.role || "")}"></td><td><input class="mono" data-f="mac" value="${esc(r.mac || "")}" style="width:150px" spellcheck="false"></td>
+        <td><button class="plDel" title="Togli la riga">✕</button></td></tr>`).join("")}
+      </tbody></table></div><div id="plErr"></div>
+      <div class="row"><button id="plAdd">Aggiungi riga</button><button id="plSort">Ordina per IP</button><span style="flex:1"></span><button class="primary" id="plSave">Salva il piano</button><button id="plCancel">Annulla</button></div>`);
+    const body = $("shBody");
+    const check = () => {
+      const count = {};
+      rows.forEach(r => { if (r.ip) count[r.ip] = (count[r.ip] || 0) + 1; });
+      body.querySelectorAll("tr[data-i]").forEach(tr => {
+        const r = rows[+tr.dataset.i], ip = tr.querySelector('[data-f="ip"]');
+        const empty = !(r.name || r.ip || r.role || r.mac);
+        ip.classList.toggle("bad", !empty && (!validIP(r.ip) || count[r.ip] > 1));
+        ip.title = !empty && !validIP(r.ip) ? (LANG === "en" ? "invalid IP" : "IP non valido") : count[r.ip] > 1 ? (LANG === "en" ? "same IP as another row" : "stesso IP di un'altra riga") : "";
+      });
+      const bad = body.querySelectorAll("input.bad").length;
+      $("plErr").innerHTML = bad ? `<p class="bad">${LANG === "en" ? `${bad} rows to fix (IP missing, invalid or repeated).` : `${bad} righe da correggere (IP mancante, non valido o ripetuto).`}</p>` : "";
+      $("plSave").disabled = !!bad;
+    };
+    body.querySelectorAll("tr[data-i] input").forEach(inp => {
+      inp.oninput = () => { rows[+inp.closest("tr").dataset.i][inp.dataset.f] = inp.value.trim(); check(); };
+      inp.onkeydown = e => {
+        if (e.key !== "Enter") return;
+        const i = +inp.closest("tr").dataset.i;
+        if (i === rows.length - 1) { rows.push({name: "", ip: nextIP(rows[i].ip), role: "", mac: ""}); draw(); const ins = $("shBody").querySelectorAll(`tr[data-i="${i + 1}"] input`); ins[0] && ins[0].focus(); }
+      };
+    });
+    body.querySelectorAll(".plDel").forEach(b => b.onclick = () => { rows.splice(+b.closest("tr").dataset.i, 1); if (!rows.length) rows.push({name: "", ip: "", role: "", mac: ""}); draw(); });
+    $("plAdd").onclick = () => { rows.push({name: "", ip: nextIP(rows.at(-1)?.ip || ""), role: "", mac: ""}); draw(); const ins = $("shBody").querySelectorAll(`tr[data-i="${rows.length - 1}"] input`); ins[0] && ins[0].focus(); };
+    $("plSort").onclick = () => { rows.sort((a, b) => (validIP(a.ip) ? ipNum(a.ip) : 1e12) - (validIP(b.ip) ? ipNum(b.ip) : 1e12)); draw(); };
+    $("plCancel").onclick = () => planView();
+    $("plSave").onclick = async () => {
+      try { await post("api/plan", {items: rows}); toast("Piano salvato."); planView(); }
+      catch (e) { $("plErr").innerHTML = `<p class="bad">${esc(e.message)}</p>`; }
+    };
+    check();
+  };
+  draw();
 }
 async function applyPlanNames(pc) {
   let n = 0;
@@ -473,39 +524,159 @@ async function freeView() {
   $("shBody").querySelectorAll("a[data-ip]").forEach(a => a.onclick = () => copy(a.dataset.ip));
 }
 
-// Live DMX: universes heard on Art-Net and sACN, with the levels of one.
-let dmxES = null, dmxSel = "", dmxSess = "", critUnis = new Set();
+// Live DMX: universes heard on Art-Net and sACN. "Elenco": the table and,
+// for the universe picked, its 512 channels with the RDM patch on top, the
+// history of one channel and the sources side by side. "Panoramica": all
+// universes as strips. Listening only: wasaping never sends DMX.
+let dmxES = null, dmxSel = "", dmxSess = "", dmxCh = 0, dmxTab = "list", dmxPatch = [], dmxTableAt = 0, dmxTableKey = "", dmxGridFor = "", critUnis = new Set();
+const b64bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const dmxQuery = () => `s=${dmxSess}&u=${encodeURIComponent(dmxSel)}&ch=${dmxCh}&all=${dmxTab === "all" ? 1 : 0}`;
+const dmxWantPost = () => fetch(`api/dmx?${dmxQuery()}`, {method: "POST"}).catch(() => {});
 function dmxView() {
   fetch("api/universe").then(r => r.json()).then(l => { critUnis = new Set(l || []); }).catch(() => {});
-  openSheet("Universi DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Clic su un universo per vedere i 512 canali.</p>
-    <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxGrid"></div>`);
+  fetch("api/rdm").then(r => r.json()).then(d => { dmxPatch = (d.fixtures || []).filter(f => f.address); dmxGridFor = ""; }).catch(() => {});
+  openSheet("Universi DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Solo ascolto: wasaping non manda DMX. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.</p>
+    <div class="row"><button id="dmxTabList" class="primary">Elenco</button><button id="dmxTabAll">Panoramica</button></div>
+    <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxAll"></div><div id="dmxDetail"></div>`);
+  dmxTableKey = ""; dmxGridFor = "";
+  const tab = t => { dmxTab = t; $("dmxTabList").classList.toggle("primary", t === "list"); $("dmxTabAll").classList.toggle("primary", t === "all");
+    $("dmxBody").hidden = $("dmxDetail").hidden = t !== "list"; $("dmxAll").hidden = t !== "all"; dmxTableKey = ""; dmxWantPost(); };
+  $("dmxTabList").onclick = () => tab("list");
+  $("dmxTabAll").onclick = () => tab("all");
+  $("dmxAll").hidden = dmxTab !== "all"; $("dmxBody").hidden = $("dmxDetail").hidden = dmxTab !== "list";
+  $("dmxTabList").classList.toggle("primary", dmxTab === "list"); $("dmxTabAll").classList.toggle("primary", dmxTab === "all");
   dmxSess = Math.random().toString(36).slice(2);
-  dmxES = new EventSource(`api/dmx?s=${dmxSess}&u=${encodeURIComponent(dmxSel)}`);
+  dmxES = new EventSource(`api/dmx?${dmxQuery()}`);
   dmxES.addEventListener("snap", e => drawDMX(JSON.parse(e.data)));
   dmxES.onerror = () => { if (dmxES) $("dmxBody").innerHTML = "<p>Ascolto interrotto.</p>"; };
 }
+// The fixtures of the latest RDM search on this universe (Art-Net port-address).
+function dmxFixtures(id) {
+  const [proto, n] = id.split(":");
+  return proto === "art" ? dmxPatch.filter(f => f.universe === +n) : [];
+}
 function drawDMX(unis) {
   if (!$("dmxBody")) return;
-  if (!unis.length) { $("dmxBody").innerHTML = "<p>Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.</p>"; $("dmxGrid").innerHTML = ""; return; }
-  const multi = u => u.sources.length > 1;
-  $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th><th title="Il Monitor avvisa se l'universo smette di arrivare">Critico</th></tr></thead><tbody>
-    ${unis.map(u => `<tr class="pick${u.id === dmxSel ? " sel" : ""}" data-id="${esc(u.id)}"><td><b>${u.number}</b></td><td>${esc(u.protocol)}</td>
-      <td>${u.sources.map(x => `${esc(x.name || x.ip)}${x.name ? ` <span class="muted">${esc(x.ip)}</span>` : ""}${x.priority ? ` <span class="muted">prio ${x.priority}</span>` : ""}`).join("<br>")}${multi(u) ? ' <span class="badge warn">più sorgenti</span>' : ""}</td>
-      <td>${u.sources.map(x => x.fps.toFixed(0)).join(" / ")}</td><td>${u.active} / 512</td><td><input type="checkbox" class="ucrit" data-id="${esc(u.id)}"${critUnis.has(u.id) ? " checked" : ""}></td></tr>`).join("")}
-  </tbody></table></div>`;
-  $("dmxBody").querySelectorAll("input.ucrit").forEach(c => {
-    c.onclick = e => e.stopPropagation();
-    c.onchange = () => post("api/universe", {id: c.dataset.id, critical: c.checked}).then(r => r.json()).then(l => {
-      critUnis = new Set(l || []); toast(c.checked ? "Il Monitor ora controlla questo universo." : "Universo tolto dal Monitor.");
-    }).catch(e => toast("Errore: " + e.message));
+  if (!unis.length) {
+    $("dmxBody").innerHTML = "<p>Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.</p>";
+    $("dmxDetail").innerHTML = $("dmxAll").innerHTML = ""; dmxTableKey = dmxGridFor = ""; return;
+  }
+  // The table: rebuilt when universes or sources change, else once a second.
+  const key = unis.map(u => u.id + u.sources.map(x => x.ip + x.name).join()).join("|") + dmxSel;
+  if (key !== dmxTableKey || Date.now() - dmxTableAt > 1000) {
+    dmxTableKey = key; dmxTableAt = Date.now();
+    $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th><th title="Il Monitor avvisa se l'universo smette di arrivare">Critico</th></tr></thead><tbody>
+      ${unis.map(u => `<tr class="pick${u.id === dmxSel ? " sel" : ""}" data-id="${esc(u.id)}"><td><b>${u.number}</b></td><td>${esc(u.protocol)}</td>
+        <td>${u.sources.map(x => `<span class="nt">${esc(x.name || x.ip)}</span>${x.name ? ` <span class="muted">${esc(x.ip)}</span>` : ""}${x.priority ? ` <span class="muted">prio ${x.priority}</span>` : ""}`).join("<br>")}${u.sources.length > 1 ? ' <span class="badge warn">più sorgenti</span>' : ""}</td>
+        <td>${u.sources.map(x => `${x.fps.toFixed(0)}${x.lost ? ` <span class="badge warn" title="Pacchetti mancanti nell'ultimo secondo (numeri di sequenza saltati): rete congestionata, Wi-Fi o switch in difficoltà">${x.lost} persi</span>` : ""}`).join(" / ")}</td>
+        <td>${u.active} / 512</td><td><input type="checkbox" class="ucrit" data-id="${esc(u.id)}"${critUnis.has(u.id) ? " checked" : ""}></td></tr>`).join("")}
+    </tbody></table></div>`;
+    $("dmxBody").querySelectorAll("input.ucrit").forEach(c => {
+      c.onclick = e => e.stopPropagation();
+      c.onchange = () => post("api/universe", {id: c.dataset.id, critical: c.checked}).then(r => r.json()).then(l => {
+        critUnis = new Set(l || []); toast(c.checked ? "Il Monitor ora controlla questo universo." : "Universo tolto dal Monitor.");
+      }).catch(e => toast("Errore: " + e.message));
+    });
+    $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { dmxSel = tr.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxTableKey = ""; dmxWantPost(); });
+  }
+  if (dmxTab === "all") drawDMXAll(unis);
+  drawDMXDetail(unis.find(u => u.id === dmxSel && u.levels));
+}
+// Overview: one strip of 512 channels per universe.
+function drawDMXAll(unis) {
+  const ids = unis.map(u => u.id).join();
+  if ($("dmxAll").dataset.ids !== ids) {
+    $("dmxAll").dataset.ids = ids;
+    $("dmxAll").innerHTML = `<div class="dmxall">${unis.map(u => `<div class="dmxrow" data-id="${esc(u.id)}"><span><b>${esc(u.protocol)} ${u.number}</b></span><canvas width="512" height="1"></canvas><span class="muted act"></span></div>`).join("")}</div>
+      <div class="dmxscale"><span>1</span><span>128</span><span>256</span><span>384</span><span>512</span></div>`;
+    $("dmxAll").querySelectorAll(".dmxrow").forEach(r => r.onclick = () => { dmxSel = r.dataset.id; dmxCh = 0; dmxGridFor = ""; $("dmxTabList").click(); });
+  }
+  for (const u of unis) {
+    const row = $("dmxAll").querySelector(`.dmxrow[data-id="${CSS.escape(u.id)}"]`);
+    if (!row || !u.data) continue;
+    const lv = b64bytes(u.data), cv = row.querySelector("canvas"), ctx = cv.getContext("2d"), img = ctx.createImageData(512, 1);
+    for (let i = 0; i < 512; i++) { const v = lv[i], o = i * 4; img.data[o] = 129; img.data[o + 1] = 215; img.data[o + 2] = 66; img.data[o + 3] = v ? 40 + Math.round(215 * v / 255) : 18; }
+    ctx.putImageData(img, 0, 0);
+    row.querySelector(".act").textContent = `${u.active} attivi`;
+  }
+}
+// One universe: grid with patch, channel history, sources compared.
+function drawDMXDetail(sel) {
+  const box = $("dmxDetail");
+  if (!sel) { box.innerHTML = dmxSel ? "" : `<p class="muted">Scegli un universo dall'elenco.</p>`; dmxGridFor = ""; return; }
+  const fx = dmxFixtures(sel.id);
+  // channel -> fixtures on it
+  const at = Array.from({length: 512}, () => []);
+  fx.forEach((f, k) => { for (let c = f.address; c < f.address + Math.max(f.footprint, 1) && c <= 512; c++) at[c - 1].push(k); });
+  const gridKey = sel.id + "|" + fx.map(f => f.uid + f.address + f.footprint).join();
+  if (dmxGridFor !== gridKey) {
+    dmxGridFor = gridKey;
+    const clash = new Set(at.filter(a => a.length > 1).flat());
+    box.innerHTML = `<h3 style="font-size:14px;margin:16px 0 0">${esc(sel.protocol)} universo ${sel.number}</h3>
+      ${fx.length ? `<div class="dmxlegend">${fx.map((f, k) => `<span class="${clash.has(k) ? "fxc" : k % 2 ? "fxb" : "fxa"}"><b class="nt">${esc(f.label || f.model || f.uid)}</b> ${f.address}–${f.address + Math.max(f.footprint, 1) - 1}</span>`).join("")}</div>`
+        : sel.protocol === "Art-Net" ? `<p class="muted">Per vedere gli apparecchi sopra i canali, fai una ricerca in Strumenti → Apparecchi RDM.</p>` : ""}
+      <div class="dmxgrid">${Array.from({length: 512}, (_, i) => { const a = at[i];
+        const cls = a.length > 1 ? "fxc" : a.length ? (a[0] % 2 ? "fxb" : "fxa") : "";
+        const first = a.some(k => fx[k].address === i + 1) ? " fs" : "";
+        const who = a.map(k => `${fx[k].label || fx[k].model || fx[k].uid} · ${i + 2 - fx[k].address}/${fx[k].footprint}`).join(" + ");
+        return `<i data-c="${i + 1}" class="${cls}${first}${dmxCh === i + 1 ? " watch" : ""}" data-who="${esc(who)}"></i>`; }).join("")}</div>
+      <div id="dmxChan"></div><div id="dmxSrc"></div>`;
+    box.querySelectorAll(".dmxgrid i").forEach(c => c.onclick = () => {
+      dmxCh = +c.dataset.c; box.querySelectorAll(".dmxgrid i.watch").forEach(x => x.classList.remove("watch")); c.classList.add("watch"); dmxWantPost();
+    });
+  }
+  const cells = box.querySelectorAll(".dmxgrid i");
+  sel.levels.forEach((v, i) => {
+    const c = cells[i]; if (!c) return;
+    c.style.background = v ? `rgba(129,215,66,${0.15 + 0.85 * v / 255})` : "";
+    c.title = `${LANG === "en" ? "channel" : "canale"} ${i + 1}: ${v} (${Math.round(v / 2.55)}%)${c.dataset.who ? " · " + c.dataset.who : ""}`;
   });
-  $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => {
-    dmxSel = tr.dataset.id;
-    fetch(`api/dmx?s=${dmxSess}&u=${encodeURIComponent(dmxSel)}`, {method: "POST"});
-  });
-  const sel = unis.find(u => u.id === dmxSel && u.levels);
-  $("dmxGrid").innerHTML = sel ? `<h3 style="font-size:14px;margin:16px 0 0">${esc(sel.protocol)} universo ${sel.number}</h3><div class="dmxgrid">${sel.levels.map((v, i) =>
-    `<i title="canale ${i + 1}: ${v} (${Math.round(v / 2.55)}%)" style="background:${v ? `rgba(129,215,66,${0.15 + 0.85 * v / 255})` : ""}"></i>`).join("")}</div>` : "";
+  // the channel followed
+  if (dmxCh) {
+    const v = sel.levels[dmxCh - 1], who = cells[dmxCh - 1]?.dataset.who;
+    $("dmxChan").innerHTML = `<div class="chanbox"><div><b>${LANG === "en" ? "Channel" : "Canale"} ${dmxCh}</b>${who ? ` <span class="nt muted">${esc(who)}</span>` : ""} · <b>${v}</b> <span class="muted">(${Math.round(v / 2.55)}%)</span></div>${chanChart(sel.history || [])}</div>`;
+  } else $("dmxChan").innerHTML = "";
+  // more sources: side by side
+  const srcs = sel.sources.filter(x => x.data);
+  if (srcs.length > 1) {
+    const lv = srcs.map(x => b64bytes(x.data));
+    const diff = [];
+    for (let i = 0; i < 512; i++) if (lv.some(l => l[i] !== lv[0][i])) diff.push(i + 1);
+    const prios = [...new Set(srcs.map(x => x.priority))];
+    const rule = sel.protocol === "sACN"
+      ? (prios.length > 1 ? `Priorità diverse: gli apparecchi seguono solo la sorgente con priorità ${Math.max(...prios)}; le altre sono di riserva.` : "Stessa priorità: i ricevitori uniscono le sorgenti e tengono il valore più alto (HTP). Di solito non è voluto: controlla le priorità sulle console.")
+      : "Su Art-Net i nodi uniscono le due sorgenti, di solito tenendo il valore più alto (HTP); alcuni nodi tengono l'ultimo arrivato (LTP).";
+    $("dmxSrc").innerHTML = `<h3 style="font-size:14px;margin:16px 0 4px">Sorgenti a confronto</h3><p class="muted">${esc(rule)}</p>
+      <div class="dmxall">${srcs.map((x, k) => `<div class="dmxrow"><span class="nt"><b>${esc(x.name || x.ip)}</b>${x.priority ? ` · prio ${x.priority}` : ""}</span><canvas width="512" height="1" data-k="${k}"></canvas><span class="muted">${x.fps.toFixed(0)} fps</span></div>`).join("")}</div>
+      <p>${diff.length ? `<span>Differiscono su</span> <b>${diff.length}</b> <span>canali:</span> <span class="mono">${esc(chRanges(diff))}</span>` : "Mandano gli stessi valori."}</p>`;
+    $("dmxSrc").querySelectorAll("canvas").forEach(cv => {
+      const l = lv[+cv.dataset.k], ctx = cv.getContext("2d"), img = ctx.createImageData(512, 1);
+      for (let i = 0; i < 512; i++) { const o = i * 4; img.data[o] = 129; img.data[o + 1] = 215; img.data[o + 2] = 66; img.data[o + 3] = l[i] ? 40 + Math.round(215 * l[i] / 255) : 18; }
+      ctx.putImageData(img, 0, 0);
+    });
+  } else $("dmxSrc").innerHTML = "";
+}
+// "1-24, 30, 40-48"
+function chRanges(list) {
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    let j = i; while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++;
+    out.push(i === j ? `${list[i]}` : `${list[i]}–${list[j]}`); i = j;
+  }
+  return out.length > 12 ? out.slice(0, 12).join(", ") + " …" : out.join(", ");
+}
+// The last 10 seconds of one channel.
+function chanChart(h) {
+  const W = 600, H = 90, now = Date.now(), t0 = now - 10000;
+  if (!h.length) return `<p class="muted">Raccolgo i valori…</p>`;
+  let d = "", prev = null;
+  for (const [t, v] of h) {
+    const x = Math.max(0, (t - t0) / 10000 * W), y = H - 4 - v / 255 * (H - 8);
+    d += prev === null ? `M${x.toFixed(1)},${y.toFixed(1)}` : `H${x.toFixed(1)}V${y.toFixed(1)}`; prev = y;
+  }
+  d += `H${W}`;
+  return `<svg class="chansvg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line x1="0" x2="${W}" y1="${H - 4}" y2="${H - 4}" class="ax"/><line x1="0" x2="${W}" y1="4" y2="4" class="ax"/><path d="${d}"/></svg>
+    <div class="dmxscale"><span>−10 s</span><span>−5 s</span><span>${LANG === "en" ? "now" : "ora"}</span></div>`;
 }
 
 // What changed since last time on this network (a snapshot per session).
@@ -529,6 +700,14 @@ async function compareView(withIdx) {
   $("cmpWith").onchange = () => compareView(+$("cmpWith").value);
 }
 
+// Link speed of a device's switch port; slow links for Dante, NDI and video are a problem.
+const needsGigabit = h => !!(h.dante || (h.ndi || []).length || (h.protocols || []).some(p => p === "NDI" || p === "Dante" || p === "Blackmagic"));
+function speedCell(h) {
+  const m = h.swport && h.swport.mbps;
+  if (!m) return '<span class="muted">—</span>';
+  const txt = m >= 1000 ? `${m / 1000} Gbit/s` : `${m} Mbit/s`;
+  return m < 1000 && needsGigabit(h) ? `<span class="badge warn" title="${LANG === "en" ? "Dante, NDI and video need 1 Gbit/s ports" : "Dante, NDI e video vogliono porte da 1 Gbit/s"}">⚠ ${txt}</span>` : txt;
+}
 // Network map: each switch with its ports and what is on them.
 function switchMap(switches) {
   const byName = new Map(switches.map(s => [(s.name || s.ip).toLowerCase(), s]));
@@ -572,8 +751,8 @@ function switchView() {
       $("swOut").innerHTML = !d.switches || !d.switches.length
         ? "<p>Nessuno switch ha risposto. Controlla che SNMP sia attivo e la community giusta.</p>"
         : switchMap(d.switches) + `<h3>Tutti i dispositivi</h3><p>${d.switches.map(x => `<b>${esc(x.name || x.ip)}</b> <span class="muted">${esc(x.ip)} · ${x.macs} indirizzi</span>`).join("<br>")}</p>
-           <div class="wrap" style="margin:0"><table><thead><tr><th>Switch</th><th>Porta</th><th>Descrizione porta</th><th>Dispositivo</th><th>IP</th></tr></thead><tbody>
-           ${rows.map(h => `<tr><td>${esc(h.swport.switch)}</td><td class="mono">${esc(h.swport.port)}</td><td class="nt">${esc(h.swport.alias || "")}</td><td class="nt"><b>${esc(label(h) || h.mac)}</b>${h.swport.shared > 1 ? ` <span class="muted" title="Su questa porta ci sono ${h.swport.shared} indirizzi: probabilmente un altro switch o un collegamento tra switch">· ${h.swport.shared} indirizzi</span>` : ""}</td><td class="mono">${esc(h.ip)}</td></tr>`).join("")}
+           <div class="wrap" style="margin:0"><table><thead><tr><th>Switch</th><th>Porta</th><th>Velocità</th><th>Descrizione porta</th><th>Dispositivo</th><th>IP</th></tr></thead><tbody>
+           ${rows.map(h => `<tr><td>${esc(h.swport.switch)}</td><td class="mono">${esc(h.swport.port)}</td><td>${speedCell(h)}</td><td class="nt">${esc(h.swport.alias || "")}</td><td class="nt"><b>${esc(label(h) || h.mac)}</b>${h.swport.shared > 1 ? ` <span class="muted" title="Su questa porta ci sono ${h.swport.shared} indirizzi: probabilmente un altro switch o un collegamento tra switch">· ${h.swport.shared} indirizzi</span>` : ""}</td><td class="mono">${esc(h.ip)}</td></tr>`).join("")}
            </tbody></table></div>`;
       render();
     } catch (e) { $("swOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
@@ -667,6 +846,71 @@ function rdmView() {
     } catch (e) { $("rdmOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
     $("rdmGo").disabled = false;
   };
+}
+// Dante: devices, clock, and the routing read over ARC (read-only).
+function danteView() {
+  const dante = hosts.filter(h => h.dante && !h.self);
+  const rows = dante.map(h => `<tr><td class="nt"><b>${esc(h.dante.name || label(h) || h.ip)}</b></td><td class="mono">${esc(h.ip)}</td><td>${h.dante.sample_rate ? h.dante.sample_rate / 1000 + " kHz" : "—"}</td>
+    <td>${h.dante.latency_ms ? h.dante.latency_ms + " ms" : "—"}</td><td>${h.dante.tx_channels || "—"}</td>
+    <td>${h.ptp === "PTPv1" ? '<span class="badge ok">master</span>' : h.ptp_follower ? "✓ segue" : '<span class="muted">—</span>'}</td></tr>`).join("");
+  const danteIssues = issues.filter(i => /Dante|clock/i.test(i));
+  openSheet("Dante", `${dante.length ? `<div class="wrap" style="margin:0"><table><thead><tr><th>Dispositivo</th><th>IP</th><th>Frequenza</th><th>Latenza</th><th>Canali in trasmissione</th><th title="Chi segue il master del clock PTP: ha chiesto il ritardo al master durante la scansione">Clock</th></tr></thead><tbody>${rows}</tbody></table></div>` : "<p>Nessun dispositivo Dante nell'ultima scansione.</p>"}
+    ${danteIssues.length ? `<ul class="warnlist">${danteIssues.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}
+    <h3>Collegamenti (routing)</h3>
+    <p class="muted">wasaping chiede a ogni dispositivo i suoi canali e a cosa è collegato ogni canale in ricezione, con il protocollo di Dante Controller. Solo lettura: non cambia niente. Il protocollo non è pubblico: se un dispositivo non risponde o i dati sembrano strani, fai fede a Dante Controller e mandaci una diagnostica.</p>
+    <div class="row"><button class="primary" id="dnGo">Leggi il routing</button><input id="dnIP" placeholder="un altro IP (facoltativo)" style="width:190px" class="mono" spellcheck="false"></div>
+    <div id="dnOut"></div>`);
+  $("dnGo").onclick = async () => {
+    $("dnGo").disabled = true; $("dnOut").innerHTML = "<p>Chiedo ai dispositivi…</p>";
+    try {
+      const d = await fetch(`api/dante?ip=${encodeURIComponent($("dnIP").value.trim())}`).then(r => r.json());
+      const devs = d.devices || [], sm = d.summary || {};
+      if (!devs.length) { $("dnOut").innerHTML = "<p>Nessun dispositivo da interrogare.</p>"; }
+      else {
+        const cls = {ok: "ok", bad: "bad", wait: "warn", none: ""};
+        const bw = Object.entries(sm.TxMbps || {}).sort((a, b) => b[1] - a[1]);
+        $("dnOut").innerHTML = `<div class="sum"><span class="pill ok">${sm.OK || 0} collegati</span>${sm.Bad ? `<span class="pill bad">✗ ${sm.Bad} con problemi</span>` : ""}${sm.Wait ? `<span class="pill warn">${sm.Wait} in attesa</span>` : ""}</div>
+          ${bw.length ? `<p class="muted"><span>Banda stimata in uscita (unicast):</span> ${bw.map(([n, m]) => `<span class="nt">${esc(n)}</span> ${m.toFixed(1)} Mbit/s`).join(" · ")}</p>` : ""}
+          ${devs.map(x => x.error ? `<div class="dncard"><b class="nt">${esc(x.name || x.ip)}</b> <span class="muted mono">${esc(x.ip)}</span><p class="bad">${esc(x.error)}</p></div>` :
+          `<div class="dncard"><b class="nt">${esc(x.name || x.ip)}</b> <span class="muted mono">${esc(x.ip)}</span> <span class="muted">· ${x.tx_count} in trasmissione · ${x.rx_count} in ricezione</span>
+            ${(x.rx || []).length ? `<div class="wrap" style="margin:6px 0 0"><table><thead><tr><th>Canale</th><th>Riceve da</th><th>Stato</th></tr></thead><tbody>
+            ${x.rx.map(r => `<tr><td class="nt">${r.num}. ${esc(r.name)}</td><td class="nt">${r.tx_device ? `${esc(r.tx_channel)} <span class="muted">@</span> ${esc(r.tx_device)}` : '<span class="muted">—</span>'}</td><td class="st-${cls[r.state] || ""}">${esc(r.detail)}</td></tr>`).join("")}
+            </tbody></table></div>` : ""}
+            ${(x.tx || []).length ? `<p class="muted" style="margin:6px 0 0"><span>In trasmissione:</span> <span class="nt">${x.tx.map(t => esc(t.name)).join(", ")}</span></p>` : ""}</div>`).join("")}`;
+      }
+    } catch (e) { $("dnOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
+    $("dnGo").disabled = false;
+  };
+}
+// Video: Blackmagic, vMix, Resolume… asked now; projectors, NDI, PTPv2 from the scan.
+function videoView() {
+  openSheet("Video", `<p class="muted">wasaping chiede lo stato ai dispositivi video trovati nell'ultima scansione: ATEM, HyperDeck, Videohub, vMix, Resolume. Solo lettura. Alcuni accettano pochi collegamenti di controllo: wasaping si collega un attimo e si stacca.</p>
+    <div class="row"><button class="primary" id="vdGo">Leggi lo stato</button><input id="vdIP" placeholder="un altro IP (facoltativo)" style="width:190px" class="mono" spellcheck="false">
+      <select id="vdKind">${["ATEM", "HyperDeck", "Videohub", "vMix", "Resolume"].map(k => `<option>${k}</option>`).join("")}</select></div>
+    <div id="vdOut"></div>`);
+  const go = async () => {
+    $("vdGo").disabled = true; $("vdOut").innerHTML = "<p>Chiedo ai dispositivi…</p>";
+    try {
+      const ip = $("vdIP").value.trim();
+      const d = await fetch(`api/video${ip ? `?ip=${encodeURIComponent(ip)}&kind=${encodeURIComponent($("vdKind").value)}` : ""}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
+      const devs = d.devices || [], pj = d.projectors || [], ndi = d.ndi || [], ptp = d.ptp2 || [];
+      const hostName = ip => { const h = hosts.find(x => x.ip === ip); return h ? label(h) : ""; };
+      let html = "";
+      html += devs.length ? devs.map(v => `<div class="dncard"><b class="nt">${esc(v.model || v.kind)}</b> <span class="muted"><span class="mono">${esc(v.ip)}</span>${hostName(v.ip) ? ` · <span class="nt">${esc(hostName(v.ip))}</span>` : ""}${v.version ? ` · v${esc(v.version)}` : ""}</span>
+          ${v.error ? `<p class="bad">${esc(v.error)}</p>` : ""}
+          ${(v.lines || []).map(l => `<div class="nt">${esc(l)}</div>`).join("")}
+          ${(v.warn || []).map(l => `<div class="bad">⚠ ${esc(l)}</div>`).join("")}
+          ${(v.routes || []).length ? `<div class="wrap" style="margin:6px 0 0"><table><thead><tr><th>Uscita</th><th>Ingresso</th></tr></thead><tbody>${v.routes.map(r => `<tr><td class="nt">${r.out}. ${esc(r.out_label)}${r.locked ? ' <span class="muted" title="Uscita bloccata">🔒</span>' : ""}</td><td class="nt">${r.in}. ${esc(r.in_label)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+        </div>`).join("") : "<p>Nessun ATEM, HyperDeck, Videohub, vMix o Resolume nell'ultima scansione.</p>";
+      if (pj.length) html += `<h3>Proiettori (PJLink)</h3><div class="wrap" style="margin:0"><table><thead><tr><th>Proiettore</th><th>IP</th><th>Stato</th><th>Ore lampada</th><th>Errori</th></tr></thead><tbody>${pj.map(p => `<tr><td class="nt"><b>${esc(p.name)}</b> <span class="muted">${esc([p.pjlink.maker, p.pjlink.model].filter(Boolean).join(" "))}</span></td><td class="mono">${esc(p.ip)}</td><td>${esc(p.pjlink.power || (p.pjlink.needs_login ? "serve la password PJLink" : "—"))}</td><td>${(p.pjlink.lamp_hours || []).join(" / ") || "—"}</td><td class="${p.pjlink.errors ? "st-bad" : ""}">${esc(p.pjlink.errors || "—")}</td></tr>`).join("")}</tbody></table></div>`;
+      if (ndi.length) html += `<h3>NDI</h3>${ndi.map(n => `<div><b class="nt">${esc(n.name)}</b> <span class="muted mono">${esc(n.ip)}</span>: <span class="nt">${n.sources.map(esc).join(", ")}</span></div>`).join("")}<p class="muted">Una sorgente NDI a piena qualità in 1080p usa circa 100–150 Mbit/s: va su porte da 1 Gbit, non sul Wi-Fi.</p>`;
+      if (ptp.length) html += `<h3>Clock PTPv2 (SMPTE 2110, AES67)</h3>${ptp.map(p => `<div><b class="nt">${esc(p.name)}</b> <span class="muted mono">${esc(p.ip)}</span> · ${esc(p.kind)}</div>`).join("")}`;
+      $("vdOut").innerHTML = html;
+    } catch (e) { $("vdOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
+    $("vdGo").disabled = false;
+  };
+  $("vdGo").onclick = go;
+  go();
 }
 // RDM Identify: the only command wasaping sends to fixtures, so it asks once.
 let identOK = false;
@@ -762,6 +1006,58 @@ async function showReportView() {
   go();
 }
 
+// The show's project: one file with everything about the venue's networks.
+function saveProjectView() {
+  const nets = networks.length ? networks : (network ? [network] : []);
+  const chosen = activeNet ? [activeNet] : nets.map(n => n.id);
+  const cur = nets.find(n => n.id === chosen[0]) || network || {};
+  openSheet("Salva progetto", `<p>Un file <b>.wasaping</b> con tutto il lavoro su questo locale: dispositivi con nomi, ruoli, note e tipi, critici, piano IP, universi critici, patch RDM, storico e note dello show. Lo riapri qui, lo passi ai colleghi o lo prepari prima di arrivare.</p>
+    <div class="set">
+      <b>Nome</b><div class="opt"><input id="pjName" class="nt" value="${esc(cur.name || cur.auto || "")}" style="flex:1 1 260px"></div>
+      ${nets.length > 1 ? `<b>Reti</b><div class="opt" style="flex-direction:column;align-items:flex-start">${nets.map(n => `<label class="check" style="margin:0"><input type="checkbox" class="pjNet" value="${esc(n.id)}"${chosen.includes(n.id) ? " checked" : ""}> <span class="nt">${esc(n.name || n.auto)}</span></label>`).join("")}</div>` : ""}
+      <b>Note dello show</b><div class="opt"><textarea id="pjNotes" rows="5" class="nt" style="flex:1 1 100%" placeholder="Orari, contatti, cose da ricordare…">${esc(cur.notes || "")}</textarea></div>
+    </div>
+    <div class="row"><button class="primary" id="pjSave">Salva il file</button></div>`);
+  $("pjSave").onclick = async () => {
+    const ids = nets.length > 1 ? [...document.querySelectorAll(".pjNet:checked")].map(c => c.value) : [cur.id || ""];
+    if (!ids.length) { toast("Scegli almeno una rete."); return; }
+    const name = $("pjName").value.trim();
+    try {
+      await post("api/project", {notes: $("pjNotes").value, net: ids[0]});
+      if (network && network.id === ids[0]) network.notes = $("pjNotes").value;
+      const p = await fetch(`api/project?nets=${encodeURIComponent(ids.join(","))}&name=${encodeURIComponent(name)}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
+      const file = (name || "wasaping").replace(/[\\/:*?"<>|]+/g, "-").slice(0, 60) + ` ${new Date().toISOString().slice(0, 10)}.wasaping`;
+      await download(file, JSON.stringify(p, null, 2), "application/json");
+      closeSheet();
+    } catch (e) { toast("Non salvato: " + e.message); }
+  };
+}
+async function openProjectView(text, fileName) {
+  let p;
+  try { p = JSON.parse(text); } catch { toast("Il file non è un progetto di wasaping."); return; }
+  const venues = p.format === "wasaping-project" ? (p.venues || []) : p.format === "wasaping-venue" ? [p] : null;
+  if (!venues || !venues.length) { toast("Il file non è un progetto di wasaping."); return; }
+  const here = id => (networks.length ? networks : network ? [network] : []).some(n => n.id === id);
+  const curID = network ? network.id : "";
+  const canMerge = venues.length === 1 && network && venues[0].id !== curID;
+  openSheet("Apri progetto", `<p><b class="nt">${esc(p.name || venues[0].name || venues[0].auto || fileName)}</b>${p.saved_at ? ` <span class="muted">· ${esc(new Date(p.saved_at).toLocaleString(LANG === "en" ? "en-GB" : "it"))}</span>` : ""}</p>
+    <ul>${venues.map(v => `<li><span class="nt">${esc(v.name || v.auto || v.id || "")}</span> · ${(v.devices || []).length} <span>dispositivi</span>${(v.plan || []).length ? ` · <span>piano IP</span>` : ""}${(v.rdm || []).length ? ` · <span>patch RDM</span>` : ""}${v.id && v.id === curID ? ` · <b>è la rete attuale</b>` : ""}</li>`).join("")}</ul>
+    ${p.notes || venues[0].notes ? `<div class="notice nt" style="display:block;white-space:pre-wrap">${esc(p.notes || venues[0].notes)}</div>` : ""}
+    <p class="muted">Nomi, ruoli e note del file prendono il posto di quelli che hai già; i dispositivi critici e gli universi critici si aggiungono. Una rete dove questo computer non è mai stato viene preparata: quando arrivi lì e fai la scansione, ritrovi tutto.</p>
+    <div class="row"><button class="primary" id="pjOwn">Apri</button>${canMerge ? `<button id="pjMerge">Unisci alla rete attuale</button>` : ""}<button id="pjNo">Annulla</button></div>`);
+  $("pjNo").onclick = closeSheet;
+  const go = async target => {
+    try {
+      const d = await post("api/project", {project: p, target}).then(r => r.json());
+      closeSheet();
+      const onCurrent = target === "" || (d.networks || []).includes(curID);
+      toast(LANG === "en" ? `Project opened: ${d.devices} devices.` : `Progetto aperto: ${d.devices} dispositivi.` + (onCurrent ? "" : " Si attiva quando sei su quella rete."));
+      if (onCurrent && !es) start();
+    } catch (e) { toast("Non aperto: " + e.message); }
+  };
+  $("pjOwn").onclick = () => go("own");
+  if ($("pjMerge")) $("pjMerge").onclick = () => go("");
+}
 async function exportVenue() {
   if (needOneNet()) return;
   try {

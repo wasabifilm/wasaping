@@ -58,6 +58,9 @@ func Exposure(h Host) []string {
 		// PJLink without password: anyone on the network can switch it off.
 		w = append(w, "PJLink senza password: chiunque sulla rete può spegnere il proiettore.")
 	}
+	if h.Dante != nil && h.OffSubnet {
+		w = append(w, "Dispositivo Dante su un'altra sottorete: Dante Controller lo vede, ma l'audio con gli altri dispositivi non passa.")
+	}
 	if h.ArtNet != nil && strings.Contains(strings.ToLower(h.ArtNet.Report), "fail") {
 		w = append(w, "Il nodo Art-Net segnala un problema: "+h.ArtNet.Report)
 	}
@@ -96,6 +99,100 @@ func NetworkIssues(hosts []Host) []string {
 			out = append(out, fmt.Sprintf("Universo sACN %d inviato da più sorgenti (%s): controlla le priorità o il merge.", u, strings.Join(ips, ", ")))
 		}
 	}
+	out = append(out, danteIssues(hosts)...)
 	slices.Sort(out)
+	return out
+}
+
+// danteName is how a Dante device is called in the messages.
+func danteName(h Host) string {
+	if h.Dante != nil && h.Dante.Name != "" {
+		return h.Dante.Name
+	}
+	if h.Friendly != "" {
+		return h.Friendly
+	}
+	return h.IP
+}
+
+// danteIssues: what stops Dante audio, readable without Audinate's
+// protocol: sample rates, primary and secondary mixed up, the clock.
+func danteIssues(hosts []Host) []string {
+	var out []string
+	var dante []Host
+	for _, h := range hosts {
+		if h.Dante != nil && !h.Self {
+			dante = append(dante, h)
+		}
+	}
+	if len(dante) == 0 {
+		return nil
+	}
+	// 1. Different sample rates: those devices cannot exchange audio.
+	byRate := map[int][]string{}
+	for _, h := range dante {
+		if h.Dante.SampleRate > 0 {
+			byRate[h.Dante.SampleRate] = append(byRate[h.Dante.SampleRate], danteName(h))
+		}
+	}
+	if len(byRate) > 1 {
+		rates := make([]int, 0, len(byRate))
+		for r := range byRate {
+			rates = append(rates, r)
+		}
+		slices.Sort(rates)
+		var parts []string
+		for _, r := range rates {
+			parts = append(parts, fmt.Sprintf("%g kHz: %s", float64(r)/1000, strings.Join(byRate[r], ", ")))
+		}
+		out = append(out, "Dante a frequenze di campionamento diverse ("+strings.Join(parts, "; ")+"): tra loro l'audio non passa.")
+	}
+	// 2. The same device answering twice on one network: primary and
+	// secondary are on the same switch (or the device is in switched mode
+	// with two cables on the same network).
+	byDev := map[string][]string{}
+	for _, h := range dante {
+		key := h.Dante.ID
+		if key == "" {
+			key = "name:" + h.Dante.Name
+		}
+		if key != "name:" {
+			byDev[key] = append(byDev[key], h.IP)
+		}
+	}
+	for key, ips := range byDev {
+		if len(ips) > 1 {
+			name := strings.TrimPrefix(key, "name:")
+			for _, h := range dante {
+				if h.IP == ips[0] {
+					name = danteName(h)
+				}
+			}
+			slices.Sort(ips)
+			out = append(out, fmt.Sprintf("Dante: %s risponde da %s sulla stessa rete. Primaria e secondaria sono collegate allo stesso switch? Devono stare su reti separate.", name, strings.Join(ips, " e ")))
+		}
+	}
+	// 3. The clock: who follows the master. Only when some device is seen
+	// following, so that a missing Delay_Req means something.
+	master, follows := false, false
+	for _, h := range hosts {
+		master = master || h.PTP == "PTPv1" || strings.HasPrefix(h.PTP, "PTPv2")
+		follows = follows || h.PTPFollower
+	}
+	if !master && len(dante) > 1 {
+		out = append(out, "Dispositivi Dante, ma nessun master del clock PTP sentito durante la scansione: controlla il clock (o, su Linux, che wasaping possa ascoltare le porte 319 e 320).")
+	}
+	if master && follows {
+		var lost []string
+		for _, h := range dante {
+			if h.PTP == "" && !h.PTPFollower {
+				lost = append(lost, danteName(h))
+			}
+		}
+		if len(lost) > 0 && len(lost) < len(dante) {
+			slices.Sort(lost)
+			out = append(out, "Dante: "+strings.Join(lost, ", ")+" non risulta agganciato al clock (nessuna richiesta al master durante la scansione). Controllalo in Dante Controller → Clock Status.")
+		}
+	}
 	return out
 }

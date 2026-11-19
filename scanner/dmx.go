@@ -2,7 +2,9 @@ package scanner
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"sort"
@@ -19,6 +21,17 @@ type DMXSource struct {
 	Name     string  `json:"name,omitempty"`
 	Priority int     `json:"priority,omitempty"`
 	FPS      float64 `json:"fps"`
+	Lost     int     `json:"lost,omitempty"`    // frames missing (sequence gaps) in the last second
+	MaxGapMs int     `json:"max_gap,omitempty"` // longest pause between two frames in the last second
+	Data     string  `json:"data,omitempty"`    // base64 levels of this source (the universe looked at, with more sources)
+}
+
+// DMXWant says what the viewer is looking at: the levels of one universe
+// (and the history of one channel of it), or the levels of all.
+type DMXWant struct {
+	Uni     string // "sacn:1"
+	Channel int    // 1-512, 0 = none
+	All     bool
 }
 
 // Universe is the live state of one DMX universe.
@@ -29,12 +42,18 @@ type Universe struct {
 	Sources  []DMXSource `json:"sources"`
 	Active   int         `json:"active"` // channels above zero
 	Levels   []int       `json:"levels,omitempty"`
+	Data     string      `json:"data,omitempty"`    // base64 of the 512 levels (overview)
+	History  [][2]int64  `json:"history,omitempty"` // unix ms, value of the watched channel
 }
 
 type dmxSrc struct {
-	name  string
-	prio  int
-	times []time.Time
+	ip     string
+	name   string
+	prio   int
+	times  []time.Time
+	levels [512]byte
+	seq    int // last sequence number, -1 = none yet
+	lost   []time.Time
 }
 
 type dmxUni struct {
@@ -43,14 +62,32 @@ type dmxUni struct {
 	levels  [512]byte
 	sources map[string]*dmxSrc
 	last    time.Time
+	watch   int // channel whose history is kept
+	hist    [][2]int64
+}
+
+// seqGap is how many frames are missing between two sequence numbers (0 =
+// none or out of order; a sequence of 0 means "not used" in Art-Net).
+func seqGap(last, now int) int {
+	if last < 0 || now < 0 {
+		return 0
+	}
+	d := (now - last + 256) % 256
+	if d >= 2 && d < 128 {
+		return d - 1
+	}
+	return 0
 }
 
 // ListenDMX listens until ctx ends and calls snapshot every `every` with all
 // universes heard (levels only for `detail`, e.g. "sacn:1").
-func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, every time.Duration, detail func() string, snapshot func([]Universe)) {
+func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, every time.Duration, detail func() DMXWant, snapshot func([]Universe)) {
 	var mu sync.Mutex
 	unis := map[string]*dmxUni{}
-	feed := func(proto string, number int, ip, name string, prio int, data []byte) {
+	var want DMXWant
+	// key tells sources apart: the IP, plus the CID in sACN (two consoles
+	// can run on the same computer).
+	feed := func(proto string, number int, key, ip, name string, prio, seq int, data []byte) {
 		id := fmt.Sprintf("%s:%d", map[string]string{"Art-Net": "art", "sACN": "sacn"}[proto], number)
 		mu.Lock()
 		defer mu.Unlock()
@@ -59,18 +96,53 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 			u = &dmxUni{proto: proto, number: number, sources: map[string]*dmxSrc{}}
 			unis[id] = u
 		}
-		copy(u.levels[:], data)
 		u.last = time.Now()
-		s := u.sources[ip]
+		s := u.sources[key]
 		if s == nil {
-			s = &dmxSrc{}
-			u.sources[ip] = s
+			s = &dmxSrc{seq: -1, ip: ip}
+			u.sources[key] = s
 		}
 		if name != "" {
 			s.name = name
 		}
 		s.prio = prio
 		s.times = append(s.times, u.last)
+		if n := seqGap(s.seq, seq); n > 0 {
+			for i := 0; i < n && i < 256; i++ {
+				s.lost = append(s.lost, u.last)
+			}
+		}
+		s.seq = seq
+		copy(s.levels[:], data)
+		// What the fixtures get: the highest sACN priority wins; among equal
+		// priorities (and in Art-Net) the highest level (HTP), as most
+		// receivers merge.
+		top := -1
+		for _, x := range u.sources {
+			if u.last.Sub(x.times[len(x.times)-1]) <= 2*time.Second {
+				top = max(top, x.prio)
+			}
+		}
+		u.levels = [512]byte{}
+		for _, x := range u.sources {
+			if x.prio == top && u.last.Sub(x.times[len(x.times)-1]) <= 2*time.Second {
+				for i, v := range x.levels {
+					u.levels[i] = max(u.levels[i], v)
+				}
+			}
+		}
+		if id == want.Uni && want.Channel >= 1 && want.Channel <= 512 {
+			if u.watch != want.Channel {
+				u.watch, u.hist = want.Channel, nil
+			}
+			v := int64(u.levels[want.Channel-1])
+			if len(u.hist) == 0 || u.hist[len(u.hist)-1][1] != v || u.last.UnixMilli()-u.hist[len(u.hist)-1][0] > 200 {
+				u.hist = append(u.hist, [2]int64{u.last.UnixMilli(), v})
+			}
+			for len(u.hist) > 0 && u.last.UnixMilli()-u.hist[0][0] > 10_000 {
+				u.hist = u.hist[1:]
+			}
+		}
 	}
 	var wg sync.WaitGroup
 	if c, err := listenShared("0.0.0.0:6454"); err == nil {
@@ -86,7 +158,11 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 					continue
 				}
 				if uni, data, ok := parseArtDmx(buf[:n]); ok {
-					feed("Art-Net", uni, from.IP.String(), "", 0, data)
+					seq := int(buf[12])
+					if seq == 0 {
+						seq = -1 // sequence not used by this sender
+					}
+					feed("Art-Net", uni, from.IP.String(), from.IP.String(), "", 0, seq, data)
 				}
 			}
 		}()
@@ -108,7 +184,7 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 					continue
 				}
 				if uni, name, prio, data, ok := parseSACNData(buf[:n]); ok {
-					feed("sACN", uni, from.IP.String(), name, prio, data)
+					feed("sACN", uni, from.IP.String()+"/"+hex.EncodeToString(buf[22:38]), from.IP.String(), name, prio, int(buf[111]), data)
 				}
 			}
 		}()
@@ -122,9 +198,10 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 			return
 		case <-t.C:
 		}
-		want := detail()
+		w := detail()
 		now := time.Now()
 		mu.Lock()
+		want = w
 		var out []Universe
 		for id, u := range unis {
 			if now.Sub(u.last) > 5*time.Second {
@@ -137,25 +214,60 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 					v.Active++
 				}
 			}
-			for ip, s := range u.sources {
+			for key, s := range u.sources {
 				var recent []time.Time
-				for _, x := range s.times {
+				gap := time.Duration(0)
+				for i, x := range s.times {
 					if now.Sub(x) <= time.Second {
+						if len(recent) > 0 {
+							gap = max(gap, x.Sub(recent[len(recent)-1]))
+						} else if i > 0 {
+							gap = max(gap, x.Sub(s.times[i-1]))
+						}
 						recent = append(recent, x)
 					}
 				}
-				s.times = recent
-				if len(recent) == 0 && now.Sub(u.last) > 2*time.Second {
+				if len(recent) > 0 {
+					s.times = recent
+				} else if len(s.times) > 1 {
+					s.times = s.times[len(s.times)-1:] // keep the last one: when it stopped
+				}
+				var lost []time.Time
+				for _, x := range s.lost {
+					if now.Sub(x) <= time.Second {
+						lost = append(lost, x)
+					}
+				}
+				s.lost = lost
+				if len(recent) == 0 {
+					if now.Sub(s.times[len(s.times)-1]) > 2*time.Second {
+						delete(u.sources, key) // this source stopped
+					}
 					continue
 				}
-				v.Sources = append(v.Sources, DMXSource{IP: ip, Name: s.name, Priority: s.prio, FPS: float64(len(recent))})
+				src := DMXSource{IP: s.ip, Name: s.name, Priority: s.prio, FPS: float64(len(recent)), Lost: len(lost), MaxGapMs: int(gap / time.Millisecond)}
+				if id == w.Uni && len(u.sources) > 1 {
+					src.Data = base64.StdEncoding.EncodeToString(s.levels[:])
+				}
+				v.Sources = append(v.Sources, src)
 			}
-			sort.Slice(v.Sources, func(i, j int) bool { return v.Sources[i].IP < v.Sources[j].IP })
-			if id == want {
+			sort.Slice(v.Sources, func(i, j int) bool {
+				if v.Sources[i].IP != v.Sources[j].IP {
+					return v.Sources[i].IP < v.Sources[j].IP
+				}
+				return v.Sources[i].Name < v.Sources[j].Name
+			})
+			if id == w.Uni {
 				v.Levels = make([]int, 512)
 				for i, b := range u.levels {
 					v.Levels[i] = int(b)
 				}
+				if w.Channel > 0 && u.watch == w.Channel {
+					v.History = append([][2]int64(nil), u.hist...)
+				}
+			}
+			if w.All {
+				v.Data = base64.StdEncoding.EncodeToString(u.levels[:])
 			}
 			out = append(out, v)
 		}
@@ -209,6 +321,12 @@ func InterfaceFor(ip net.IP) *net.Interface {
 // ListenPTP calls onMaster for every Sync/Announce heard (a clock master
 // speaking) until ctx ends. Ports 319/320 may need rights on Linux.
 func ListenPTP(ctx context.Context, iface *net.Interface, onMaster func(kind, ip string)) {
+	ListenPTPAll(ctx, iface, onMaster, nil)
+}
+
+// ListenPTPAll also calls onFollower (if set) for every device asking the
+// master for the delay: a device following the clock.
+func ListenPTPAll(ctx context.Context, iface *net.Interface, onMaster func(kind, ip string), onFollower func(ip string)) {
 	var wg sync.WaitGroup
 	for _, port := range []int{319, 320} {
 		c, err := net.ListenMulticastUDP("udp4", iface, &net.UDPAddr{IP: net.IPv4(224, 0, 1, 129), Port: port})
@@ -228,6 +346,8 @@ func ListenPTP(ctx context.Context, iface *net.Interface, onMaster func(kind, ip
 				}
 				if kind, _ := parsePTP(buf[:n]); kind != "" {
 					onMaster(kind, from.IP.String())
+				} else if onFollower != nil && ptpFollower(buf[:n]) {
+					onFollower(from.IP.String())
 				}
 			}
 		}()

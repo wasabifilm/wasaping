@@ -172,7 +172,7 @@ func runDMXCLI(ctx context.Context, args []string) error {
 	lctx, cancel := context.WithTimeout(ctx, *dur)
 	defer cancel()
 	var last []scanner.Universe
-	scanner.ListenDMX(lctx, defaultIface(), 64, 500*time.Millisecond, func() string { return *uni }, func(u []scanner.Universe) { last = u })
+	scanner.ListenDMX(lctx, defaultIface(), 64, 500*time.Millisecond, func() scanner.DMXWant { return scanner.DMXWant{Uni: *uni} }, func(u []scanner.Universe) { last = u })
 	if len(last) == 0 {
 		fmt.Println(TC("Nessun universo in arrivo.", "No universes arriving."))
 		return nil
@@ -299,15 +299,19 @@ func runVenueCLI(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		var v Venue
-		if err := json.Unmarshal(b, &v); err != nil {
-			return err
-		}
-		n, err := devices().ImportVenue(v)
+		venues, _, err := parseProject(b) // a project (0.8) or a venue file
 		if err != nil {
 			return err
 		}
-		fmt.Printf(TC("✓ locale importato: %d dispositivi\n", "✓ venue imported: %d devices\n"), n)
+		total := 0
+		for _, v := range venues {
+			n, _, err := devices().ImportVenueInto(v, "own")
+			if err != nil {
+				return err
+			}
+			total += n
+		}
+		fmt.Printf(TC("✓ importato: %d reti, %d dispositivi\n", "✓ imported: %d networks, %d devices\n"), len(venues), total)
 	case len(args) >= 1 && args[0] == "export":
 		v, _ := devices().ExportVenue()
 		b, _ := json.MarshalIndent(v, "", "  ")

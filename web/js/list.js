@@ -75,8 +75,8 @@ $("toolsBtn").onclick = e => {
   const none = !hosts.length;
   const groups = [
     ["Rete", [["Piano IP", planView], ["IP liberi", freeView], ["Mappa della rete", switchView, none], ["Confronta con l'ultima volta", compareView, !network]]],
-    ["Show", [["Universi DMX", dmxView], ["Apparecchi RDM", rdmView], ["Report di fine show", showReportView]]],
-    ["Locale", [["Esporta locale", exportVenue, !network], ["Importa locale", () => pickFile(".wasaping,.json", importVenue), !network]]],
+    ["Show", [["Universi DMX", dmxView], ["Apparecchi RDM", rdmView], ["Dante", danteView], ["Video", videoView], ["Report di fine show", showReportView]]],
+    ["Progetto", [["Salva progetto…", saveProjectView, !network], ["Apri progetto…", () => pickFile(".wasaping,.json", openProjectView)], ["Pulisci i dispositivi vecchi", cleanupView, !network]]],
     ["Esporta", [["Stampa elenco IP", () => $("printBtn").click(), none], ["CSV", () => $("csv").click(), none], ["JSON", () => $("json").click(), none]]],
     ["Aiuto", [["Salva diagnostica", saveDiag]]],
   ];
@@ -346,5 +346,40 @@ async function saveDiag() {
       $("diagOut").innerHTML = `<p>✓ Salvato: <b class="nt">${esc(d.path)}</b> (${Math.round(d.size / 1024)} KB)</p>`;
     } catch (e) { $("diagOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
     $("diagGo").disabled = false;
+  };
+}
+
+// Remove in one go the devices not seen for a while (never the critical ones).
+function cleanupView() {
+  if (needOneNet()) return;
+  const day = 86400000, now = Date.now();
+  const list = gone.filter(h => !activeNet || h.net === activeNet);
+  const pick = (days, named) => list.filter(h => !h.critical && (named || !(h.name || h.role || h.note)) &&
+    (days === 0 || now - new Date(h.last_seen).getTime() > days * day));
+  const count = (days, named) => pick(days, named).length;
+  const opts = [[90, "non visti da più di 3 mesi"], [30, "non visti da più di 30 giorni"], [7, "non visti da più di una settimana"], [0, "tutti quelli che non rispondono ora"]];
+  openSheet("Pulisci i dispositivi vecchi", `<p>Toglie dall'elenco di questo locale i dispositivi spariti. Se tornano, wasaping li ritrova come nuovi. I dispositivi <b>critici</b> restano sempre.</p>
+    <div class="set">${opts.map(([d, l], i) => `<label class="check"><input type="radio" name="clDays" value="${d}"${i === 1 ? " checked" : ""}> <span>${esc(l)}</span> <span class="muted cl-n" data-d="${d}"></span></label>`).join("")}
+    <label class="check"><input type="checkbox" id="clNamed"> anche quelli a cui hai dato un nome, un ruolo o una nota</label></div>
+    <div class="row"><button class="primary" id="clGo"></button></div>`);
+  const upd = () => {
+    const named = $("clNamed").checked, d = +document.querySelector("input[name=clDays]:checked").value;
+    document.querySelectorAll(".cl-n").forEach(x => x.textContent = `(${count(+x.dataset.d, named)})`);
+    const n = count(d, named);
+    $("clGo").textContent = LANG === "en" ? `Remove ${n} devices` : `Togli ${n} dispositivi`;
+    $("clGo").disabled = !n;
+  };
+  document.querySelectorAll("input[name=clDays], #clNamed").forEach(x => x.onchange = upd);
+  upd();
+  $("clGo").onclick = async () => {
+    $("clGo").disabled = true;
+    const days = +document.querySelector("input[name=clDays]:checked").value, named = $("clNamed").checked;
+    try {
+      const r = await post("api/forget-old", {net: activeNet, days, named}).then(x => x.json());
+      const out = new Set(pick(days, named));
+      gone = gone.filter(h => !out.has(h));
+      toast(LANG === "en" ? `${r.removed} devices removed.` : `${r.removed} dispositivi tolti.`);
+      closeSheet(); render();
+    } catch (e) { toast("Errore: " + e.message); $("clGo").disabled = false; }
   };
 }

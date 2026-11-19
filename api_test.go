@@ -45,7 +45,7 @@ func TestAPIFilter(t *testing.T) {
 	if got := request(public, "GET", "/api/lang", "10.0.0.5:8080", "10.0.0.9:51000", nil, ""); got != 403 {
 		t.Errorf("remote /api/lang: got %d, want 403 (local only)", got)
 	}
-	for _, p := range []string{"/api/save", "/api/helper", "/api/quit", "/api/device", "/api/plan", "/api/alerts", "/api/update/install", "/api/remote", "/api/rdm/identify", "/api/rdm/set"} {
+	for _, p := range []string{"/api/save", "/api/helper", "/api/quit", "/api/device", "/api/plan", "/api/alerts", "/api/update/install", "/api/remote", "/api/rdm/identify", "/api/rdm/set", "/api/forget-old"} {
 		if got := request(public, "POST", p, "10.0.0.5:8080", "10.0.0.9:51000", nil, `{}`); got != 403 {
 			t.Errorf("remote POST %s: got %d, want 403", p, got)
 		}

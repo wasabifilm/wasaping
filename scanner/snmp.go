@@ -289,6 +289,7 @@ var (
 	oidBasePortIf = parseOID("1.3.6.1.2.1.17.1.4.1.2")     // .bridgePort -> ifIndex
 	oidIfName     = parseOID("1.3.6.1.2.1.31.1.1.1.1")
 	oidIfAlias    = parseOID("1.3.6.1.2.1.31.1.1.1.18")
+	oidIfHighSpd  = parseOID("1.3.6.1.2.1.31.1.1.1.15") // Mbit/s
 	oidIfDescr    = parseOID("1.3.6.1.2.1.2.2.1.2")
 	// LLDP-MIB: neighbors seen on each port (switches, access points, phones…)
 	oidLldpLocPortDesc = parseOID("1.0.8802.1.1.2.1.3.7.1.4") // .localPort
@@ -323,6 +324,7 @@ type SwitchPort struct {
 	Port     string `json:"port"`
 	Alias    string `json:"alias,omitempty"` // port description set on the switch
 	Shared   int    `json:"shared"`          // MACs seen on that port (1 = only this device)
+	Mbps     int    `json:"mbps,omitempty"`  // link speed (0 = unknown or down)
 }
 
 // SwitchPorts asks every candidate for its forwarding table and returns
@@ -386,6 +388,10 @@ func SwitchPorts(ctx context.Context, candidates []string, community string) ([]
 			}
 			for _, v := range s.walk(ctx, oidIfAlias, 2000) {
 				ifAlias[int64(v.oid[len(v.oid)-1])] = v.str()
+			}
+			ifSpeed := map[int64]int{}
+			for _, v := range s.walk(ctx, oidIfHighSpd, 2000) {
+				ifSpeed[int64(v.oid[len(v.oid)-1])] = int(v.num())
 			}
 			perPort := map[int64]int{}
 			for _, p := range macPort {
@@ -457,7 +463,7 @@ func SwitchPorts(ctx context.Context, candidates []string, community string) ([]
 					ifi = bp
 				}
 				port := firstNonEmpty(ifName[ifi], "porta "+strconv.FormatInt(bp, 10))
-				all[mac] = append(all[mac], loc{SwitchPort{Switch: label, SwitchIP: ip, Port: port, Alias: ifAlias[ifi], Shared: perPort[bp]}, perPort[bp]})
+				all[mac] = append(all[mac], loc{SwitchPort{Switch: label, SwitchIP: ip, Port: port, Alias: ifAlias[ifi], Shared: perPort[bp], Mbps: ifSpeed[ifi]}, perPort[bp]})
 			}
 		}(ip)
 	}

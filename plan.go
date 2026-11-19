@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -83,6 +84,40 @@ func parsePlan(data []byte) ([]PlanItem, error) {
 	}
 	if len(out) == 0 {
 		return nil, errors.New("nessuna riga con un indirizzo IP valido")
+	}
+	return out, nil
+}
+
+// checkPlanItems validates the plan written in the page's editor.
+func checkPlanItems(items []PlanItem) ([]PlanItem, error) {
+	if len(items) > 4096 {
+		return nil, fmt.Errorf("troppe righe")
+	}
+	seen := map[string]int{}
+	var out []PlanItem
+	for i, it := range items {
+		it.Name, it.IP, it.Role = strings.TrimSpace(it.Name), strings.TrimSpace(it.IP), strings.TrimSpace(it.Role)
+		if it.Name == "" && it.IP == "" && it.Role == "" && strings.TrimSpace(it.MAC) == "" {
+			continue // empty row
+		}
+		if len(it.Name) > 200 || len(it.Role) > 200 {
+			return nil, fmt.Errorf("riga %d: testo troppo lungo", i+1)
+		}
+		ip := net.ParseIP(it.IP).To4()
+		if ip == nil {
+			return nil, fmt.Errorf("riga %d: IP non valido %q", i+1, it.IP)
+		}
+		it.IP = ip.String()
+		if j, dup := seen[it.IP]; dup {
+			return nil, fmt.Errorf("righe %d e %d: stesso IP %s", j+1, i+1, it.IP)
+		}
+		seen[it.IP] = i
+		if it.MAC != "" {
+			if it.MAC = scanner.NormalizeMAC(it.MAC); it.MAC == "" {
+				return nil, fmt.Errorf("riga %d: MAC non valido", i+1)
+			}
+		}
+		out = append(out, it)
 	}
 	return out, nil
 }

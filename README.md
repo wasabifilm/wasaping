@@ -50,7 +50,13 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - il piano IP;
   - i problemi di rete e gli avvisi.
 - **Più reti insieme:** con «Tutte le reti» wasaping scansiona ogni rete del computer (luci, Dante primaria e secondaria, video…) e mostra una scheda per rete. Controlla anche la **ridondanza Dante**: ogni dispositivo deve essere su entrambe le reti.
-- **Dante:** canali in trasmissione, sample rate e latenza, letti da Bonjour.
+- **Dante:**
+  - canali in trasmissione, frequenza di campionamento e latenza, letti da Bonjour;
+  - avvisi su **frequenze diverse**, **primaria e secondaria sullo stesso switch** e dispositivi **non agganciati al clock**;
+  - il **routing in sola lettura** (Strumenti → Dante): a cosa è collegato ogni canale in ricezione, gli abbonamenti non risolti e la banda stimata. Il protocollo di Audinate non è pubblico: questa parte è sperimentale;
+  - nel Monitor, la **secondaria** dei dispositivi critici e l'aggancio al clock.
+- **Video** (Strumenti → Video): stato di **ATEM** (programma e anteprima), **HyperDeck** (registrazione, spazio libero), **Videohub** (tabella di routing), **vMix** (in onda, registrazione, streaming), Resolume; proiettori PJLink, sorgenti NDI, clock PTPv2.
+- **Velocità delle porte** degli switch (SNMP): avviso se un dispositivo Dante, NDI o video è su una porta a 100 Mbit.
 - **Report di fine show:** dal registro del Monitor, quante volte è caduto ogni dispositivo, per quanto tempo in tutto e il buco più lungo, più la cronologia e il **grafico dei tempi di risposta di tutta la serata**. Si stampa o si salva in PDF.
 - **Confronta con l'ultima volta:** nello stesso locale, chi c'è di nuovo, chi manca, chi ha cambiato IP o nome rispetto alla volta precedente.
 - **Mappa della rete:** dagli switch gestiti (SNMP) e da LLDP, quali switch sono collegati tra loro e su quale porta, e cosa c'è su ogni porta.
@@ -64,11 +70,17 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Interfaccia completa da un altro computer:** in Impostazioni, con una **password** e in **HTTPS** (certificato creato da wasaping, con l'impronta da confrontare). Utile soprattutto per il box su Raspberry Pi.
 - **Tipo corretto a mano:** se wasaping sbaglia il tipo di un dispositivo, lo cambi nel dettaglio e resta così.
 - **Diagnostica:** Strumenti → Aiuto → «Salva diagnostica» (o `wasaping diag`) prepara un file da mandare a chi sviluppa wasaping quando un apparecchio non viene riconosciuto. Non contiene i tuoi nomi, ruoli e note, né PIN e password.
-- **Piano IP:** importi il patch previsto da un foglio di calcolo (CSV con Nome, IP, Ruolo, MAC) e wasaping lo confronta con la rete. Ti dice chi manca, chi ha l'IP sbagliato, chi occupa l'IP di un altro e chi non era previsto. Con un clic dà ai dispositivi i nomi e i ruoli del piano.
-- **Universi DMX dal vivo:** quali universi Art-Net e sACN arrivano, da quale sorgente, a quanti frame al secondo e quanti canali attivi. Con un clic vedi i 512 canali di un universo.
+- **Piano IP:** importi il patch previsto da un foglio di calcolo (CSV con Nome, IP, Ruolo, MAC) e wasaping lo confronta con la rete. Ti dice chi manca, chi ha l'IP sbagliato, chi occupa l'IP di un altro e chi non era previsto. Con un clic dà ai dispositivi i nomi e i ruoli del piano. Il piano si può anche **scrivere e modificare direttamente** in wasaping (Invio aggiunge una riga con l'IP successivo; IP ripetuti o sbagliati in rosso) ed esportare in CSV.
+- **Visualizzatore DMX dal vivo** (solo ascolto):
+  - quali universi Art-Net e sACN arrivano, da quale sorgente, a quanti frame al secondo, con i **frame persi**;
+  - la **panoramica** di tutti gli universi;
+  - i 512 canali di un universo con sopra il **patch RDM** (nome dell'apparecchio, sovrapposizioni in rosso);
+  - un canale **nel tempo**, gli ultimi 10 secondi;
+  - **due console sullo stesso universo** a confronto: dove differiscono e chi vince (priorità o HTP).
 - **Porta dello switch:** chiede agli switch gestiti (via SNMP in sola lettura) su quale porta è collegato ogni dispositivo, con la descrizione della porta.
 - **IP liberi** nell'intervallo, per dare un IP fisso a un nuovo apparecchio.
-- **Condividi il locale:** esporti nomi, ruoli, note, dispositivi critici e piano IP in un file `.wasaping` da passare ai colleghi o al prossimo tour.
+- **Progetto dello show:** «Salva progetto» mette in un file `.wasaping` tutto il lavoro su un locale, anche su più reti: dispositivi con nomi, ruoli, note e tipi, critici, piano IP, universi critici, patch RDM, storico e note dello show. «Apri progetto» lo riporta qui o su un altro computer; una rete mai vista viene preparata e si attiva quando arrivi lì e fai la scansione.
+- **Pulisci i dispositivi vecchi:** toglie in un colpo quelli non visti da 3 mesi, 30 giorni o una settimana (i critici restano sempre).
 - **Un elenco per ogni locale:** ogni rete ha i suoi dispositivi, con nome, ruolo e note. La riconosce dal router, o dalla sottorete sulle reti show senza router. Le dai un nome ("Arena Verona") e la volta dopo vedi cosa c'è di nuovo e cosa manca.
 - **Elenco IP da stampare** o salvare in PDF per la crew e il rider: dispositivo, ruolo, IP, MAC, modello, protocolli, universi e note.
 - **Qualità del collegamento:** 20 ping con perdite, tempi e jitter. Serve per capire se un cavo, uno switch o il Wi-Fi fanno i capricci. C'è anche il traceroute.
@@ -130,7 +142,7 @@ wasaping rdm                      # apparecchi RDM dietro i nodi Art-Net
 wasaping rdm identify 2.0.0.10 0 5052:00000001   # fa lampeggiare un apparecchio (off per fermarlo)
 wasaping rdm set 2.0.0.10 0 5052:00000001 address 101   # cambia indirizzo (anche: mode, label); chiede conferma
 wasaping plan import piano.csv    # importa il piano IP; "wasaping plan" lo confronta con la rete
-wasaping venue export arena.wasaping   # condivide il locale (import per caricarlo)
+wasaping venue export arena.wasaping   # salva il locale (import apre anche i progetti salvati dalla finestra)
 wasaping report -since 18:00      # report di fine show
 wasaping box                      # modalità box (Raspberry Pi)
 wasaping web-access password      # interfaccia completa da un altro computer, con password (anche: on, off, status)
@@ -182,6 +194,7 @@ monitor.go           monitor dei dispositivi critici e registro degli eventi
 monitor_show.go      monitor di universi critici e master PTP
 multinet.go          più reti insieme, ridondanza Dante
 alerts.go            allarmi OSC, webhook, ntfy, Telegram, Slack
+api_show.go          DMX, RDM, Dante, video
 webaccess.go         interfaccia completa dalla rete (HTTPS, password)
 rdmset.go            modifiche RDM con verifica e registro
 compare.go, diag.go  confronto con l'ultima volta, file di diagnostica
@@ -203,7 +216,8 @@ cli_show.go, box.go  comandi da terminale per lo show, modalità box
 internal/showsim/    simulatore di attrezzatura show (anche: go run ./cmd/showsim)
 deploy/, docs/       servizio systemd e guida per Raspberry Pi
 scanner/             motore: sonde, ARP, nomi (DNS, mDNS, NetBIOS, UPnP), protocolli
-                     show (Art-Net, sACN, PTP, PJLink, RDM), DMX, SNMP, tipi, avvisi
+                     show (Art-Net, sACN, PTP, PJLink, RDM), DMX, Dante (dante.go),
+                     video (video.go: ATEM, HyperDeck, Videohub, vMix), SNMP, tipi, avvisi
 scripts/             build dell'app macOS, pacchetti .deb, icone, database produttori
 ```
 

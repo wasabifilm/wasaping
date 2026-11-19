@@ -101,6 +101,7 @@ func TestSwitchPorts(t *testing.T) {
 		"1.3.6.1.2.1.31.1.1.1.1.1014":             str("Gi1/14"),
 		"1.3.6.1.2.1.31.1.1.1.1.1026":             str("Gi1/26"),
 		"1.3.6.1.2.1.31.1.1.1.18.1014":            str("grandMA3 FOH"),
+		"1.3.6.1.2.1.31.1.1.1.15.1014":            {tag: 0x42, value: []byte{0x64}}, // 100 Mbit/s
 		// LLDP: on local port 26 there is another switch, port 1/1
 		"1.0.8802.1.1.2.1.3.7.1.4.26":     str("Gi1/26"),
 		"1.0.8802.1.1.2.1.4.1.1.9.0.26.1": str("GigaCore Palco"),
@@ -115,7 +116,7 @@ func TestSwitchPorts(t *testing.T) {
 		t.Errorf("lldp %+v", n)
 	}
 	p := ports["00:0c:29:4a:10:01"]
-	if p.Port != "Gi1/14" || p.Alias != "grandMA3 FOH" || p.Shared != 1 {
+	if p.Port != "Gi1/14" || p.Alias != "grandMA3 FOH" || p.Shared != 1 || p.Mbps != 100 {
 		t.Errorf("port %+v", p)
 	}
 	if q := ports["00:1d:c1:30:30:01"]; q.Port != "Gi1/26" || q.Shared != 2 {

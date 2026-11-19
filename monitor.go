@@ -155,7 +155,7 @@ func (m *monitor) loop(ctx context.Context) {
 }
 
 func (m *monitor) check(ctx context.Context) {
-	crit := devices().CriticalDevices()
+	crit := danteSecondaries(devices().CriticalDevices())
 	ips := make([]string, 0, len(crit))
 	ports := map[string][]int{}
 	for _, d := range crit {
@@ -228,6 +228,7 @@ func (m *monitor) check(ctx context.Context) {
 		}
 	}
 	go appendRTTLog(samples)
+	m.checkClockLocked(now)
 	lostU, backU := m.checkShowLocked(now)
 	lost, back = append(lost, lostU...), append(back, backU...)
 	var downNames []string

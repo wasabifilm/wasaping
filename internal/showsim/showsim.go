@@ -19,6 +19,9 @@ type Config struct {
 	ReplyPort int    // where replies go (default 6454)
 	DMXTo     net.IP // where ArtDmx goes (default broadcast)
 	NoPTP     bool
+	// Backup adds a second console (another sACN CID) on universe 2, at the
+	// same priority, with different levels: the merge view must show both.
+	Backup    bool
 	Universes []int // sACN universes sent (default 1, 2)
 	// Identify, when set, is called on RDM SET IDENTIFY_DEVICE.
 	Identify func(uid [6]byte, on bool)
@@ -158,24 +161,35 @@ func (c Config) rdmReply(req []byte) []byte {
 	return nil
 }
 
-func sacnPacket(u int) []byte {
+func sacnPacket(u int, seq byte, backup bool) []byte {
 	b := make([]byte, 638)
 	binary.BigEndian.PutUint16(b[0:], 0x0010)
 	copy(b[4:], "ASC-E1.17\x00\x00\x00")
 	binary.BigEndian.PutUint32(b[18:], 4)
+	copy(b[22:38], "wasaping-sim-FOH")
 	binary.BigEndian.PutUint32(b[40:], 2)
 	copy(b[44:], "grandMA3 FOH (simulatore)")
 	b[108] = 100
+	b[111] = seq
 	binary.BigEndian.PutUint16(b[113:], uint16(u))
 	binary.BigEndian.PutUint16(b[123:], 513)
 	for i := 0; i < 24; i++ {
 		b[126+i] = 200
 	}
+	if backup {
+		copy(b[22:38], "wasaping-sim-BKP")
+		copy(b[44:108], make([]byte, 64))
+		copy(b[44:], "grandMA3 Backup (simulatore)")
+		for i := 0; i < 48; i++ {
+			b[126+i] = byte(100 + i)
+		}
+	}
 	return b
 }
 
-func artDmx(u int, phase byte) []byte {
+func artDmx(u int, phase, seq byte) []byte {
 	b := artHeader(0x5000, 18+512)
+	b[12] = seq
 	b[14], b[15] = byte(u&0xFF), byte(u>>8)
 	binary.BigEndian.PutUint16(b[16:], 512)
 	for i := 0; i < 48; i++ {
@@ -266,12 +280,19 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
-	phase := byte(0)
+	phase, seq := byte(0), byte(0)
 	for {
 		phase += 7
-		out.WriteToUDP(artDmx(0, phase), &net.UDPAddr{IP: cfg.DMXTo, Port: 6454})
+		seq++
+		if seq == 0 {
+			seq = 1
+		}
+		out.WriteToUDP(artDmx(0, phase, seq), &net.UDPAddr{IP: cfg.DMXTo, Port: 6454})
 		for _, u := range cfg.Universes {
-			out.WriteToUDP(sacnPacket(u), &net.UDPAddr{IP: net.IPv4(239, 255, byte(u>>8), byte(u)), Port: 5568})
+			out.WriteToUDP(sacnPacket(u, seq, false), &net.UDPAddr{IP: net.IPv4(239, 255, byte(u>>8), byte(u)), Port: 5568})
+		}
+		if cfg.Backup {
+			out.WriteToUDP(sacnPacket(2, seq, true), &net.UDPAddr{IP: net.IPv4(239, 255, 0, 2), Port: 5568})
 		}
 		select {
 		case <-ctx.Done():

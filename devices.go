@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -46,6 +48,7 @@ type Network struct {
 	Universes []string           `json:"critical_universes,omitempty"`
 	Snapshots []Snapshot         `json:"snapshots,omitempty"` // the network, one per session (latest 30)
 	RDM       []RDMSnapshot      `json:"rdm,omitempty"`       // RDM fixtures, latest searches
+	Notes     string             `json:"notes,omitempty"`     // the show's notes, set by the user
 	FirstSeen time.Time          `json:"first_seen"`
 	LastSeen  time.Time          `json:"last_seen"`
 }
@@ -81,6 +84,7 @@ type NetView struct {
 	Name      string    `json:"name,omitempty"`
 	Auto      string    `json:"auto"`
 	Subnet    string    `json:"subnet,omitempty"`
+	Notes     string    `json:"notes,omitempty"`
 	Known     int       `json:"known"`
 	Scans     int       `json:"scans"`
 	FirstSeen time.Time `json:"first_seen"`
@@ -373,6 +377,18 @@ func (s *Store) Snapshots() []Snapshot {
 }
 
 // AddRDM records an RDM search and returns the previous one (if any).
+// LastRDM is the latest RDM search on the current network (nil if none).
+func (s *Store) LastRDM() *RDMSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.Networks[s.current]
+	if n == nil || len(n.RDM) == 0 {
+		return nil
+	}
+	r := n.RDM[len(n.RDM)-1]
+	return &r
+}
+
 func (s *Store) AddRDM(f []scanner.Fixture) (prev *RDMSnapshot) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -400,7 +416,7 @@ func (ss *Session) Network() NetView {
 }
 
 func netView(id string, n *Network, isNew bool) NetView {
-	return NetView{ID: id, Name: n.Name, Auto: n.Auto, Subnet: n.Subnet, Known: len(n.Devices), Scans: len(n.Scans), FirstSeen: n.FirstSeen, IsNew: isNew}
+	return NetView{ID: id, Name: n.Name, Auto: n.Auto, Subnet: n.Subnet, Notes: n.Notes, Known: len(n.Devices), Scans: len(n.Scans), FirstSeen: n.FirstSeen, IsNew: isNew}
 }
 
 // Current returns the network of the latest scan, if any.
@@ -483,6 +499,34 @@ func (s *Store) Forget(id, key string) {
 	}
 }
 
+// ForgetOld removes the devices of a network ("" = current) not seen for
+// more than days (0 = not found by the latest scan). Critical ones always
+// stay; those the user named or wrote a note on stay unless named is true.
+func (s *Store) ForgetOld(id string, days int, named bool) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.netLocked(id)
+	if n == nil {
+		return 0
+	}
+	limit := n.LastSeen.Add(-time.Minute) // started before the latest scan
+	if days > 0 {
+		limit = time.Now().AddDate(0, 0, -days)
+	}
+	removed := 0
+	for k, d := range n.Devices {
+		if d.Critical || !d.LastSeen.Before(limit) || (!named && (d.Name != "" || d.Role != "" || d.Note != "")) {
+			continue
+		}
+		delete(n.Devices, k)
+		removed++
+	}
+	if removed > 0 {
+		s.saveLocked()
+	}
+	return removed
+}
+
 // SetPlan stores the IP plan of the current network (nil removes it).
 func (s *Store) SetPlan(p []PlanItem) bool {
 	s.mu.Lock()
@@ -506,60 +550,110 @@ func (s *Store) Plan() []PlanItem {
 	return []PlanItem{}
 }
 
-// Venue is a network's archive in a file to share with colleagues: names,
-// roles, notes, critical devices and the IP plan.
+// Venue is a network's archive in a file to share with colleagues or keep
+// as the show's project: names, roles, notes, critical devices and
+// universes, the IP plan, the RDM patch and the history. Version 1 (0.6)
+// had only devices, plan and name; it still opens.
 type Venue struct {
-	Format  string        `json:"format"` // "wasaping-venue"
-	Version int           `json:"version"`
-	Name    string        `json:"name,omitempty"`
-	Auto    string        `json:"auto,omitempty"`
-	Devices []VenueDevice `json:"devices"`
-	Plan    []PlanItem    `json:"plan,omitempty"`
+	Format    string        `json:"format"` // "wasaping-venue"
+	Version   int           `json:"version"`
+	ID        string        `json:"id,omitempty"` // gw:<router MAC> or net:<subnet>
+	Name      string        `json:"name,omitempty"`
+	Auto      string        `json:"auto,omitempty"`
+	Subnet    string        `json:"subnet,omitempty"`
+	Notes     string        `json:"notes,omitempty"`
+	Devices   []VenueDevice `json:"devices"`
+	Plan      []PlanItem    `json:"plan,omitempty"`
+	Universes []string      `json:"critical_universes,omitempty"`
+	RDM       []RDMSnapshot `json:"rdm,omitempty"`
+	Snapshots []Snapshot    `json:"snapshots,omitempty"`
 }
 
 type VenueDevice struct {
-	Key      string `json:"key"`
-	Name     string `json:"name,omitempty"`
-	Role     string `json:"role,omitempty"`
-	Note     string `json:"note,omitempty"`
-	Critical bool   `json:"critical,omitempty"`
-	MAC      string `json:"mac,omitempty"`
-	IP       string `json:"ip"`
-	Kind     string `json:"kind,omitempty"`
-	Model    string `json:"model,omitempty"`
-	Friendly string `json:"friendly,omitempty"`
-	Hostname string `json:"hostname,omitempty"`
+	Key        string    `json:"key"`
+	Name       string    `json:"name,omitempty"`
+	Role       string    `json:"role,omitempty"`
+	Note       string    `json:"note,omitempty"`
+	Critical   bool      `json:"critical,omitempty"`
+	MAC        string    `json:"mac,omitempty"`
+	IP         string    `json:"ip"`
+	Kind       string    `json:"kind,omitempty"`
+	KindManual string    `json:"kind_manual,omitempty"`
+	Model      string    `json:"model,omitempty"`
+	Friendly   string    `json:"friendly,omitempty"`
+	Hostname   string    `json:"hostname,omitempty"`
+	LastSeen   time.Time `json:"last_seen,omitempty"`
+}
+
+// Project is the show's file: one or more networks (lights, Dante primary
+// and secondary, video…), with a name and notes.
+type Project struct {
+	Format  string    `json:"format"` // "wasaping-project"
+	Version int       `json:"version"`
+	Name    string    `json:"name,omitempty"`
+	Notes   string    `json:"notes,omitempty"`
+	SavedAt time.Time `json:"saved_at"`
+	App     string    `json:"app,omitempty"`
+	Venues  []Venue   `json:"venues"`
 }
 
 // ExportVenue returns the current network as a Venue.
-func (s *Store) ExportVenue() (Venue, bool) {
+func (s *Store) ExportVenue() (Venue, bool) { return s.ExportNetwork("") }
+
+// ExportNetwork returns a network ("" = current) as a Venue.
+func (s *Store) ExportNetwork(id string) (Venue, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n := s.Networks[s.current]
+	if id == "" {
+		id = s.current
+	}
+	n := s.Networks[id]
 	if n == nil {
 		return Venue{}, false
 	}
-	v := Venue{Format: "wasaping-venue", Version: 1, Name: n.Name, Auto: n.Auto, Plan: n.Plan}
+	v := Venue{Format: "wasaping-venue", Version: 2, ID: id, Name: n.Name, Auto: n.Auto, Subnet: n.Subnet, Notes: n.Notes, Plan: n.Plan,
+		Universes: n.Universes, Snapshots: n.Snapshots}
+	if len(n.RDM) > 0 {
+		v.RDM = n.RDM[len(n.RDM)-1:]
+	}
 	for k, d := range n.Devices {
 		v.Devices = append(v.Devices, VenueDevice{Key: k, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
-			MAC: d.MAC, IP: d.IP, Kind: d.Kind, Model: d.Model, Friendly: d.Friendly, Hostname: d.Hostname})
+			MAC: d.MAC, IP: d.IP, Kind: d.Kind, KindManual: d.KindManual, Model: d.Model, Friendly: d.Friendly, Hostname: d.Hostname, LastSeen: d.LastSeen})
 	}
 	sort.Slice(v.Devices, func(i, j int) bool { return ipLess(v.Devices[i].IP, v.Devices[j].IP) })
 	return v, true
 }
 
-// ImportVenue merges a shared venue into the current network: what the
-// file says about a device wins, devices it knows and we do not are added,
-// and its plan and name are used when this network has none.
+// ImportVenue merges a venue into the current network.
 func (s *Store) ImportVenue(v Venue) (int, error) {
+	n, _, err := s.ImportVenueInto(v, "")
+	return n, err
+}
+
+var reNetID = regexp.MustCompile(`^(gw:[0-9a-f:]{17}|gw:[0-9.]{7,15}@[0-9./]{9,18}|net:[0-9./]{9,18})$`)
+
+// ImportVenueInto merges a venue into the current network (target "") or
+// into its own network (target "own"), created when this computer has never
+// been there: when you arrive and scan, everything is ready. What the file
+// says about a device wins, devices it knows and we do not are added; the
+// critical universes add up, the history and the RDM searches join.
+func (s *Store) ImportVenueInto(v Venue, target string) (int, string, error) {
 	if v.Format != "wasaping-venue" {
-		return 0, fmt.Errorf("non è un file di locale di wasaping")
+		return 0, "", fmt.Errorf("non è un file di locale di wasaping")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n := s.Networks[s.current]
+	id := s.current
+	if target == "own" && reNetID.MatchString(v.ID) {
+		id = v.ID
+	}
+	n := s.Networks[id]
+	if n == nil && id == v.ID && id != "" {
+		n = &Network{Devices: map[string]*Device{}, FirstSeen: time.Now(), Auto: v.Auto, Subnet: v.Subnet}
+		s.Networks[id] = n
+	}
 	if n == nil {
-		return 0, fmt.Errorf("fai prima una scansione di questa rete")
+		return 0, "", fmt.Errorf("fai prima una scansione di questa rete")
 	}
 	count := 0
 	for _, vd := range v.Devices {
@@ -573,13 +667,16 @@ func (s *Store) ImportVenue(v Venue) (int, error) {
 		}
 		d := n.Devices[key]
 		if d == nil {
-			d = &Device{MAC: scanner.NormalizeMAC(vd.MAC), IP: vd.IP, Kind: vd.Kind, Model: vd.Model, Friendly: vd.Friendly, Hostname: vd.Hostname}
+			d = &Device{MAC: scanner.NormalizeMAC(vd.MAC), IP: vd.IP, Kind: vd.Kind, Model: vd.Model, Friendly: vd.Friendly, Hostname: vd.Hostname, LastSeen: vd.LastSeen}
 			n.Devices[key] = d
 		}
 		for _, kv := range [][2]*string{{&d.Name, &vd.Name}, {&d.Role, &vd.Role}, {&d.Note, &vd.Note}} {
 			if *kv[1] != "" {
 				*kv[0] = *kv[1]
 			}
+		}
+		if vd.KindManual != "" && validKind(vd.KindManual) {
+			d.KindManual, d.Kind = vd.KindManual, vd.KindManual
 		}
 		d.Critical = d.Critical || vd.Critical
 		count++
@@ -590,8 +687,47 @@ func (s *Store) ImportVenue(v Venue) (int, error) {
 	if n.Name == "" && v.Name != "" {
 		n.Name = v.Name
 	}
+	if v.Notes != "" {
+		n.Notes = v.Notes
+	}
+	for _, u := range v.Universes {
+		if !slices.Contains(n.Universes, u) {
+			n.Universes = append(n.Universes, u)
+		}
+	}
+	for _, r := range v.RDM {
+		if !slices.ContainsFunc(n.RDM, func(x RDMSnapshot) bool { return x.At.Equal(r.At) }) {
+			n.RDM = append(n.RDM, r)
+		}
+	}
+	sort.Slice(n.RDM, func(i, j int) bool { return n.RDM[i].At.Before(n.RDM[j].At) })
+	if len(n.RDM) > 10 {
+		n.RDM = n.RDM[len(n.RDM)-10:]
+	}
+	for _, sn := range v.Snapshots {
+		if !slices.ContainsFunc(n.Snapshots, func(x Snapshot) bool { return x.At.Equal(sn.At) }) {
+			n.Snapshots = append(n.Snapshots, sn)
+		}
+	}
+	sort.Slice(n.Snapshots, func(i, j int) bool { return n.Snapshots[i].At.Before(n.Snapshots[j].At) })
+	if len(n.Snapshots) > 30 {
+		n.Snapshots = n.Snapshots[len(n.Snapshots)-30:]
+	}
 	s.saveLocked()
-	return count, nil
+	return count, id, nil
+}
+
+// SetNotes stores the show's notes of a network ("" = current).
+func (s *Store) SetNotes(id, notes string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.netLocked(id)
+	if n == nil {
+		return false
+	}
+	n.Notes = notes
+	s.saveLocked()
+	return true
 }
 
 // CriticalUniverses lists the DMX universes marked critical ("sacn:1").

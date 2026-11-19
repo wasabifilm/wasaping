@@ -226,7 +226,7 @@ func runPreshow(ctx context.Context, net, lang string) (*Report, error) {
 	} else {
 		heard := map[string]scanner.Universe{}
 		lctx, cancel := context.WithTimeout(ctx, 3500*time.Millisecond)
-		scanner.ListenDMX(lctx, defaultIface(), 64, 500*time.Millisecond, func() string { return "" }, func(us []scanner.Universe) {
+		scanner.ListenDMX(lctx, defaultIface(), 64, 500*time.Millisecond, func() scanner.DMXWant { return scanner.DMXWant{} }, func(us []scanner.Universe) {
 			for _, u := range us {
 				heard[u.ID] = u
 			}
@@ -281,6 +281,34 @@ func runPreshow(ctx context.Context, net, lang string) (*Report, error) {
 		sec.Note += "."
 	}
 	rep.Sections = append(rep.Sections, sec)
+
+	// Dante routing: broken subscriptions stop the audio.
+	var danteIPs []string
+	for _, h := range hosts {
+		if h.Dante != nil && !h.Self {
+			danteIPs = append(danteIPs, h.IP)
+		}
+	}
+	if len(danteIPs) > 0 {
+		sec = ReportSection{Title: "Dante", Rows: []ReportRow{}}
+		dctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		devs := scanner.DanteRouting(dctx, danteIPs)
+		cancel()
+		sum := scanner.SummarizeDante(devs, nil)
+		for _, d := range devs {
+			if d.Err != "" {
+				continue
+			}
+			for _, r := range d.Rx {
+				if r.State == "bad" {
+					sec.Rows = append(sec.Rows, ReportRow{Class: "bad", Name: d.Name + " · " + r.Name, IP: d.IP, Role: strings.Trim(r.TxChan+" @ "+r.TxDevice, " @"), Detail: r.Detail})
+					red++
+				}
+			}
+		}
+		sec.Note = fmt.Sprintf(L(lang, "%d canali collegati, %d con problemi (lettura del routing, sperimentale).", "%d channels connected, %d with problems (routing read, experimental)."), sum.OK, sum.Bad)
+		rep.Sections = append(rep.Sections, sec)
+	}
 
 	// Network problems and device warnings.
 	lastMu.Lock()

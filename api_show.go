@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +62,14 @@ func handleSwitchPorts(w http.ResponseWriter, r *http.Request) {
 
 // handleRDM lists the RDM fixtures behind the Art-Net nodes of the latest scan.
 func handleRDM(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet { // the latest search, for the patch over the DMX levels
+		if last := devices().LastRDM(); last != nil {
+			writeJSON(w, last)
+		} else {
+			writeJSON(w, RDMSnapshot{Fixtures: []scanner.Fixture{}})
+		}
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
 		return
@@ -100,15 +111,21 @@ func handleRDM(w http.ResponseWriter, r *http.Request) {
 // changes it with POST ?u=… on the same id (?s=session).
 var (
 	dmxMu     sync.Mutex
-	dmxDetail = map[string]string{}
+	dmxDetail = map[string]scanner.DMXWant{}
 )
+
+// dmxWant reads ?u=sacn:1&ch=40&all=1.
+func dmxWant(q url.Values) scanner.DMXWant {
+	ch, _ := strconv.Atoi(q.Get("ch"))
+	return scanner.DMXWant{Uni: q.Get("u"), Channel: ch, All: q.Get("all") == "1"}
+}
 
 func handleDMX(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	sess := q.Get("s")
 	if r.Method == http.MethodPost {
 		dmxMu.Lock()
-		dmxDetail[sess] = q.Get("u")
+		dmxDetail[sess] = dmxWant(q)
 		dmxMu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -118,13 +135,13 @@ func handleDMX(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dmxMu.Lock()
-	dmxDetail[sess] = q.Get("u")
+	dmxDetail[sess] = dmxWant(q)
 	dmxMu.Unlock()
 	defer func() { dmxMu.Lock(); delete(dmxDetail, sess); dmxMu.Unlock() }()
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
 	var iface = defaultIface()
-	scanner.ListenDMX(ctx, iface, 64, 500*time.Millisecond, func() string {
+	scanner.ListenDMX(ctx, iface, 64, 250*time.Millisecond, func() scanner.DMXWant {
 		dmxMu.Lock()
 		defer dmxMu.Unlock()
 		return dmxDetail[sess]
@@ -191,4 +208,84 @@ func handleRDMIdentify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDante reads the Dante routing of the Dante devices of the latest
+// scan (plus ?ip=… for one more): GET.
+func handleDante(w http.ResponseWriter, r *http.Request) {
+	var ips []string
+	rate := map[string]int{}
+	lastMu.Lock()
+	if lastResult != nil {
+		for _, h := range lastResult.Hosts {
+			if h.Dante != nil && !h.Self {
+				ips = append(ips, h.IP)
+				if h.Dante.Name != "" {
+					rate[h.Dante.Name] = h.Dante.SampleRate
+				}
+			}
+		}
+	}
+	lastMu.Unlock()
+	if ip := net.ParseIP(r.URL.Query().Get("ip")).To4(); ip != nil && !slices.Contains(ips, ip.String()) {
+		ips = append(ips, ip.String())
+	}
+	if len(ips) == 0 {
+		writeJSON(w, map[string]any{"devices": []scanner.DanteDevice{}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	devs := scanner.DanteRouting(ctx, ips)
+	writeJSON(w, map[string]any{"devices": devs, "summary": scanner.SummarizeDante(devs, rate), "rates": rate})
+}
+
+// handleVideo reads the video gear of the latest scan (plus ?ip=…&kind=…):
+// GET. Blackmagic, vMix, Resolume… are asked now; projectors, NDI sources
+// and PTPv2 clocks come from the scan.
+func handleVideo(w http.ResponseWriter, r *http.Request) {
+	type target struct{ ip, kind string }
+	var targets []target
+	var projectors, ndi, ptp []map[string]any
+	lastMu.Lock()
+	if lastResult != nil {
+		for _, h := range lastResult.Hosts {
+			if h.Self {
+				continue
+			}
+			name := firstNonEmpty(h.Name, h.Friendly, h.Hostname, h.IP)
+			if k := scanner.VideoCandidate(h.Host); k != "" {
+				targets = append(targets, target{h.IP, k})
+			}
+			if h.PJLink != nil {
+				projectors = append(projectors, map[string]any{"ip": h.IP, "name": name, "pjlink": h.PJLink})
+			}
+			if len(h.NDI) > 0 {
+				ndi = append(ndi, map[string]any{"ip": h.IP, "name": name, "sources": h.NDI})
+			}
+			if strings.HasPrefix(h.PTP, "PTPv2") {
+				ptp = append(ptp, map[string]any{"ip": h.IP, "name": name, "kind": h.PTP})
+			}
+		}
+	}
+	lastMu.Unlock()
+	q := r.URL.Query()
+	if ip := net.ParseIP(q.Get("ip")).To4(); ip != nil {
+		kind := q.Get("kind")
+		if !slices.Contains([]string{"ATEM", "HyperDeck", "Videohub", "vMix", "Resolume"}, kind) {
+			http.Error(w, "tipo non valido", http.StatusBadRequest)
+			return
+		}
+		targets = append(targets, target{ip.String(), kind})
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	out := make([]scanner.VideoInfo, len(targets))
+	var wg sync.WaitGroup
+	for i, t := range targets {
+		wg.Add(1)
+		go func() { defer wg.Done(); out[i] = scanner.VideoStatus(ctx, t.ip, t.kind) }()
+	}
+	wg.Wait()
+	writeJSON(w, map[string]any{"devices": out, "projectors": projectors, "ndi": ndi, "ptp2": ptp})
 }

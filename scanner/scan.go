@@ -31,16 +31,19 @@ type Host struct {
 	ArtNet    *ArtNetNode `json:"artnet,omitempty"`
 	SACN      *SACNSource `json:"sacn,omitempty"`
 	PTP       string      `json:"ptp,omitempty"` // set when this device is a PTP clock master
-	PJLink    *PJLink     `json:"pjlink,omitempty"`
-	UPnP      string      `json:"upnp,omitempty"`      // UPnP device type, e.g. MediaRenderer
-	WebTitle  string      `json:"web_title,omitempty"` // <title> of its web page
-	NDI       []string    `json:"ndi,omitempty"`       // NDI sources it publishes
-	Dante     *DanteInfo  `json:"dante,omitempty"`
-	Kind      string      `json:"kind,omitempty"` // see GuessKind
-	Warnings  []string    `json:"warnings,omitempty"`
-	OffSubnet bool        `json:"off_subnet,omitempty"` // not in any network of this computer
-	Gateway   bool        `json:"gateway,omitempty"`
-	Self      bool        `json:"self,omitempty"`
+	// PTPFollower: this device asked the master for the delay (Delay_Req):
+	// it is following the clock.
+	PTPFollower bool       `json:"ptp_follower,omitempty"`
+	PJLink      *PJLink    `json:"pjlink,omitempty"`
+	UPnP        string     `json:"upnp,omitempty"`      // UPnP device type, e.g. MediaRenderer
+	WebTitle    string     `json:"web_title,omitempty"` // <title> of its web page
+	NDI         []string   `json:"ndi,omitempty"`       // NDI sources it publishes
+	Dante       *DanteInfo `json:"dante,omitempty"`
+	Kind        string     `json:"kind,omitempty"` // see GuessKind
+	Warnings    []string   `json:"warnings,omitempty"`
+	OffSubnet   bool       `json:"off_subnet,omitempty"` // not in any network of this computer
+	Gateway     bool       `json:"gateway,omitempty"`
+	Self        bool       `json:"self,omitempty"`
 }
 
 // Options controls a scan.
@@ -255,15 +258,15 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 					host.Hostname = d.name
 				}
 				host.Friendly, host.Model, host.Services, host.NDI = d.friendly, d.model, d.services, d.ndiSources
-				if len(d.danteChans) > 0 || d.danteRate > 0 {
-					host.Dante = &DanteInfo{TxChannels: len(d.danteChans), SampleRate: d.danteRate, LatencyMs: float64(d.danteLatNs) / 1e6}
+				if len(d.danteChans) > 0 || d.danteRate > 0 || d.danteName != "" || d.danteID != "" {
+					host.Dante = &DanteInfo{Name: d.danteName, ID: d.danteID, TxChannels: len(d.danteChans), SampleRate: d.danteRate, LatencyMs: float64(d.danteLatNs) / 1e6}
 				}
 			}
 			if host.Self && opt.ResolveDNS {
 				host.Hostname = selfName
 			}
 			if s != nil {
-				host.ArtNet, host.SACN, host.PTP = s.artnet, s.sacn, s.ptp
+				host.ArtNet, host.SACN, host.PTP, host.PTPFollower = s.artnet, s.sacn, s.ptp, s.ptpFollow
 				if len(s.artMACs) > 1 {
 					host.Warnings = append(host.Warnings, "Conflitto di IP: su Art-Net rispondono più dispositivi con questo indirizzo ("+joinStrings(s.artMACs)+").")
 				}
@@ -410,6 +413,8 @@ func upnpSoftware(u *upnpInfo) bool {
 
 // DanteInfo is what a Dante device announces about its transmit channels.
 type DanteInfo struct {
+	Name       string  `json:"name,omitempty"` // Dante device name
+	ID         string  `json:"id,omitempty"`   // Dante device id: the same on primary and secondary
 	TxChannels int     `json:"tx_channels,omitempty"`
 	SampleRate int     `json:"sample_rate,omitempty"`
 	LatencyMs  float64 `json:"latency_ms,omitempty"`

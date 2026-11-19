@@ -20,7 +20,9 @@ var DefaultProbePorts = []int{80, 443, 22, 445, 139, 8080, 62078, 5000, 3389, 55
 // CommonPorts is the default list checked on hosts found alive.
 var CommonPorts = []int{21, 22, 23, 53, 80, 139, 443, 445, 548, 554, 631, 1883, 3389, 5000, 5900, 8000, 8080, 8443, 9100, 32400, 62078,
 	// show gear: PJLink, Videohub, HyperDeck, NDI, QLab, grandMA, Yamaha, Allen & Heath, Shure, Dante
-	4352, 9990, 9993, 5960, 53000, 30000, 49280, 51325, 2202, 4440}
+	4352, 9990, 9993, 5960, 53000, 30000, 49280, 51325, 2202, 4440,
+	// video: vMix, OBS, Watchout
+	8088, 4455, 3039, 3040}
 
 // tcpProbe tries the ports in parallel; it returns true at the first proof of life.
 func tcpProbe(ctx context.Context, ip string, ports []int, timeout time.Duration) (bool, time.Duration) {

@@ -39,11 +39,12 @@ type SACNSource struct {
 
 // showInfo collects the show protocols heard from one IP.
 type showInfo struct {
-	artnet   *ArtNetNode
-	artMACs  []string // more than one: IP conflict
-	sacn     *SACNSource
-	ptp      string // "PTPv1" (Dante) / "PTPv2 dominio N" when this IP is the clock master
-	ptpPrio1 int
+	artnet    *ArtNetNode
+	artMACs   []string // more than one: IP conflict
+	sacn      *SACNSource
+	ptp       string // "PTPv1" (Dante) / "PTPv2 dominio N" when this IP is the clock master
+	ptpPrio1  int
+	ptpFollow bool // sent a Delay_Req: follows the clock
 }
 
 // ArtNetNodePort is where requests to Art-Net nodes go (always 6454 on a
@@ -154,6 +155,10 @@ func showDiscover(ctx context.Context, iface *net.Interface, wait time.Duration)
 					mu.Lock()
 					s := get(from.IP.String())
 					s.ptp, s.ptpPrio1 = kind, prio
+					mu.Unlock()
+				} else if ptpFollower(b) {
+					mu.Lock()
+					get(from.IP.String()).ptpFollow = true
 					mu.Unlock()
 				}
 			})
@@ -266,6 +271,15 @@ func parsePTP(b []byte) (string, int) {
 		return "PTPv1", 0
 	}
 	return "", 0
+}
+
+// ptpFollower recognizes a Delay_Req: a device following the clock asks
+// the master how long the way is.
+func ptpFollower(b []byte) bool {
+	if len(b) >= 34 && b[1]&0x0F == 2 {
+		return b[0]&0x0F == 0x01
+	}
+	return len(b) >= 33 && binary.BigEndian.Uint16(b) == 1 && b[32] == 1
 }
 
 func mergeInts(a, b []int) []int {

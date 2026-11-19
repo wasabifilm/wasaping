@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/wasabifilm/wasaping/scanner"
 )
@@ -53,6 +56,114 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleForgetOld cleans a network's list: POST {net, days, named}.
+func handleForgetOld(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Net   string `json:"net"`
+		Days  int    `json:"days"`
+		Named bool   `json:"named"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil || req.Days < 0 || req.Days > 3650 {
+		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]int{"removed": devices().ForgetOld(req.Net, req.Days, req.Named)})
+}
+
+// handleProject: GET ?nets=id1,id2&name=… saves the show's project (the
+// networks given, or the current one); POST {project, target} opens a
+// project or an older venue file: target "own" puts each network in its
+// own place (created if new), "" merges a single venue into the current one.
+func handleProject(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req struct {
+			Project json.RawMessage `json:"project"`
+			Target  string          `json:"target"`
+			Notes   *string         `json:"notes"`
+			Net     string          `json:"net"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<20)).Decode(&req); err != nil {
+			http.Error(w, "file non valido", http.StatusBadRequest)
+			return
+		}
+		if req.Notes != nil { // just the show's notes
+			if len(*req.Notes) > 20000 || !devices().SetNotes(req.Net, *req.Notes) {
+				http.Error(w, "note non salvate", http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		venues, name, err := parseProject(req.Project)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		target := ""
+		if req.Target == "own" {
+			target = "own"
+		}
+		total, nets := 0, []string{}
+		for _, v := range venues {
+			n, id, err := devices().ImportVenueInto(v, target)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			total += n
+			nets = append(nets, id)
+		}
+		writeJSON(w, map[string]any{"devices": total, "networks": nets, "name": name})
+		return
+	}
+	q := r.URL.Query()
+	p := Project{Format: "wasaping-project", Version: 1, Name: strings.TrimSpace(q.Get("name")), SavedAt: time.Now(), App: "wasaping " + version}
+	ids := strings.Split(q.Get("nets"), ",")
+	for _, id := range ids {
+		if v, ok := devices().ExportNetwork(strings.TrimSpace(id)); ok && !slices.ContainsFunc(p.Venues, func(x Venue) bool { return x.ID == v.ID }) {
+			p.Venues = append(p.Venues, v)
+		}
+	}
+	if len(p.Venues) == 0 {
+		http.Error(w, "fai prima una scansione di questa rete", http.StatusConflict)
+		return
+	}
+	if p.Name == "" {
+		p.Name = firstNonEmpty(p.Venues[0].Name, p.Venues[0].Auto)
+	}
+	p.Notes = p.Venues[0].Notes
+	writeJSON(w, p)
+}
+
+// parseProject reads a project file, or a venue file of older versions.
+func parseProject(b []byte) ([]Venue, string, error) {
+	var head struct {
+		Format string `json:"format"`
+	}
+	if json.Unmarshal(b, &head) != nil {
+		return nil, "", fmt.Errorf("file non valido")
+	}
+	switch head.Format {
+	case "wasaping-project":
+		var p Project
+		if err := json.Unmarshal(b, &p); err != nil || len(p.Venues) == 0 || len(p.Venues) > 32 {
+			return nil, "", fmt.Errorf("progetto non valido")
+		}
+		return p.Venues, p.Name, nil
+	case "wasaping-venue":
+		var v Venue
+		if err := json.Unmarshal(b, &v); err != nil {
+			return nil, "", fmt.Errorf("file non valido")
+		}
+		return []Venue{v}, v.Name, nil
+	}
+	return nil, "", fmt.Errorf("non è un progetto di wasaping")
 }
 
 // handleNetwork renames the current network ("Arena Verona").
@@ -162,15 +273,22 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 func handlePlan(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var req struct {
-			CSV   string `json:"csv"`
-			Clear bool   `json:"clear"`
+			CSV   string      `json:"csv"`
+			Items *[]PlanItem `json:"items"` // from the editor in the page
+			Clear bool        `json:"clear"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&req); err != nil {
 			http.Error(w, "richiesta non valida", http.StatusBadRequest)
 			return
 		}
 		var plan []PlanItem
-		if !req.Clear {
+		if req.Items != nil {
+			var err error
+			if plan, err = checkPlanItems(*req.Items); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		} else if !req.Clear {
 			var err error
 			if plan, err = parsePlan([]byte(req.CSV)); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -212,6 +330,8 @@ func handleVenue(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, v)
 }
+
+func validKind(k string) bool { return validKinds[k] }
 
 var validKinds = map[string]bool{
 	scanner.KindRouter: true, scanner.KindComputer: true, scanner.KindPhone: true, scanner.KindTablet: true,

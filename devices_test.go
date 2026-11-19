@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -222,5 +223,123 @@ func TestCompare(t *testing.T) {
 	}
 	if got["A"] != "modalità 1/2 → 2/2;" || got["B"] != "non risponde più;" || got["C"] != "nuovo;" {
 		t.Errorf("fixtures %v", got)
+	}
+}
+
+func TestForgetOld(t *testing.T) {
+	s := openStore(filepath.Join(t.TempDir(), "devices.json"))
+	ctx := context.Background()
+	targets := []net.IP{net.ParseIP("192.168.78.1"), net.ParseIP("192.168.78.2"), net.ParseIP("192.168.78.3"), net.ParseIP("192.168.78.4")}
+	ss := s.Begin(ctx, targets)
+	for _, ip := range []string{"192.168.78.1", "192.168.78.2", "192.168.78.3", "192.168.78.4"} {
+		ss.View(scanner.Host{IP: ip})
+	}
+	ss.Finish(targets)
+	s.Label("", "ip:192.168.78.2", "Stagebox", "", "", false)
+	s.Label("", "ip:192.168.78.3", "", "", "", true)
+	// .2 named, .3 critical, .4 a month old; only .1 answers now.
+	s.mu.Lock()
+	n := s.Networks[s.current]
+	n.Devices["ip:192.168.78.4"].LastSeen = time.Now().AddDate(0, 0, -40)
+	s.mu.Unlock()
+	time.Sleep(10 * time.Millisecond)
+	ss = s.Begin(ctx, targets)
+	ss.View(scanner.Host{IP: "192.168.78.1"})
+	ss.Finish(targets)
+	s.mu.Lock()
+	for _, k := range []string{"ip:192.168.78.2", "ip:192.168.78.3"} {
+		s.Networks[s.current].Devices[k].LastSeen = time.Now().Add(-2 * time.Hour) // missed the latest scan
+	}
+	s.mu.Unlock()
+
+	if r := s.ForgetOld("", 30, false); r != 1 {
+		t.Errorf("older than 30 days: removed %d, want 1 (.4)", r)
+	}
+	if r := s.ForgetOld("", 0, false); r != 0 {
+		t.Errorf("not answering, keep named: removed %d, want 0", r)
+	}
+	if r := s.ForgetOld("", 0, true); r != 1 {
+		t.Errorf("not answering, named too: removed %d, want 1 (.2)", r)
+	}
+	if _, ok := s.Networks[s.current].Devices["ip:192.168.78.3"]; !ok {
+		t.Error("a critical device must never be removed")
+	}
+}
+
+func TestProjectRoundTrip(t *testing.T) {
+	a := openStore(filepath.Join(t.TempDir(), "devices.json"))
+	ctx := context.Background()
+	targets := []net.IP{net.ParseIP("192.168.79.1"), net.ParseIP("192.168.79.2")}
+	ss := a.Begin(ctx, targets)
+	ss.View(scanner.Host{IP: "192.168.79.2", MAC: "aa:bb:cc:00:00:02"})
+	ss.Finish(targets)
+	a.Label("", "aa:bb:cc:00:00:02", "Rio3224 Palco", "Stagebox", "cavo blu", true)
+	a.SetKind("", "aa:bb:cc:00:00:02", scanner.KindAudio)
+	a.SetUniverseCritical("sacn:1", true)
+	a.SetNotes("", "Soundcheck alle 17")
+	a.AddRDM([]scanner.Fixture{{UID: "5052:00000001", Universe: 0, Address: 1, Footprint: 39}})
+	v, ok := a.ExportNetwork("")
+	if !ok || v.ID == "" || v.Notes != "Soundcheck alle 17" || len(v.RDM) != 1 {
+		t.Fatalf("export %+v", v)
+	}
+	b, _ := json.Marshal(Project{Format: "wasaping-project", Version: 1, Name: "Arena", Venues: []Venue{v}})
+
+	// Another computer that has never been there: the network is created.
+	other := openStore(filepath.Join(t.TempDir(), "devices.json"))
+	venues, name, err := parseProject(b)
+	if err != nil || name != "Arena" {
+		t.Fatal(err)
+	}
+	if _, _, err := other.ImportVenueInto(venues[0], ""); err == nil {
+		t.Error("merging into the current network needs one")
+	}
+	n, id, err := other.ImportVenueInto(venues[0], "own")
+	if err != nil || n != 1 || id != v.ID {
+		t.Fatalf("import own: %d %q %v", n, id, err)
+	}
+	nw := other.Networks[id]
+	d := nw.Devices["aa:bb:cc:00:00:02"]
+	if d == nil || d.Name != "Rio3224 Palco" || !d.Critical || d.KindManual != scanner.KindAudio || nw.Notes != "Soundcheck alle 17" ||
+		len(nw.Universes) != 1 || len(nw.RDM) != 1 {
+		t.Errorf("imported %+v %+v", nw, d)
+	}
+	// Opening it twice adds nothing twice.
+	other.ImportVenueInto(venues[0], "own")
+	if len(other.Networks[id].RDM) != 1 || len(other.Networks[id].Universes) != 1 {
+		t.Error("duplicates after a second open")
+	}
+	// Old venue files (0.6) still open.
+	if vs, _, err := parseProject([]byte(`{"format":"wasaping-venue","version":1,"devices":[]}`)); err != nil || len(vs) != 1 {
+		t.Errorf("venue v1: %v", err)
+	}
+}
+
+func TestCheckPlanItems(t *testing.T) {
+	got, err := checkPlanItems([]PlanItem{{Name: " Console ", IP: "10.0.0.10", MAC: "AA-BB-CC-00-11-22"}, {}, {Name: "Nodo", IP: "10.0.0.21"}})
+	if err != nil || len(got) != 2 || got[0].Name != "Console" || got[0].MAC != "aa:bb:cc:00:11:22" {
+		t.Errorf("%+v %v", got, err)
+	}
+	if _, err := checkPlanItems([]PlanItem{{Name: "a", IP: "10.0.0.1"}, {Name: "b", IP: "10.0.0.1"}}); err == nil {
+		t.Error("duplicate IP accepted")
+	}
+	if _, err := checkPlanItems([]PlanItem{{Name: "a", IP: "10.0.0.300"}}); err == nil {
+		t.Error("invalid IP accepted")
+	}
+}
+
+func TestDanteSecondaries(t *testing.T) {
+	lastMu.Lock()
+	old := lastResult
+	lastResult = &ScanResult{Hosts: []HostView{
+		{Host: scanner.Host{IP: "10.0.0.2", Dante: &scanner.DanteInfo{Name: "Rio3224", ID: "001dc1fffe000002"}}},
+		{Host: scanner.Host{IP: "10.1.0.2", Dante: &scanner.DanteInfo{Name: "Rio3224", ID: "001dc1fffe000002"}}},
+		{Host: scanner.Host{IP: "10.0.0.9", Dante: &scanner.DanteInfo{Name: "AVIO", ID: "001dc1fffe000009"}}},
+	}}
+	lastMu.Unlock()
+	defer func() { lastMu.Lock(); lastResult = old; lastMu.Unlock() }()
+	crit := []GoneView{{Device: Device{IP: "10.0.0.2", Name: "Stagebox"}, Key: "aa"}}
+	got := danteSecondaries(crit)
+	if len(got) != 2 || got[1].IP != "10.1.0.2" || got[1].Key != "aa#dante2" || !strings.Contains(got[1].Name, "Stagebox") {
+		t.Errorf("%+v", got)
 	}
 }

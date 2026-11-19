@@ -81,6 +81,11 @@ var enMessages = []struct {
 	{regexp.MustCompile(`^Conflitto di IP: su Art-Net rispondono più dispositivi con questo indirizzo \((.+)\)\.$`), "IP conflict: several devices answer on Art-Net with this address ($1)."},
 	{regexp.MustCompile(`^Alla scansione precedente questo IP era di (.+) \((.+)\): .*$`), "At the previous scan this IP belonged to $1 ($2): device replaced, or an IP conflict."},
 	{regexp.MustCompile(`^Nessun router su questa rete.*$`), "No router on this network: normal for an isolated show network, but no internet and no DHCP from a router."},
+	{regexp.MustCompile(`^Dante a frequenze di campionamento diverse \((.+)\): tra loro l\'audio non passa\.$`), "Dante at different sample rates ($1): audio does not pass between them."},
+	{regexp.MustCompile(`^Dante: (.+) risponde da (.+) sulla stessa rete\. .*$`), "Dante: $1 answers from $2 on the same network. Are primary and secondary on the same switch? They must be on separate networks."},
+	{regexp.MustCompile(`^Dispositivi Dante, ma nessun master del clock PTP sentito .*$`), "Dante devices, but no PTP clock master heard during the scan: check the clock (or, on Linux, that wasaping can listen on ports 319 and 320)."},
+	{regexp.MustCompile(`^Dante: (.+) non risulta agganciato al clock .*$`), "Dante: $1 does not seem locked to the clock (no request to the master during the scan). Check it in Dante Controller → Clock Status."},
+	{regexp.MustCompile(`^Dispositivo Dante su un\'altra sottorete: .*$`), "Dante device on another subnet: Dante Controller sees it, but audio with the other devices does not pass."},
 	{regexp.MustCompile(`^Più master di clock (.+): (.+)\. .*$`), "Several $1 clock masters: $2. Dante and AES67 want a single master per domain."},
 	{regexp.MustCompile(`^Universo sACN (\d+) inviato da più sorgenti \((.+)\): .*$`), "sACN universe $1 sent by several sources ($2): check priorities or merging."},
 }

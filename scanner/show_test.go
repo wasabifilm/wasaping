@@ -194,3 +194,39 @@ func TestRDMPackets(t *testing.T) {
 		t.Errorf("tod %d %v %v", u, uids, ok)
 	}
 }
+
+func TestSeqGap(t *testing.T) {
+	for _, c := range [][3]int{{1, 2, 0}, {1, 4, 2}, {255, 1, 1}, {10, 9, 0}, {-1, 5, 0}, {5, -1, 0}} {
+		if g := seqGap(c[0], c[1]); g != c[2] {
+			t.Errorf("seqGap(%d,%d) = %d, want %d", c[0], c[1], g, c[2])
+		}
+	}
+}
+
+func TestDanteIssues(t *testing.T) {
+	d := func(ip, name, id string, rate int, follow bool) Host {
+		return Host{IP: ip, Dante: &DanteInfo{Name: name, ID: id, SampleRate: rate}, PTPFollower: follow}
+	}
+	hosts := []Host{
+		{IP: "10.0.0.1", PTP: "PTPv1", Dante: &DanteInfo{Name: "CL5-FOH", ID: "001dc1fffe000001", SampleRate: 48000}},
+		d("10.0.0.2", "Rio3224", "001dc1fffe000002", 48000, true),
+		d("10.0.0.3", "Rio3224", "001dc1fffe000002", 48000, true), // secondary on the primary switch
+		d("10.0.0.4", "AVIO-1", "001dc1fffe000004", 96000, false),
+	}
+	got := strings.Join(danteIssues(hosts), "\n")
+	for _, want := range []string{"48 kHz: CL5-FOH, Rio3224, Rio3224; 96 kHz: AVIO-1", "Rio3224 risponde da 10.0.0.2 e 10.0.0.3", "AVIO-1 non risulta agganciato"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "CL5-FOH non risulta") {
+		t.Error("the master does not follow itself")
+	}
+	v1 := make([]byte, 40)
+	v1[1], v1[32] = 1, 1
+	v2 := make([]byte, 44)
+	v2[0], v2[1] = 0x01, 0x02
+	if !ptpFollower(v1) || !ptpFollower(v2) {
+		t.Error("Delay_Req not recognized")
+	}
+}

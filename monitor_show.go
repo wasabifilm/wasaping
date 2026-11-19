@@ -32,16 +32,18 @@ type MonPTP struct {
 }
 
 type showMonitor struct {
-	unis     map[string]*MonUniverse
-	uniOrder []string
-	snap     map[string]scanner.Universe
-	snapAt   time.Time
-	ptpSeen  map[string]map[string]time.Time // kind -> ip -> last heard
-	ptpCur   map[string]string               // kind -> current master
-	ptpSince map[string]time.Time
-	ptpLost  map[string]bool
-	cancel   context.CancelFunc
-	listenMu sync.Mutex
+	unis      map[string]*MonUniverse
+	uniOrder  []string
+	snap      map[string]scanner.Universe
+	snapAt    time.Time
+	ptpSeen   map[string]map[string]time.Time // kind -> ip -> last heard
+	ptpCur    map[string]string               // kind -> current master
+	ptpSince  map[string]time.Time
+	ptpLost   map[string]bool
+	ptpFollow map[string]time.Time // ip -> last Delay_Req: follows the clock
+	clockLost map[string]bool      // device key -> warned that it stopped following
+	cancel    context.CancelFunc
+	listenMu  sync.Mutex
 }
 
 func uniName(id string) string {
@@ -59,7 +61,7 @@ func (m *monitor) startListeners(ctx context.Context) {
 	lctx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
 	iface := defaultIface()
-	go scanner.ListenDMX(lctx, iface, 64, time.Second, func() string { return "" }, func(us []scanner.Universe) {
+	go scanner.ListenDMX(lctx, iface, 64, time.Second, func() scanner.DMXWant { return scanner.DMXWant{} }, func(us []scanner.Universe) {
 		m.mu.Lock()
 		m.snap = map[string]scanner.Universe{}
 		for _, u := range us {
@@ -68,7 +70,7 @@ func (m *monitor) startListeners(ctx context.Context) {
 		m.snapAt = time.Now()
 		m.mu.Unlock()
 	})
-	go scanner.ListenPTP(lctx, iface, func(kind, ip string) {
+	go scanner.ListenPTPAll(lctx, iface, func(kind, ip string) {
 		m.mu.Lock()
 		if m.ptpSeen == nil {
 			m.ptpSeen = map[string]map[string]time.Time{}
@@ -77,6 +79,13 @@ func (m *monitor) startListeners(ctx context.Context) {
 			m.ptpSeen[kind] = map[string]time.Time{}
 		}
 		m.ptpSeen[kind][ip] = time.Now()
+		m.mu.Unlock()
+	}, func(ip string) {
+		m.mu.Lock()
+		if m.ptpFollow == nil {
+			m.ptpFollow = map[string]time.Time{}
+		}
+		m.ptpFollow[ip] = time.Now()
 		m.mu.Unlock()
 	})
 }
@@ -188,4 +197,67 @@ func (m *monitor) ptpStateLocked() []MonPTP {
 		out = append(out, MonPTP{Kind: kind, IP: ip, Since: m.ptpSince[kind]})
 	}
 	return out
+}
+
+// danteSecondaries adds, for each critical Dante device, its secondary
+// interface (same Dante id, another IP in the latest scan) as a device to
+// watch: losing the secondary means no redundancy, before the show stops.
+func danteSecondaries(crit []GoneView) []GoneView {
+	lastMu.Lock()
+	var hosts []scanner.Host
+	if lastResult != nil {
+		for _, h := range lastResult.Hosts {
+			hosts = append(hosts, h.Host)
+		}
+	}
+	lastMu.Unlock()
+	byIP := map[string]scanner.Host{}
+	for _, h := range hosts {
+		byIP[h.IP] = h
+	}
+	have := map[string]bool{}
+	for _, d := range crit {
+		have[d.IP] = true
+	}
+	out := crit
+	for _, d := range crit {
+		h, ok := byIP[d.IP]
+		if !ok || h.Dante == nil || h.Dante.ID == "" {
+			continue
+		}
+		for _, o := range hosts {
+			if o.IP != d.IP && !have[o.IP] && o.Dante != nil && o.Dante.ID == h.Dante.ID {
+				sec := GoneView{Device: d.Device, Key: d.Key + "#dante2"}
+				sec.IP, sec.Ports = o.IP, nil
+				sec.Name = firstNonEmpty(d.Name, d.Friendly, d.Hostname, d.IP) + T(" (Dante secondaria)", " (Dante secondary)")
+				out = append(out, sec)
+				have[o.IP] = true
+			}
+		}
+	}
+	return out
+}
+
+// checkClockLocked warns when a critical device that was following the PTP
+// clock stops asking the master (m.mu held).
+func (m *monitor) checkClockLocked(now time.Time) {
+	if m.clockLost == nil {
+		m.clockLost = map[string]bool{}
+	}
+	for _, k := range m.order {
+		d := m.devs[k]
+		last, ok := m.ptpFollow[d.IP]
+		if !ok || !d.Alive {
+			continue // never seen following, or already reported as down
+		}
+		lost := now.Sub(last) > 20*time.Second
+		switch {
+		case lost && !m.clockLost[k]:
+			m.clockLost[k] = true
+			m.addEventRaw(MonEvent{At: now, Name: d.Name, IP: d.IP, Kind: "ptp", Text: T("non segue più il clock PTP", "no longer follows the PTP clock")})
+		case !lost && m.clockLost[k]:
+			delete(m.clockLost, k)
+			m.addEventRaw(MonEvent{At: now, Name: d.Name, IP: d.IP, Kind: "ptp", Text: T("di nuovo agganciato al clock PTP", "locked to the PTP clock again")})
+		}
+	}
 }

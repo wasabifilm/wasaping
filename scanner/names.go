@@ -23,6 +23,9 @@ type devInfo struct {
 	danteChans map[string]bool // Dante transmit channel names
 	danteRate  int
 	danteLatNs int
+	danteName  string // the Dante device name (instance of _netaudio-arc)
+	danteID    string // the Dante device id (TXT "id" of _netaudio-cmc)
+	danteModel string
 	fprio      int // priority of the service that gave friendly (lower wins)
 	mprio      int
 }
@@ -194,6 +197,13 @@ func absorbMDNS(b []byte, from string, out map[string]*devInfo) {
 					d.setModel(3, strings.Trim(firstNonEmpty(txt["ty"], txt["product"]), "()"))
 				case "netaudio-arc", "netaudio-cmc":
 					d.setModel(1, firstNonEmpty(txt["model"], txt["mf"]))
+					if svc == "netaudio-arc" && nameLabels[0] != "" {
+						d.danteName = nameLabels[0]
+					}
+					if id := txt["id"]; svc == "netaudio-cmc" && id != "" {
+						d.danteID = id
+					}
+					d.danteModel = firstNonEmpty(d.danteModel, txt["model"])
 				case "netaudio-chan":
 					if n, err := strconv.Atoi(txt["rate"]); err == nil {
 						d.danteRate = n

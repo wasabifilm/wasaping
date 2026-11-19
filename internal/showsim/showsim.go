@@ -88,8 +88,12 @@ func todData() []byte {
 	return b
 }
 
-// rdmReply answers an ArtRdm GET (or SET IDENTIFY) for one fixture.
+var fixMu sync.Mutex
+
+// rdmReply answers an ArtRdm GET (or SET IDENTIFY, address, mode, label) for one fixture.
 func (c Config) rdmReply(req []byte) []byte {
+	fixMu.Lock()
+	defer fixMu.Unlock()
 	m := req[24:]
 	if len(m) < 23 {
 		return nil
@@ -97,9 +101,18 @@ func (c Config) rdmReply(req []byte) []byte {
 	var dst [6]byte
 	copy(dst[:], m[2:8])
 	cc, pid := m[19], binary.BigEndian.Uint16(m[20:])
-	for _, f := range Fixtures {
+	for i := range Fixtures {
+		f := &Fixtures[i]
 		if f.UID != dst {
 			continue
+		}
+		pdl := 0
+		if len(m) > 22 {
+			pdl = int(m[22])
+		}
+		var setPD []byte
+		if 23+pdl <= len(m) {
+			setPD = m[23 : 23+pdl]
 		}
 		var pd []byte
 		respCC := byte(0x21)
@@ -108,6 +121,15 @@ func (c Config) rdmReply(req []byte) []byte {
 			if c.Identify != nil && len(m) > 23 {
 				c.Identify(f.UID, m[23] == 1)
 			}
+			respCC = 0x31
+		case cc == 0x30 && pid == 0x00F0 && len(setPD) == 2: // SET DMX_START_ADDRESS
+			f.Address = int(binary.BigEndian.Uint16(setPD))
+			respCC = 0x31
+		case cc == 0x30 && pid == 0x00E0 && len(setPD) == 1: // SET DMX_PERSONALITY
+			f.Pers = setPD[0]
+			respCC = 0x31
+		case cc == 0x30 && pid == 0x0082: // SET DEVICE_LABEL
+			f.Label = string(setPD)
 			respCC = 0x31
 		case pid == 0x0060:
 			pd = make([]byte, 19)

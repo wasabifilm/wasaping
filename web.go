@@ -69,6 +69,9 @@ func runWeb(ctx context.Context, args []string) error {
 	if err := remote.apply(); err != nil {
 		fmt.Fprintln(os.Stderr, "Accesso da iPad/telefono non attivo:", err)
 	}
+	if err := webAcc.apply(); err != nil {
+		fmt.Fprintln(os.Stderr, "Accesso completo dalla rete non attivo:", err)
+	}
 	switch {
 	case *appMode && hasNativeWindow:
 		uiMode.Store("native")

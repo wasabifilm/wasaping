@@ -54,8 +54,20 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
   - **RDM:** «Identifica» (SET IDENTIFY_DEVICE) è l'unica scrittura verso gli apparecchi, con conferma nella pagina.
   - **CI:** i test macOS sono un job separato; la release fa da sé i test su macOS (prima restava bloccata dai runner macOS in coda).
 
+- v0.7:
+  - **Diagnostica:** `diag.go` + `scanner/diag.go` (`scanner.SetDiag` registra i pacchetti grezzi mDNS/NetBIOS/Art-Net/sACN/PTP/SSDP/UPnP/PJLink durante una scansione); zip senza nomi/ruoli/note, impostazioni mascherate. `/api/diag`, `wasaping diag`.
+  - **Tipo a mano:** `Device.KindManual`, `HostView.AutoKind`, `Store.SetKind`; select `#dKind` nel dettaglio.
+  - **Mappa della rete:** `scanner/snmp.go` legge anche LLDP (`SwitchInfo.Neighbors`, `Ports`); `switchMap` in app.js.
+  - **Confronto:** `Network.Snapshots` (una per sessione, max 30) e `Network.RDM` (max 10); `compare.go` (`/api/compare`, `compareFixtures` per l'RDM).
+  - **Tempi di risposta:** il monitor scrive `rtt-log.csv` (ruota a 20 MB in `.old`), `readRTT` sfoltisce a 400 punti; `ShowReport.RTT`, grafico SVG `rttChart`.
+  - **RDM in scrittura:** `scanner.RDMInfo`/`RDMSet` (address 0x00F0, mode 0x00E0, label 0x0082) con `rdmClient`; `rdmset.go` (`/api/rdm/set`, rilegge e scrive `rdm-changes.csv`), `wasaping rdm set`. Nella pagina: «Modifica» → riepilogo + casella «Ho capito» → «Cambia ora». Il simulatore accetta questi SET.
+  - **Notifiche:** `alerts.go` con `alertCfg` (OSC, webhook, Telegram `token|chat`, ntfy, Slack); `telegramAPI` variabile per i test; il token non compare negli errori.
+  - **Accesso completo dalla rete:** `webaccess.go`, porta 47443, TLS con certificato ECDSA self-signed in `tls-cert.pem`/`tls-key.pem` (rifatto se cambia l'IP), password PBKDF2-SHA256 scritto a mano (go.mod resta 1.22), cookie `wsa` 12 h Secure/HttpOnly/Strict, 5 tentativi al minuto. `apiMux` (rotte) è separato dal filtro `newHandler`; `remoteWebBlocked` (quit, helper, update/install, webaccess, save, diag, ping, login). `/api/info` con `remote: true` dà `ui: browser`. CLI `wasaping web-access password|on|off|status`.
+  - **.deb:** `scripts/debgen` (ar + tar.gz in Go puro) → `dist/wasaping-linux-{amd64,arm64}.deb` (`make deb`, anche in `make release`); postinst crea l'utente `wasaping` (home `/var/lib/wasaping`), servizio in `/usr/lib/systemd/system`, non lo abilita da solo. La CI lo installa con il vero dpkg.
+  - **Aggiornamenti:** controllo al massimo ogni 3 ore, pulsante «Controlla ora» (`/api/update` POST `check: true`).
+
 ## Stato e prossimi passi
-- Pubblicate fino alla v0.5.0 (release su GitHub con file Mac/Windows/Linux). Provato su Mac reale (macOS 27, arm64) con la rete di casa e il simulatore show. Da provare su hardware reale: Windows su un PC, attrezzatura show (Dante, NDI, ATEM, PJLink, PTP, RDM), switch gestiti, Raspberry Pi.
+- Pubblicate fino alla v0.6.0 (release su GitHub con file Mac/Windows/Linux). Provato su Mac reale (macOS 27, arm64) con la rete di casa e il simulatore show. Da provare su hardware reale: Windows su un PC, attrezzatura show (Dante, NDI, ATEM, PJLink, PTP, RDM), switch gestiti, Raspberry Pi.
 - Modulo: `github.com/wasabifilm/wasaping`. Repository pubblico: https://github.com/wasabifilm/wasaping
 - Nuova release: `git tag vX.Y.Z && git push --tags` fa partire la CI, che crea la release.
 - Idee: firma/notarizzazione Apple (anche per i MAC), WebView2 + icona nella tray su Windows (da provare su un PC), IPv6, Dante (ARC) per clock e routing, RDM indirizzi in scrittura (con conferme).

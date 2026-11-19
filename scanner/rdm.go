@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -315,4 +316,155 @@ func RDMIdentify(ctx context.Context, node string, universe int, uid string, on 
 		}
 	}
 	return fmt.Errorf("l'apparecchio %s non ha risposto", uid)
+}
+
+// ---- Single-fixture requests (GET info, SET address/mode/label) ----
+
+type rdmClient struct {
+	c       *net.UDPConn
+	replies chan rdmReply
+	tn      byte
+}
+
+func newRDMClient() (*rdmClient, error) {
+	c, err := listenShared("0.0.0.0:6454")
+	if err != nil {
+		return nil, err
+	}
+	cl := &rdmClient{c: c, replies: make(chan rdmReply, 64)}
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			n, _, err := c.ReadFromUDP(buf)
+			if err != nil {
+				return
+			}
+			if r, ok := parseArtRdmReply(buf[:n]); ok {
+				select {
+				case cl.replies <- r:
+				default:
+				}
+			}
+		}
+	}()
+	return cl, nil
+}
+
+func (cl *rdmClient) close() { cl.c.Close() }
+
+// request sends one RDM message and waits for the matching ACK.
+func (cl *rdmClient) request(ctx context.Context, node net.IP, universe int, uid [6]byte, cc byte, pid uint16, pd []byte) ([]byte, bool) {
+	cl.tn++
+	req := artRdm(universe, rdmMessage(uid, cl.tn, cc, pid, pd))
+	for try := 0; try < 3 && ctx.Err() == nil; try++ {
+		cl.c.WriteToUDP(req, &net.UDPAddr{IP: node, Port: ArtNetNodePort})
+		deadline := time.After(500 * time.Millisecond)
+	wait:
+		for {
+			select {
+			case r := <-cl.replies:
+				if r.src == uid && r.pid == pid && r.cc == cc+1 {
+					return r.pd, true
+				}
+			case <-deadline:
+				break wait
+			case <-ctx.Done():
+				return nil, false
+			}
+		}
+	}
+	return nil, false
+}
+
+func parseUID(uid string) ([6]byte, error) {
+	var u [6]byte
+	var hi uint16
+	var lo uint32
+	if _, err := fmt.Sscanf(uid, "%04X:%08X", &hi, &lo); err != nil {
+		return u, fmt.Errorf("UID non valido %q", uid)
+	}
+	binary.BigEndian.PutUint16(u[:], hi)
+	binary.BigEndian.PutUint32(u[2:], lo)
+	return u, nil
+}
+
+// RDMInfo reads one fixture: address, footprint, mode, label, maker, model.
+func RDMInfo(ctx context.Context, node string, universe int, uid string) (Fixture, error) {
+	f := Fixture{UID: uid, Node: node, Universe: universe}
+	u, err := parseUID(uid)
+	ip := net.ParseIP(node).To4()
+	if err != nil || ip == nil {
+		return f, fmt.Errorf("apparecchio o nodo non valido")
+	}
+	cl, err := newRDMClient()
+	if err != nil {
+		return f, err
+	}
+	defer cl.close()
+	pd, ok := cl.request(ctx, ip, universe, u, 0x20, pidDeviceInfo, nil)
+	if !ok || len(pd) < 19 {
+		return f, fmt.Errorf("l'apparecchio %s non ha risposto", uid)
+	}
+	f.Footprint = int(binary.BigEndian.Uint16(pd[10:]))
+	if pd[13] > 0 {
+		f.Personality = fmt.Sprintf("%d/%d", pd[12], pd[13])
+	}
+	f.Address = int(binary.BigEndian.Uint16(pd[14:]))
+	if b, ok := cl.request(ctx, ip, universe, u, 0x20, pidDeviceLabel, nil); ok {
+		f.Label = rdmText(b)
+	}
+	if b, ok := cl.request(ctx, ip, universe, u, 0x20, pidMakerLabel, nil); ok {
+		f.Maker = rdmText(b)
+	}
+	if b, ok := cl.request(ctx, ip, universe, u, 0x20, pidModelDescr, nil); ok {
+		f.Model = rdmText(b)
+	}
+	return f, nil
+}
+
+const (
+	pidDMXPersonality = 0x00E0
+	pidDMXStartAddr   = 0x00F0
+)
+
+// RDMSet changes one setting of a fixture: "address" (1-512), "mode"
+// (personality number) or "label" (up to 32 characters).
+func RDMSet(ctx context.Context, node string, universe int, uid, field, value string) error {
+	u, err := parseUID(uid)
+	ip := net.ParseIP(node).To4()
+	if err != nil || ip == nil {
+		return fmt.Errorf("apparecchio o nodo non valido")
+	}
+	var pid uint16
+	var pd []byte
+	switch field {
+	case "address":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > 512 {
+			return fmt.Errorf("indirizzo DMX non valido (1-512)")
+		}
+		pid, pd = pidDMXStartAddr, binary.BigEndian.AppendUint16(nil, uint16(n))
+	case "mode":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > 255 {
+			return fmt.Errorf("modalità non valida")
+		}
+		pid, pd = pidDMXPersonality, []byte{byte(n)}
+	case "label":
+		if len(value) > 32 {
+			return fmt.Errorf("etichetta troppo lunga (massimo 32 caratteri)")
+		}
+		pid, pd = pidDeviceLabel, []byte(value)
+	default:
+		return fmt.Errorf("impostazione sconosciuta %q", field)
+	}
+	cl, err := newRDMClient()
+	if err != nil {
+		return err
+	}
+	defer cl.close()
+	if _, ok := cl.request(ctx, ip, universe, u, 0x30, pid, pd); !ok {
+		return fmt.Errorf("l'apparecchio %s non ha confermato la modifica", uid)
+	}
+	return nil
 }

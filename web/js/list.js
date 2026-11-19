@@ -74,10 +74,11 @@ $("toolsBtn").onclick = e => {
   const r = $("toolsBtn").getBoundingClientRect();
   const none = !hosts.length;
   const groups = [
-    ["Rete", [["Piano IP", planView], ["IP liberi", freeView], ["Porte switch", switchView, none]]],
+    ["Rete", [["Piano IP", planView], ["IP liberi", freeView], ["Mappa della rete", switchView, none], ["Confronta con l'ultima volta", compareView, !network]]],
     ["Show", [["Universi DMX", dmxView], ["Apparecchi RDM", rdmView], ["Report di fine show", showReportView]]],
     ["Locale", [["Esporta locale", exportVenue, !network], ["Importa locale", () => pickFile(".wasaping,.json", importVenue), !network]]],
     ["Esporta", [["Stampa elenco IP", () => $("printBtn").click(), none], ["CSV", () => $("csv").click(), none], ["JSON", () => $("json").click(), none]]],
+    ["Aiuto", [["Salva diagnostica", saveDiag]]],
   ];
   const m = $("ctx");
   m.innerHTML = groups.map(([g, items]) => `<div class="hint">${esc(g)}</div>` + items.map(([l, , dis], i) => `<div data-g="${esc(g)}" data-i="${i}"${dis ? ' class="dis"' : ""}>${esc(l)}</div>`).join("")).join("");
@@ -143,6 +144,13 @@ function openDetail(key) {
   $("dTitle").innerHTML = kindIcon(h.kind) + `<span class="nt">${esc(label(h) || h.ip)}</span>`;
   $("dSub").textContent = (KIND[h.kind] || KIND[""])[0] + (isGone ? " · non risponde" : "");
   if (changed) { stopTool(); $("dToolHost").value = h.ip; $("dPings").hidden = $("dToolOut").hidden = true; }
+  if (changed) {
+    $("dKind").innerHTML = `<option value="">automatico${h.auto_kind ? "" : ` (${esc((KIND[h.kind] || KIND[""])[0])})`}</option>` +
+      Object.entries(KIND).filter(([k]) => k).map(([k, v]) => `<option value="${k}">${esc(v[0])}</option>`).join("");
+    $("dKind").value = h.auto_kind ? h.kind : "";
+    $("dKindAuto").textContent = h.auto_kind ? `wasaping pensava: ${(KIND[h.auto_kind] || KIND[""])[0]}` : "";
+    translateTree($("detail"));
+  }
   if (changed) { $("dName").value = h.name || ""; $("dRole").value = h.role || ""; $("dNote").value = h.note || ""; $("dCrit").checked = !!h.critical; $("dMsg").textContent = ""; }
   $("dName").placeholder = (h.friendly || h.hostname) ? `vuoto = ${h.friendly || h.hostname}` : "es. Console FOH";
   $("dWarn").innerHTML = (h.warnings || []).map(w => `<li>${esc(w)}</li>`).join("");
@@ -311,3 +319,32 @@ $("dForget").onclick = async () => {
     closeDetail();
   } catch (e) { $("dMsg").textContent = "Errore: " + e.message; }
 };
+
+// Correct the type wasaping guessed: saved, and included in the diagnostics.
+$("dKind").onchange = async () => {
+  const h = findHost(selected); if (!h) return;
+  const kind = $("dKind").value;
+  try {
+    await post("api/device", {key: h.key, net: h.net || "", kind});
+    if (kind) { if (!h.auto_kind) h.auto_kind = h.kind; h.kind = kind; }
+    else if (h.auto_kind) { h.kind = h.auto_kind; h.auto_kind = ""; }
+    if (h.auto_kind === h.kind) h.auto_kind = "";
+    selected = null; openDetail(h.key); render();
+    $("dMsg").textContent = "✓ Tipo corretto: grazie, finisce anche nella diagnostica.";
+  } catch (e) { $("dMsg").textContent = "Non salvato: " + e.message; }
+};
+
+// Diagnostic bundle: a scan that records what devices answer, saved as a zip.
+async function saveDiag() {
+  openSheet("Diagnostica", `<p>wasaping fa una scansione registrando le risposte dei dispositivi (Bonjour, UPnP, Art-Net, sACN, PTP, PJLink…) e salva tutto in un file zip nella cartella Download.</p>
+    <p class="muted">Serve quando un apparecchio non viene riconosciuto o ha un nome sbagliato: manda il file a chi sviluppa wasaping. Non contiene i nomi, i ruoli e le note che hai scritto, né PIN, password o indirizzi degli allarmi.</p>
+    <div class="row"><button class="primary" id="diagGo">Crea il file di diagnostica</button></div><div id="diagOut"></div>`);
+  $("diagGo").onclick = async () => {
+    $("diagGo").disabled = true; $("diagOut").innerHTML = "<p>Scansione e registrazione in corso…</p>";
+    try {
+      const d = await post("api/diag", {}).then(r => r.json());
+      $("diagOut").innerHTML = `<p>✓ Salvato: <b class="nt">${esc(d.path)}</b> (${Math.round(d.size / 1024)} KB)</p>`;
+    } catch (e) { $("diagOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
+    $("diagGo").disabled = false;
+  };
+}

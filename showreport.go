@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/csv"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,6 +29,124 @@ type LogEvent struct {
 	DownFor float64   `json:"down_for,omitempty"`
 }
 
+// RTTSeries is a device's response times over the period of the report.
+type RTTSeries struct {
+	Name   string     `json:"name"`
+	IP     string     `json:"ip,omitempty"`
+	Points [][2]int64 `json:"points"` // unix seconds, ms (-1 = no answer)
+	Avg    float64    `json:"avg"`
+	Max    int64      `json:"max"`
+	Loss   float64    `json:"loss"` // percent of checks without answer
+}
+
+type rttSample struct {
+	at   time.Time
+	name string
+	ip   string
+	rtt  int64
+}
+
+var rttMu sync.Mutex
+
+func rttLogPath() string { return filepath.Join(filepath.Dir(monitorLogPath()), "rtt-log.csv") }
+
+// appendRTTLog keeps every check of the critical devices, for the report.
+func appendRTTLog(s []rttSample) {
+	if len(s) == 0 {
+		return
+	}
+	rttMu.Lock()
+	defer rttMu.Unlock()
+	p := rttLogPath()
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	if st, err := os.Stat(p); err == nil && st.Size() > 20<<20 {
+		os.Rename(p, p+".old") // keep the size bounded: one old file is enough
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	w := csv.NewWriter(f)
+	for _, x := range s {
+		w.Write([]string{strconv.FormatInt(x.at.Unix(), 10), x.name, x.ip, strconv.FormatInt(x.rtt, 10)})
+	}
+	w.Flush()
+}
+
+// readRTT returns the series of each device since `since`, thinned to at
+// most 400 points each (the worst value of each group is kept).
+func readRTT(since time.Time) []RTTSeries {
+	rttMu.Lock()
+	defer rttMu.Unlock()
+	by := map[string]*RTTSeries{}
+	var order []string
+	for _, p := range []string{rttLogPath() + ".old", rttLogPath()} {
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		r := csv.NewReader(f)
+		r.FieldsPerRecord = 4
+		for {
+			rec, err := r.Read()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				continue
+			}
+			t, err1 := strconv.ParseInt(rec[0], 10, 64)
+			v, err2 := strconv.ParseInt(rec[3], 10, 64)
+			if err1 != nil || err2 != nil || t < since.Unix() {
+				continue
+			}
+			s := by[rec[1]]
+			if s == nil {
+				s = &RTTSeries{Name: rec[1], IP: rec[2]}
+				by[rec[1]] = s
+				order = append(order, rec[1])
+			}
+			s.Points = append(s.Points, [2]int64{t, v})
+		}
+		f.Close()
+	}
+	var out []RTTSeries
+	for _, name := range order {
+		s := by[name]
+		var sum, n, lost int64
+		for _, p := range s.Points {
+			if p[1] < 0 {
+				lost++
+				continue
+			}
+			sum += p[1]
+			n++
+			s.Max = max(s.Max, p[1])
+		}
+		if n > 0 {
+			s.Avg = float64(sum) / float64(n)
+		}
+		s.Loss = 100 * float64(lost) / float64(len(s.Points))
+		if len(s.Points) > 400 { // thin out, keeping the worst of each group
+			step := (len(s.Points) + 399) / 400
+			var thin [][2]int64
+			for i := 0; i < len(s.Points); i += step {
+				w := s.Points[i]
+				for _, p := range s.Points[i:min(i+step, len(s.Points))] {
+					if p[1] < 0 || (w[1] >= 0 && p[1] > w[1]) {
+						w = p
+					}
+				}
+				thin = append(thin, w)
+			}
+			s.Points = thin
+		}
+		out = append(out, *s)
+	}
+	return out
+}
+
 // DeviceSummary adds up one device's night.
 type DeviceSummary struct {
 	Name      string  `json:"name"`
@@ -44,6 +164,7 @@ type ShowReport struct {
 	Devices []DeviceSummary `json:"devices"`
 	Events  []LogEvent      `json:"events"`
 	Drops   int             `json:"drops"`
+	RTT     []RTTSeries     `json:"rtt"`
 }
 
 func monitorLogPath() string {
@@ -99,7 +220,7 @@ func readMonitorLog(since time.Time) ([]LogEvent, error) {
 // buildShowReport sums up the log from since to now.
 func buildShowReport(since time.Time) (ShowReport, error) {
 	ev, err := readMonitorLog(since)
-	rep := ShowReport{Since: since, Until: time.Now(), Events: ev}
+	rep := ShowReport{Since: since, Until: time.Now(), Events: ev, RTT: readRTT(since)}
 	if err != nil {
 		return rep, err
 	}

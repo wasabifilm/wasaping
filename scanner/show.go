@@ -77,7 +77,7 @@ func showDiscover(ctx context.Context, iface *net.Interface, wait time.Duration)
 			for _, b := range broadcastAddrs() {
 				c.WriteToUDP(poll, &net.UDPAddr{IP: b, Port: ArtNetNodePort})
 			}
-			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
+			readUntil(ctx, c, "artnet", func(b []byte, from *net.UDPAddr) {
 				if n := parseArtPollReply(b); n != nil {
 					ip := from.IP.String()
 					if len(b) >= 14 {
@@ -116,7 +116,7 @@ func showDiscover(ctx context.Context, iface *net.Interface, wait time.Duration)
 		go func() {
 			defer wg.Done()
 			defer c.Close()
-			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
+			readUntil(ctx, c, "sacn", func(b []byte, from *net.UDPAddr) {
 				name, unis, prio, ok := parseSACN(b)
 				if !ok {
 					return
@@ -149,7 +149,7 @@ func showDiscover(ctx context.Context, iface *net.Interface, wait time.Duration)
 		go func() {
 			defer wg.Done()
 			defer c.Close()
-			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
+			readUntil(ctx, c, "ptp", func(b []byte, from *net.UDPAddr) {
 				if kind, prio := parsePTP(b); kind != "" {
 					mu.Lock()
 					s := get(from.IP.String())
@@ -304,7 +304,11 @@ func queryPJLinkAddr(ctx context.Context, addr string, timeout time.Duration) *P
 	defer c.Close()
 	c.SetDeadline(time.Now().Add(3 * timeout))
 	r := bufio.NewReader(io.LimitReader(c, 16<<10)) // a projector says little: cap what we read
-	line := func() string { s, _ := r.ReadString('\r'); return strings.TrimSpace(s) }
+	line := func() string {
+		s, _ := r.ReadString('\r')
+		diag("pjlink", addr, []byte(s))
+		return strings.TrimSpace(s)
+	}
 	hello := line()
 	if !strings.HasPrefix(strings.ToUpper(hello), "PJLINK") {
 		return nil

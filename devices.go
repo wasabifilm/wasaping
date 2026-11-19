@@ -17,21 +17,22 @@ import (
 
 // Device is what wasaping remembers about a device between scans.
 type Device struct {
-	Name      string      `json:"name,omitempty"` // set by the user
-	Role      string      `json:"role,omitempty"` // set by the user, e.g. "Console FOH"
-	Note      string      `json:"note,omitempty"` // set by the user
-	Critical  bool        `json:"critical,omitempty"`
-	MAC       string      `json:"mac,omitempty"`
-	IP        string      `json:"ip"`
-	Hostname  string      `json:"hostname,omitempty"`
-	Friendly  string      `json:"friendly,omitempty"`
-	Model     string      `json:"model,omitempty"`
-	Vendor    string      `json:"vendor,omitempty"`
-	Kind      string      `json:"kind,omitempty"`
-	Ports     []int       `json:"ports,omitempty"`
-	FirstSeen time.Time   `json:"first_seen"`
-	LastSeen  time.Time   `json:"last_seen"`
-	Seen      []time.Time `json:"seen,omitempty"` // scans that found it (latest maxHistory)
+	Name       string      `json:"name,omitempty"` // set by the user
+	Role       string      `json:"role,omitempty"` // set by the user, e.g. "Console FOH"
+	Note       string      `json:"note,omitempty"` // set by the user
+	Critical   bool        `json:"critical,omitempty"`
+	MAC        string      `json:"mac,omitempty"`
+	IP         string      `json:"ip"`
+	Hostname   string      `json:"hostname,omitempty"`
+	Friendly   string      `json:"friendly,omitempty"`
+	Model      string      `json:"model,omitempty"`
+	Vendor     string      `json:"vendor,omitempty"`
+	Kind       string      `json:"kind,omitempty"`
+	KindManual string      `json:"kind_manual,omitempty"` // type chosen by the user
+	Ports      []int       `json:"ports,omitempty"`
+	FirstSeen  time.Time   `json:"first_seen"`
+	LastSeen   time.Time   `json:"last_seen"`
+	Seen       []time.Time `json:"seen,omitempty"` // scans that found it (latest maxHistory)
 }
 
 // Network is a place: home, office, a venue. Devices are remembered per network.
@@ -43,6 +44,8 @@ type Network struct {
 	Scans     []time.Time        `json:"scans,omitempty"` // latest maxHistory scans
 	Plan      []PlanItem         `json:"plan,omitempty"`  // imported IP plan
 	Universes []string           `json:"critical_universes,omitempty"`
+	Snapshots []Snapshot         `json:"snapshots,omitempty"` // the network, one per session (latest 30)
+	RDM       []RDMSnapshot      `json:"rdm,omitempty"`       // RDM fixtures, latest searches
 	FirstSeen time.Time          `json:"first_seen"`
 	LastSeen  time.Time          `json:"last_seen"`
 }
@@ -60,7 +63,8 @@ type HostView struct {
 	Critical  bool      `json:"critical,omitempty"`
 	New       bool      `json:"new,omitempty"`
 	FirstSeen time.Time `json:"first_seen,omitempty"`
-	History   string    `json:"history,omitempty"` // latest scans, oldest first: 1 = seen, 0 = not
+	History   string    `json:"history,omitempty"`   // latest scans, oldest first: 1 = seen, 0 = not
+	AutoKind  string    `json:"auto_kind,omitempty"` // what wasaping guessed, when the user corrected it
 }
 
 // GoneView is a known device that did not answer this scan.
@@ -261,13 +265,16 @@ func (ss *Session) View(h scanner.Host) HostView {
 		d = &Device{FirstSeen: now}
 	}
 	d.MAC, d.IP, d.LastSeen = h.MAC, h.IP, now
-	for _, kv := range [][2]*string{{&d.Hostname, &h.Hostname}, {&d.Friendly, &h.Friendly}, {&d.Model, &h.Model}, {&d.Vendor, &h.Vendor}, {&d.Kind, &h.Kind}} {
+	for _, kv := range [][2]*string{{&d.Hostname, &h.Hostname}, {&d.Friendly, &h.Friendly}, {&d.Model, &h.Model}, {&d.Vendor, &h.Vendor}} {
 		if *kv[1] != "" {
 			*kv[0] = *kv[1]
 		}
 	}
 	if len(h.Ports) > 0 {
 		d.Ports = h.Ports
+	}
+	if h.Kind != "" && d.KindManual == "" {
+		d.Kind = h.Kind
 	}
 	hist := history(n, d, now, true)
 	if len(d.Seen) == 0 || !d.Seen[len(d.Seen)-1].Equal(now) {
@@ -278,7 +285,11 @@ func (ss *Session) View(h scanner.Host) HostView {
 	}
 	n.Devices[key] = d
 	ss.seen[key] = true
-	return HostView{Host: h, Key: key, Net: ss.id, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
+	auto := ""
+	if d.KindManual != "" && d.KindManual != h.Kind {
+		auto, h.Kind = h.Kind, d.KindManual
+	}
+	return HostView{AutoKind: auto, Host: h, Key: key, Net: ss.id, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
 		New: !known && !ss.first, FirstSeen: d.FirstSeen, History: hist}
 }
 
@@ -304,8 +315,81 @@ func (ss *Session) Finish(targets []net.IP) []GoneView {
 		n.Scans = n.Scans[len(n.Scans)-maxHistory:]
 	}
 	n.LastSeen = ss.started
+	n.addSnapshotLocked(ss)
 	s.saveLocked()
 	return gone
+}
+
+// Snapshot is how a network looked: used to compare with an earlier show.
+type Snapshot struct {
+	At      time.Time `json:"at"`
+	Devices []SnapDev `json:"devices"`
+}
+
+type SnapDev struct {
+	Key   string `json:"key"`
+	IP    string `json:"ip"`
+	Name  string `json:"name,omitempty"`
+	Model string `json:"model,omitempty"`
+	Kind  string `json:"kind,omitempty"`
+}
+
+// RDMSnapshot is the result of one RDM search.
+type RDMSnapshot struct {
+	At       time.Time         `json:"at"`
+	Fixtures []scanner.Fixture `json:"fixtures"`
+}
+
+// addSnapshotLocked keeps one snapshot per working session: scans less
+// than an hour apart replace the latest one.
+func (n *Network) addSnapshotLocked(ss *Session) {
+	snap := Snapshot{At: ss.started}
+	for k := range ss.seen {
+		d := n.Devices[k]
+		if d == nil {
+			continue
+		}
+		snap.Devices = append(snap.Devices, SnapDev{Key: k, IP: d.IP, Name: firstNonEmpty(d.Name, d.Friendly, d.Hostname), Model: firstNonEmpty(d.Model, d.Vendor), Kind: firstNonEmpty(d.KindManual, d.Kind)})
+	}
+	sort.Slice(snap.Devices, func(i, j int) bool { return ipLess(snap.Devices[i].IP, snap.Devices[j].IP) })
+	if l := len(n.Snapshots); l > 0 && ss.started.Sub(n.Snapshots[l-1].At) < time.Hour {
+		n.Snapshots[l-1] = snap
+	} else {
+		n.Snapshots = append(n.Snapshots, snap)
+	}
+	if len(n.Snapshots) > 30 {
+		n.Snapshots = n.Snapshots[len(n.Snapshots)-30:]
+	}
+}
+
+// Snapshots returns the snapshots of the current network.
+func (s *Store) Snapshots() []Snapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n := s.Networks[s.current]; n != nil {
+		return append([]Snapshot(nil), n.Snapshots...)
+	}
+	return nil
+}
+
+// AddRDM records an RDM search and returns the previous one (if any).
+func (s *Store) AddRDM(f []scanner.Fixture) (prev *RDMSnapshot) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.Networks[s.current]
+	if n == nil || len(f) == 0 {
+		return nil
+	}
+	if l := len(n.RDM); l > 0 {
+		p := n.RDM[l-1]
+		prev = &p
+	}
+	n.RDM = append(n.RDM, RDMSnapshot{At: time.Now(), Fixtures: f})
+	if len(n.RDM) > 10 {
+		n.RDM = n.RDM[len(n.RDM)-10:]
+	}
+	s.saveLocked()
+	return prev
 }
 
 // Network describes the network of the latest scan.
@@ -372,6 +456,19 @@ func (s *Store) Label(id, key, name, role, note string, critical bool) bool {
 	}
 	d := n.Devices[key]
 	d.Name, d.Role, d.Note, d.Critical = strings.TrimSpace(name), strings.TrimSpace(role), strings.TrimSpace(note), critical
+	s.saveLocked()
+	return true
+}
+
+// SetKind corrects the type of a device ("" = back to automatic).
+func (s *Store) SetKind(id, key, kind string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.netLocked(id)
+	if n == nil || n.Devices[key] == nil {
+		return false
+	}
+	n.Devices[key].KindManual = kind
 	s.saveLocked()
 	return true
 }

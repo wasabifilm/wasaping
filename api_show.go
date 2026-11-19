@@ -86,7 +86,13 @@ func handleRDM(w http.ResponseWriter, r *http.Request) {
 	defer activeScan.Add(-1)
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
-	writeJSON(w, map[string]any{"nodes": len(nodes), "fixtures": scanner.RDMDiscover(ctx, nodes)})
+	fx := scanner.RDMDiscover(ctx, nodes)
+	out := map[string]any{"nodes": len(nodes), "fixtures": fx}
+	if prev := devices().AddRDM(fx); prev != nil {
+		out["previous"] = prev.At
+		out["changes"] = compareFixtures(prev.Fixtures, fx, r.URL.Query().Get("lang"))
+	}
+	writeJSON(w, out)
 }
 
 // handleDMX streams the live universes (SSE) while the page shows them, for

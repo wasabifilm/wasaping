@@ -68,5 +68,19 @@ func TestShowIntegration(t *testing.T) {
 		if err := RDMIdentify(ctx, "127.0.0.1", 0, fx[2].UID, true); err != nil || !identified.Load() {
 			t.Errorf("identify: %v (callback %v)", err, identified.Load())
 		}
+		// Change the address of the overlapping fixture, then read it back.
+		if err := RDMSet(ctx, "127.0.0.1", 0, fx[2].UID, "address", "101"); err != nil {
+			t.Fatalf("set address: %v", err)
+		}
+		if err := RDMSet(ctx, "127.0.0.1", 0, fx[2].UID, "label", "Wash palco"); err != nil {
+			t.Fatalf("set label: %v", err)
+		}
+		f, err := RDMInfo(ctx, "127.0.0.1", 0, fx[2].UID)
+		if err != nil || f.Address != 101 || f.Label != "Wash palco" {
+			t.Errorf("after set: %+v %v", f, err)
+		}
+		if err := RDMSet(ctx, "127.0.0.1", 0, fx[2].UID, "address", "600"); err == nil {
+			t.Error("address 600 should be refused")
+		}
 	})
 }

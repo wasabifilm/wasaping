@@ -40,6 +40,18 @@ jobs:
         run: |
           GOOS=darwin go vet ./...
           GOOS=linux GOARCH=arm64 go vet ./...
+      # The .deb is built without dpkg-deb: check it with the real dpkg.
+      - if: runner.os == 'Linux'
+        name: .deb package
+        run: |
+          make deb VERSION=v0.0.0-ci
+          dpkg-deb --info dist/wasaping-linux-amd64.deb
+          dpkg-deb --contents dist/wasaping-linux-amd64.deb
+          sudo dpkg -i dist/wasaping-linux-amd64.deb
+          wasaping version
+          getent passwd wasaping
+          systemctl cat wasaping
+          sudo dpkg --purge wasaping
 
   # macOS on its own: its runners can stay queued for a long time, and a
   # release must not wait for this job (it runs the same checks itself).

@@ -23,16 +23,22 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 	for k := range ifs {
 		ifs[k].Network = clampNetwork(ifs[k])
 	}
+	ui, helper, app := uiMode.Load(), helperState.Load(), appModeOn
+	remoteWeb := isRemoteWeb(r)
+	if remoteWeb { // from another computer: an ordinary browser tab
+		ui, helper, app = "browser", "notneeded", false
+	}
 	writeJSON(w, map[string]any{
+		"remote":        remoteWeb,
 		"version":       version,
 		"interfaces":    ifs,
 		"defaultTarget": def,
 		"allTargets":    localScanTargets(),
 		"hasOUI":        scanner.HasOUI(),
 		"os":            runtime.GOOS,
-		"app":           appModeOn,
-		"ui":            uiMode.Load(),
-		"helper":        helperState.Load(),
+		"app":           app,
+		"ui":            ui,
+		"helper":        helper,
 		"snmp":          firstNonEmpty(loadSettings().SNMPCommunity, "public"),
 	})
 }

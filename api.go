@@ -15,6 +15,30 @@ import (
 // newHandler builds the server for the page. public: listening on the
 // network (-addr 0.0.0.0); allowed: the Host values accepted otherwise.
 func newHandler(public bool, allowedHosts map[string]bool, quit func()) http.Handler {
+	mux := apiMux(quit)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Block DNS rebinding: only answer requests addressed to localhost.
+		if !public && !allowedHosts[r.Host] {
+			http.Error(w, "host non consentito", http.StatusForbidden)
+			return
+		}
+		// Block other websites open in the browser from driving the API.
+		if crossSite(r) {
+			http.Error(w, "richiesta da un altro sito non consentita", http.StatusForbidden)
+			return
+		}
+		// Reachable from the network (-addr 0.0.0.0): what acts on this
+		// computer (files, password dialog, quitting, archive) stays local.
+		if public && localOnly[r.URL.Path] && !fromLoopback(r) {
+			http.Error(w, "consentito solo da questo computer", http.StatusForbidden)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+// apiMux has the page and every route, without the filter.
+func apiMux(quit func()) *http.ServeMux {
 	static, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(static)))
@@ -43,8 +67,12 @@ func newHandler(public bool, allowedHosts map[string]bool, quit func()) http.Han
 	mux.HandleFunc("/api/lang", handleLang)
 	mux.HandleFunc("/api/rdm", handleRDM)
 	mux.HandleFunc("/api/rdm/identify", handleRDMIdentify)
+	mux.HandleFunc("/api/rdm/set", handleRDMSet)
+	mux.HandleFunc("/api/webaccess", handleWebAccess)
 	mux.HandleFunc("/api/preshow", handlePreshow)
 	mux.HandleFunc("/api/showreport", handleShowReport)
+	mux.HandleFunc("/api/diag", handleDiag)
+	mux.HandleFunc("/api/compare", handleCompare)
 	mux.HandleFunc("/api/universe", handleUniverse)
 	mux.HandleFunc("/api/alerts", handleAlerts)
 	mux.HandleFunc("/api/update/install", handleUpdateInstall)
@@ -62,33 +90,14 @@ func newHandler(public bool, allowedHosts map[string]bool, quit func()) http.Han
 		w.WriteHeader(http.StatusNoContent)
 		go func() { time.Sleep(200 * time.Millisecond); quit() }()
 	})
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Block DNS rebinding: only answer requests addressed to localhost.
-		if !public && !allowedHosts[r.Host] {
-			http.Error(w, "host non consentito", http.StatusForbidden)
-			return
-		}
-		// Block other websites open in the browser from driving the API.
-		if crossSite(r) {
-			http.Error(w, "richiesta da un altro sito non consentita", http.StatusForbidden)
-			return
-		}
-		// Reachable from the network (-addr 0.0.0.0): what acts on this
-		// computer (files, password dialog, quitting, archive) stays local.
-		if public && localOnly[r.URL.Path] && !fromLoopback(r) {
-			http.Error(w, "consentito solo da questo computer", http.StatusForbidden)
-			return
-		}
-		mux.ServeHTTP(w, r)
-	})
+	return mux
 }
 
 // localOnly are the endpoints that change this computer, not just look at
 // the network.
 var localOnly = map[string]bool{
 	"/api/save": true, "/api/helper": true, "/api/quit": true, "/api/notify": true,
-	"/api/device": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/venue": true, "/api/switchports": true, "/api/update": true, "/api/lang": true, "/api/universe": true, "/api/alerts": true, "/api/rdm": true, "/api/rdm/identify": true, "/api/preshow": true, "/api/update/install": true,
+	"/api/device": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/venue": true, "/api/switchports": true, "/api/update": true, "/api/lang": true, "/api/universe": true, "/api/alerts": true, "/api/rdm": true, "/api/rdm/identify": true, "/api/rdm/set": true, "/api/preshow": true, "/api/diag": true, "/api/compare": true, "/api/update/install": true, "/api/webaccess": true,
 }
 
 func fromLoopback(r *http.Request) bool {

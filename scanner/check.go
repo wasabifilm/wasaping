@@ -49,7 +49,7 @@ func Check(ctx context.Context, ips []string, knownPorts map[string][]int) []Che
 			}
 			actx, acancel := context.WithTimeout(ctx, time.Second)
 			defer acancel()
-			readUntil(actx, c, func(b []byte, from *net.UDPAddr) {
+			readUntil(actx, c, "artnet", func(b []byte, from *net.UDPAddr) {
 				if parseArtPollReply(b) != nil {
 					ip := from.IP.String()
 					if rep := net.IP(b[10:14]).String(); rep != "0.0.0.0" {

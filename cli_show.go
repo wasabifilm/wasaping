@@ -81,6 +81,35 @@ func runPreshowCLI(ctx context.Context, args []string) error {
 }
 
 func runRDMCLI(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "set" {
+		// wasaping rdm set <node> <universe> <uid> address|mode|label <value> [-y]
+		if len(args) < 6 {
+			return fmt.Errorf(TC("uso: wasaping rdm set <IP nodo> <universo> <UID> address|mode|label <valore> [-y]", "usage: wasaping rdm set <node IP> <universe> <UID> address|mode|label <value> [-y]"))
+		}
+		u, err := strconv.Atoi(args[2])
+		if err != nil {
+			return err
+		}
+		uid := strings.ToUpper(args[3])
+		before, err := scanner.RDMInfo(ctx, args[1], u, uid)
+		if err != nil {
+			return err
+		}
+		fmt.Printf(TC("%s (%s %s): %s da %q a %q\n", "%s (%s %s): %s from %q to %q\n"), before.Label, before.Maker, before.Model, args[4], rdmField(before, args[4]), args[5])
+		if !(len(args) > 6 && args[6] == "-y") {
+			fmt.Print(TC("Cambia davvero l'apparecchio. Confermi? [s/N] ", "This really changes the fixture. Confirm? [y/N] "))
+			var ans string
+			fmt.Scanln(&ans)
+			if a := strings.ToLower(ans); a != "s" && a != "si" && a != "sì" && a != "y" && a != "yes" {
+				return fmt.Errorf(TC("annullato", "cancelled"))
+			}
+		}
+		if _, err := rdmChange(ctx, args[1], u, uid, args[4], args[5]); err != nil {
+			return err
+		}
+		fmt.Println(TC("✓ cambiato e verificato", "✓ changed and verified"))
+		return nil
+	}
 	if len(args) > 0 && args[0] == "identify" {
 		// wasaping rdm identify <node> <universe> <uid> [off]
 		if len(args) < 4 {
@@ -314,6 +343,14 @@ func runReportCLI(args []string) error {
 				still = TC(" (ancora giù)", " (still down)")
 			}
 			fmt.Fprintf(tw, "%s%s\t%d\t%s\t%s\n", d.Name, still, d.Drops, shortDur(d.DownTotal), shortDur(d.Longest))
+		}
+		tw.Flush()
+	}
+	if len(rep.RTT) > 0 {
+		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, TC("\nTEMPI DI RISPOSTA\tMEDIA\tMASSIMO\tCONTROLLI SENZA RISPOSTA", "\nRESPONSE TIMES\tAVERAGE\tMAXIMUM\tCHECKS WITHOUT ANSWER"))
+		for _, s := range rep.RTT {
+			fmt.Fprintf(tw, "%s\t%.0f ms\t%d ms\t%.1f%%\n", s.Name, s.Avg, s.Max, s.Loss)
 		}
 		tw.Flush()
 	}

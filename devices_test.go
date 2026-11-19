@@ -170,7 +170,57 @@ func TestShowReport(t *testing.T) {
 	if cl5.Drops != 2 || cl5.DownTotal != 17 || cl5.Longest != 12 || cl5.StillDown {
 		t.Errorf("CL5: %+v", cl5)
 	}
+	base := time.Now().Add(-time.Hour)
+	var samples []rttSample
+	for i := 0; i < 1000; i++ {
+		v := int64(2)
+		if i == 550 {
+			v = 90
+		}
+		if i%100 == 0 {
+			v = -1
+		}
+		samples = append(samples, rttSample{base.Add(time.Duration(i) * time.Second), "CL5-FOH", "10.0.0.30", v})
+	}
+	appendRTTLog(samples)
+	rtt := readRTT(base.Add(-time.Minute))
+	if len(rtt) != 1 || rtt[0].Max != 90 || rtt[0].Loss != 1 || len(rtt[0].Points) > 400 {
+		t.Errorf("rtt %+v", rtt)
+	}
+	worst := false
+	for _, p := range rtt[0].Points {
+		if p[1] == 90 {
+			worst = true
+		}
+	}
+	if !worst {
+		t.Error("thinning lost the worst value")
+	}
 	if at, ok := parseSince("18:00", time.Date(2026, 11, 19, 1, 0, 0, 0, time.Local)); !ok || at.Day() != 18 || at.Hour() != 18 {
 		t.Errorf("since 18:00 after midnight: %v", at)
+	}
+}
+
+func TestCompare(t *testing.T) {
+	before := Snapshot{Devices: []SnapDev{{Key: "a", IP: "10.0.0.1", Model: "X"}, {Key: "b", IP: "10.0.0.2"}, {Key: "c", IP: "10.0.0.3", Model: "Y"}}}
+	now := Snapshot{Devices: []SnapDev{{Key: "a", IP: "10.0.0.1", Model: "X"}, {Key: "b", IP: "10.0.0.9"}, {Key: "c", IP: "10.0.0.3", Model: "Z"}, {Key: "d", IP: "10.0.0.4"}}}
+	ch, same := compareSnapshots(before, now, "it")
+	kinds := map[string]int{}
+	for _, c := range ch {
+		kinds[c.Kind]++
+	}
+	if same != 1 || kinds["ip"] != 1 || kinds["changed"] != 1 || kinds["new"] != 1 || kinds["missing"] != 0 {
+		t.Errorf("same %d kinds %v", same, kinds)
+	}
+	f := func(uid string, addr int, pers string) scanner.Fixture {
+		return scanner.Fixture{UID: uid, Label: uid, Address: addr, Personality: pers}
+	}
+	fc := compareFixtures([]scanner.Fixture{f("A", 1, "1/2"), f("B", 40, "2/3")}, []scanner.Fixture{f("A", 1, "2/2"), f("C", 80, "1/1")}, "it")
+	got := map[string]string{}
+	for _, c := range fc {
+		got[c.UID] += c.Detail + ";"
+	}
+	if got["A"] != "modalità 1/2 → 2/2;" || got["B"] != "non risponde più;" || got["C"] != "nuovo;" {
+		t.Errorf("fixtures %v", got)
 	}
 }

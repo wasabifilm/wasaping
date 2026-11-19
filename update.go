@@ -49,9 +49,11 @@ func newerVersion(tag, cur string) bool {
 	return false
 }
 
-func checkUpdates(ctx context.Context) {
+// checkUpdates asks GitHub for the latest release; force skips the "not
+// more than every 3 hours" rule (the "Check now" button).
+func checkUpdates(ctx context.Context, force bool) {
 	s := loadSettings()
-	if s.NoUpdateCheck || !strings.HasPrefix(version, "v") || time.Since(s.UpdateChecked) < 20*time.Hour {
+	if s.NoUpdateCheck || !strings.HasPrefix(version, "v") || (!force && time.Since(s.UpdateChecked) < 3*time.Hour) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
@@ -96,30 +98,34 @@ func updateLoop(ctx context.Context) {
 	case <-time.After(15 * time.Second): // not while the app is starting
 	}
 	for {
-		checkUpdates(ctx)
+		checkUpdates(ctx, false)
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(6 * time.Hour):
+		case <-time.After(3 * time.Hour):
 		}
 	}
 }
 
 // handleUpdate: GET says whether a newer version exists; POST {off: true}
-// turns the check off (and {off: false} back on).
+// turns the check off (and {off: false} back on); {check: true} asks GitHub now.
 func handleUpdate(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var req struct {
-			Off bool `json:"off"`
+			Off   bool `json:"off"`
+			Check bool `json:"check"`
 		}
 		json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req)
 		s := loadSettings()
 		s.NoUpdateCheck = req.Off
 		saveSettings(s)
+		if req.Check {
+			checkUpdates(r.Context(), true)
+		}
 	}
 	s := loadSettings()
 	writeJSON(w, map[string]any{
-		"current": version, "latest": s.LatestVersion, "url": s.LatestURL, "off": s.NoUpdateCheck,
+		"current": version, "latest": s.LatestVersion, "checked": s.UpdateChecked, "url": s.LatestURL, "off": s.NoUpdateCheck,
 		"newer":       !s.NoUpdateCheck && newerVersion(s.LatestVersion, version),
 		"can_install": canSelfUpdate() && s.LatestMacZip != "" && s.LatestSums != "",
 	})

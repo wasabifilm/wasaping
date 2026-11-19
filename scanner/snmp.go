@@ -290,7 +290,20 @@ var (
 	oidIfName     = parseOID("1.3.6.1.2.1.31.1.1.1.1")
 	oidIfAlias    = parseOID("1.3.6.1.2.1.31.1.1.1.18")
 	oidIfDescr    = parseOID("1.3.6.1.2.1.2.2.1.2")
+	// LLDP-MIB: neighbors seen on each port (switches, access points, phones…)
+	oidLldpLocPortDesc = parseOID("1.0.8802.1.1.2.1.3.7.1.4") // .localPort
+	oidLldpLocPortID   = parseOID("1.0.8802.1.1.2.1.3.7.1.3")
+	oidLldpRemPortID   = parseOID("1.0.8802.1.1.2.1.4.1.1.7") // .timeMark.localPort.index
+	oidLldpRemPortDesc = parseOID("1.0.8802.1.1.2.1.4.1.1.8")
+	oidLldpRemSysName  = parseOID("1.0.8802.1.1.2.1.4.1.1.9")
 )
+
+// LLDPNeighbor is a device announcing itself on a switch port.
+type LLDPNeighbor struct {
+	LocalPort  string `json:"local_port"`
+	Name       string `json:"name"`
+	RemotePort string `json:"remote_port,omitempty"`
+}
 
 // SwitchInfo is a managed switch that answered.
 type SwitchInfo struct {
@@ -298,6 +311,9 @@ type SwitchInfo struct {
 	Name  string `json:"name,omitempty"`
 	Descr string `json:"descr,omitempty"`
 	MACs  int    `json:"macs"` // addresses in its forwarding table
+	// Ports: addresses seen per port (many = a link to another switch).
+	Ports     map[string]int `json:"ports,omitempty"`
+	Neighbors []LLDPNeighbor `json:"neighbors,omitempty"`
 }
 
 // SwitchPort is where a MAC address is connected.
@@ -375,9 +391,65 @@ func SwitchPorts(ctx context.Context, candidates []string, community string) ([]
 			for _, p := range macPort {
 				perPort[p]++
 			}
+			portName := func(bp int64) string {
+				ifi, ok := portIf[bp]
+				if !ok {
+					ifi = bp
+				}
+				return firstNonEmpty(ifName[ifi], "porta "+strconv.FormatInt(bp, 10))
+			}
+			ports := map[string]int{}
+			for bp, n := range perPort {
+				ports[portName(bp)] = n
+			}
+			// LLDP neighbors, by local port number.
+			locName := map[uint32]string{}
+			for _, v := range s.walk(ctx, oidLldpLocPortDesc, 2000) {
+				locName[v.oid[len(v.oid)-1]] = v.str()
+			}
+			for _, v := range s.walk(ctx, oidLldpLocPortID, 2000) {
+				if locName[v.oid[len(v.oid)-1]] == "" {
+					locName[v.oid[len(v.oid)-1]] = v.str()
+				}
+			}
+			type remKey struct{ port, idx uint32 }
+			rem := map[remKey]*LLDPNeighbor{}
+			get := func(v varbind, base oid) *LLDPNeighbor {
+				idx := v.oid[len(base):]
+				if len(idx) < 3 {
+					return nil
+				}
+				k := remKey{idx[1], idx[2]}
+				if rem[k] == nil {
+					rem[k] = &LLDPNeighbor{LocalPort: firstNonEmpty(locName[idx[1]], "porta "+strconv.Itoa(int(idx[1])))}
+				}
+				return rem[k]
+			}
+			for _, v := range s.walk(ctx, oidLldpRemSysName, 2000) {
+				if n := get(v, oidLldpRemSysName); n != nil {
+					n.Name = v.str()
+				}
+			}
+			for _, v := range s.walk(ctx, oidLldpRemPortDesc, 2000) {
+				if n := get(v, oidLldpRemPortDesc); n != nil {
+					n.RemotePort = v.str()
+				}
+			}
+			for _, v := range s.walk(ctx, oidLldpRemPortID, 2000) {
+				if n := get(v, oidLldpRemPortID); n != nil && n.RemotePort == "" {
+					n.RemotePort = v.str()
+				}
+			}
+			var neighbors []LLDPNeighbor
+			for _, n := range rem {
+				if n.Name != "" || n.RemotePort != "" {
+					neighbors = append(neighbors, *n)
+				}
+			}
+			sort.Slice(neighbors, func(i, j int) bool { return neighbors[i].LocalPort < neighbors[j].LocalPort })
 			mu.Lock()
 			defer mu.Unlock()
-			switches = append(switches, SwitchInfo{IP: ip, Name: name, Descr: descr, MACs: len(macPort)})
+			switches = append(switches, SwitchInfo{IP: ip, Name: name, Descr: descr, MACs: len(macPort), Ports: ports, Neighbors: neighbors})
 			label := firstNonEmpty(name, ip)
 			for mac, bp := range macPort {
 				ifi, ok := portIf[bp]

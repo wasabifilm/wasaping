@@ -41,7 +41,7 @@ func upnpDiscover(ctx context.Context, wait time.Duration) map[string]*upnpInfo 
 	c.WriteToUDP([]byte(msg), dst)
 
 	locations := map[string]string{} // ip -> description URL
-	readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
+	readUntil(ctx, c, "ssdp", func(b []byte, from *net.UDPAddr) {
 		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(b)), nil)
 		if err != nil {
 			return
@@ -95,7 +95,9 @@ func fetchUPnP(ctx context.Context, client *http.Client, loc string) *upnpInfo {
 			ModelNumber  string `xml:"modelNumber"`
 		} `xml:"device"`
 	}
-	if err := xml.NewDecoder(io.LimitReader(resp.Body, 256<<10)).Decode(&d); err != nil {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+	diag("upnp-xml", req.URL.Host, body)
+	if err := xml.NewDecoder(bytes.NewReader(body)).Decode(&d); err != nil {
 		return nil
 	}
 	t := d.Device.DeviceType // urn:schemas-upnp-org:device:MediaRenderer:1

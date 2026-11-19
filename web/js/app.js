@@ -301,7 +301,8 @@ $("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updB
 $("setBtn").onclick = settingsView;
 async function settingsView() {
   const get = u => fetch(u).then(r => r.json()).catch(() => ({}));
-  const [bg, rem, upd, login, alerts, info] = await Promise.all([get("api/bg"), get("api/remote"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info")]);
+  const [bg, rem, upd, login, alerts, info, wa] = await Promise.all([get("api/bg"), get("api/remote"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info"), get("api/webaccess")]);
+  const waInfo = w => w.on ? `Da un altro computer apri <b class="nt">${esc(w.url)}</b> e inserisci la password. Il browser avviserà che il certificato non è verificato: è normale, l'ha creato wasaping. Impronta SHA-256: <span class="mono nt" style="font-size:11px;word-break:break-all">${esc(w.fingerprint || "")}</span>` : "Tutta l'interfaccia, anche le modifiche, da un altro computer: HTTPS e password.";
   const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}"${String(k) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   openSheet("Impostazioni", `<div class="set">
     <b>Lingua</b><div class="opt">${sel("sLang", [["it", "Italiano"], ["en", "English"]], LANG)}</div>
@@ -311,10 +312,19 @@ async function settingsView() {
       <input id="sOSC" placeholder="OSC: 192.168.1.20:53000" value="${esc(alerts.osc || "")}" style="width:220px" spellcheck="false">
       <input id="sOSCAddr" placeholder="/wasaping" value="${esc(alerts.osc_address || "")}" style="width:140px" spellcheck="false">
       <input id="sHook" placeholder="Indirizzo web (webhook): https://…" value="${esc(alerts.webhook || "")}" style="flex:1 1 260px" spellcheck="false">
-      <button id="sAlertSave">Salva</button><button id="sAlertTest">Prova</button>
       <span class="tag">Quando un dispositivo o un universo critico cade o torna, wasaping manda un messaggio OSC (a QLab, a una console, a un media server) e/o chiama l'indirizzo web con i dettagli in JSON.</span></div>
+    <b>Notifiche sul telefono</b><div class="opt">
+      <input id="sNtfy" placeholder="ntfy: nome dell'argomento" value="${esc(alerts.ntfy || "")}" style="width:240px" spellcheck="false">
+      <input id="sTGToken" placeholder="Telegram: token del bot" value="${esc((alerts.telegram || "").split("|")[0])}" style="width:240px" spellcheck="false">
+      <input id="sTGChat" placeholder="id della chat" value="${esc((alerts.telegram || "").split("|")[1] || "")}" style="width:130px" spellcheck="false">
+      <input id="sSlack" placeholder="Slack: https://hooks.slack.com/…" value="${esc(alerts.slack || "")}" style="flex:1 1 260px" spellcheck="false">
+      <button id="sAlertSave">Salva</button><button id="sAlertTest">Prova</button>
+      <span class="tag">Il modo più semplice è ntfy: installa l'app ntfy sul telefono, iscriviti a un argomento con un nome difficile da indovinare e scrivi lo stesso nome qui. Per Telegram: crea un bot con @BotFather e scrivi qui il suo token e l'id della chat. Per Slack: un «incoming webhook» del canale.</span></div>
     <b>Monitor su iPad o telefono</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sRemote"${rem.on ? " checked" : ""}> attivo</label><span class="tag" id="sRemoteInfo">${rem.on ? `Apri <b>${esc(rem.url)}</b> e inserisci il PIN <b>${esc(rem.pin)}</b>.` : "Sola lettura, protetto da un PIN."}</span></div>
-    <b>Aggiornamenti</b><div class="opt"><span>wasaping ${esc(upd.current || "")}</span>${upd.newer ? `<button class="primary" id="sUpdNow">Aggiorna a ${esc(upd.latest)}</button>` : ""}<label class="check" style="margin:0"><input type="checkbox" id="sUpdCheck"${upd.off ? "" : " checked"}> controlla le nuove versioni</label></div>
+    ${info.remote ? `<b>Accesso dalla rete</b><div class="opt"><span>Sei collegato da un altro computer.</span><form method="post" action="/logout" style="margin:0"><button>Disconnetti</button></form></div>` : `<b>Accesso completo dalla rete</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sWeb"${wa.on ? " checked" : ""}> attivo</label>
+      <input type="password" id="sWebPw" placeholder="${wa.has_password ? "nuova password (facoltativa)" : "password (almeno 8 caratteri)"}" autocomplete="new-password" style="width:230px"><button id="sWebPwSave">Salva password</button>
+      <span class="tag" id="sWebInfo">${waInfo(wa)}</span></div>`}
+    <b>Aggiornamenti</b><div class="opt"><span>wasaping ${esc(upd.current || "")}</span>${upd.newer ? `<button class="primary" id="sUpdNow">Aggiorna a ${esc(upd.latest)}</button>` : ""}<label class="check" style="margin:0"><input type="checkbox" id="sUpdCheck"${upd.off ? "" : " checked"}> controlla le nuove versioni</label><button id="sUpdNowCheck">Controlla ora</button><span class="tag" id="sUpdInfo"></span></div>
     ${login.available ? `<b>Apri al login</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sLogin"${login.enabled ? " checked" : ""}> apri wasaping all'accesso, nella barra dei menu</label></div>` : ""}
     ${info.helper && info.helper !== "notneeded" ? `<b>Indirizzi MAC (macOS)</b><div class="opt">${info.helper === "installed" ? '<span>aiuto di sistema attivo</span><button id="sHelperOff">Disinstalla</button>' : '<span>nascosti da macOS</span><button id="sHelperOn">Installa l\'aiuto</button>'}</div>` : ""}
     <b>Community SNMP</b><div class="opt"><input id="sSNMP" value="${esc(snmpCommunity)}" style="width:160px" spellcheck="false"><span class="tag">Per leggere dagli switch su quale porta è ogni dispositivo.</span></div>
@@ -322,11 +332,29 @@ async function settingsView() {
   $("sLang").onchange = () => { try { localStorage.setItem("wasaping.lang", $("sLang").value); } catch {} location.reload(); };
   $("sTheme").onchange = () => { theme = $("sTheme").value; try { localStorage.setItem("wasaping.theme", theme); } catch {} applyTheme(theme); };
   $("sRepeat").onchange = () => { $("repeat").value = $("sRepeat").value; $("repeat").onchange(); };
-  $("sAlertSave").onclick = () => post("api/alerts", {osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim()}).then(() => toast("Allarmi salvati.")).catch(e => toast("Non salvato: " + e.message));
-  $("sAlertTest").onclick = () => post("api/alerts", {osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim(), test: true}).then(r => r.json()).then(d => toast(d.result || "Inviato.")).catch(e => toast("Errore: " + e.message));
+  const alertForm = () => ({osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim(), ntfy: $("sNtfy").value.trim(), slack: $("sSlack").value.trim(),
+    telegram: $("sTGToken").value.trim() || $("sTGChat").value.trim() ? $("sTGToken").value.trim() + "|" + $("sTGChat").value.trim() : ""});
+  $("sAlertSave").onclick = () => post("api/alerts", alertForm()).then(r => r.json()).then(d => { $("sNtfy").value = d.ntfy || ""; toast("Allarmi salvati."); }).catch(e => toast("Non salvato: " + e.message));
+  $("sAlertTest").onclick = () => post("api/alerts", {...alertForm(), test: true}).then(r => r.json()).then(d => toast(d.result || "Niente da provare: scrivi almeno una destinazione.")).catch(e => toast("Errore: " + e.message));
   $("sRemote").onchange = () => post("api/remote", {on: $("sRemote").checked}).then(r => r.json()).then(r => {
     $("sRemoteInfo").innerHTML = r.on ? `Apri <b>${esc(r.url)}</b> e inserisci il PIN <b>${esc(r.pin)}</b>.` : "Sola lettura, protetto da un PIN.";
   }).catch(e => { toast("Non attivato: " + e.message); $("sRemote").checked = false; });
+  const webSet = body => post("api/webaccess", body).then(r => r.json()).then(w => { $("sWeb").checked = w.on; $("sWebInfo").innerHTML = waInfo(w); $("sWebPw").value = ""; return w; });
+  if ($("sWeb")) {
+    $("sWeb").onchange = () => webSet({on: $("sWeb").checked, password: $("sWebPw").value}).catch(e => { toast("Non attivato: " + e.message); $("sWeb").checked = false; });
+    $("sWebPwSave").onclick = () => { if (!$("sWebPw").value) { toast("Scrivi la password"); return; } webSet({on: $("sWeb").checked, password: $("sWebPw").value}).then(() => toast("Password salvata.")).catch(e => toast("Non salvata: " + e.message)); };
+  }
+  $("sUpdNowCheck").onclick = async () => {
+    $("sUpdNowCheck").disabled = true;
+    try {
+      const u = await post("api/update", {off: !$("sUpdCheck").checked, check: true}).then(r => r.json());
+      if (u.off) $("sUpdInfo").textContent = "Il controllo è spento.";
+      else if (!u.current.startsWith("v")) $("sUpdInfo").textContent = "Versione di sviluppo: non si aggiorna.";
+      else if (u.newer) { settingsView(); checkUpdate(); return; }
+      else $("sUpdInfo").textContent = `Hai già l'ultima versione (${u.latest || u.current}).`;
+    } catch (e) { $("sUpdInfo").textContent = "Controllo non riuscito: " + e.message; }
+    $("sUpdNowCheck").disabled = false;
+  };
   $("sUpdCheck").onchange = () => post("api/update", {off: !$("sUpdCheck").checked});
   if ($("sUpdNow")) $("sUpdNow").onclick = installUpdate;
   if ($("sLogin")) $("sLogin").onchange = () => post("api/login", {enabled: $("sLogin").checked}).catch(e => { toast(e.message); $("sLogin").checked = !$("sLogin").checked; });
@@ -480,9 +508,57 @@ function drawDMX(unis) {
     `<i title="canale ${i + 1}: ${v} (${Math.round(v / 2.55)}%)" style="background:${v ? `rgba(129,215,66,${0.15 + 0.85 * v / 255})` : ""}"></i>`).join("")}</div>` : "";
 }
 
+// What changed since last time on this network (a snapshot per session).
+async function compareView(withIdx) {
+  if (needOneNet()) return;
+  let r;
+  try { r = await fetch(`api/compare?net=${encodeURIComponent(activeNet)}&lang=${LANG}${withIdx !== undefined ? "&with=" + withIdx : ""}`).then(x => x.json()); } catch { return; }
+  const snaps = r.snapshots || [];
+  const fmt = t => new Date(t).toLocaleString(LANG === "en" ? "en-GB" : "it", {day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"});
+  if (snaps.length < 2) {
+    openSheet("Confronta con l'ultima volta", "<p>Serve almeno un'altra sessione su questa rete: wasaping tiene una fotografia della rete per ogni sessione di lavoro (scansioni a più di un'ora di distanza). La prossima volta che torni in questo locale potrai vedere cosa è cambiato.</p>");
+    return;
+  }
+  const label = {new: "nuovo", missing: "non c'è più", ip: "IP cambiato", changed: "cambiato"};
+  const cls = {new: "warn", missing: "bad", ip: "warn", changed: "warn"};
+  const sel = snaps.slice(0, -1).map((t, i) => `<option value="${i}"${new Date(t).getTime() === new Date(r.before).getTime() ? " selected" : ""}>${esc(fmt(t))}</option>`).reverse().join("");
+  openSheet("Confronta con l'ultima volta", `<div class="row"><span>Oggi (${esc(fmt(r.now))}) confrontato con</span><select id="cmpWith">${sel}</select></div>
+    <div class="sum"><span class="pill ok">${r.same} uguali</span>${["new", "missing", "ip", "changed"].map(k => { const n = r.changes.filter(c => c.kind === k).length; return n ? `<span class="pill ${cls[k]}">${n} ${label[k]}</span>` : ""; }).join("")}</div>
+    ${r.changes.length ? `<div class="wrap" style="margin:0"><table><tbody>${r.changes.map(c => { const d = c.kind === "missing" ? c.before : c.now;
+      return `<tr><td class="st-${cls[c.kind]}">${esc(label[c.kind])}</td><td>${kindIcon(d.kind)}<b class="nt">${esc(d.name || d.key)}</b></td><td class="mono">${esc(d.ip)}</td><td class="nt">${esc(d.model || "")}</td><td class="nt">${esc(c.detail || "")}</td></tr>`; }).join("")}</tbody></table></div>` : "<p>Nessuna differenza: la rete è come allora.</p>"}`);
+  $("cmpWith").onchange = () => compareView(+$("cmpWith").value);
+}
+
+// Network map: each switch with its ports and what is on them.
+function switchMap(switches) {
+  const byName = new Map(switches.map(s => [(s.name || s.ip).toLowerCase(), s]));
+  const links = [];
+  const cards = switches.map(sw => {
+    const ports = new Map();
+    for (const [p, n] of Object.entries(sw.ports || {})) ports.set(p, {macs: n, devs: [], nb: []});
+    for (const h of hosts) if (h.swport && h.swport.switch_ip === sw.ip) {
+      if (!ports.has(h.swport.port)) ports.set(h.swport.port, {macs: 1, devs: [], nb: []});
+      ports.get(h.swport.port).devs.push(h);
+    }
+    for (const n of sw.neighbors || []) {
+      if (!ports.has(n.local_port)) ports.set(n.local_port, {macs: 0, devs: [], nb: []});
+      ports.get(n.local_port).nb.push(n);
+      if (byName.has((n.name || "").toLowerCase())) links.push(`${sw.name || sw.ip} ${n.local_port} ↔ ${n.name} ${n.remote_port || ""}`);
+    }
+    const rows = [...ports.entries()].sort((a, b) => a[0].localeCompare(b[0], "it", {numeric: true})).map(([p, v]) => {
+      const what = v.nb.length ? v.nb.map(n => `<span class="nt">↔ <b>${esc(n.name || "?")}</b>${n.remote_port ? " " + esc(n.remote_port) : ""}</span>`).join("<br>")
+        : v.devs.length ? v.devs.map(h => `<span class="nt">${kindIcon(h.kind)}${esc(label(h) || h.mac)} <span class="muted mono">${esc(h.ip)}</span></span>`).join("<br>")
+        : v.macs > 1 ? `<span class="muted">${v.macs} indirizzi (collegamento)</span>` : `<span class="muted">${v.macs} indirizzo</span>`;
+      return `<tr><td class="mono">${esc(p)}</td><td>${what}</td></tr>`;
+    }).join("");
+    return `<div class="swcard"><div class="swh"><b class="nt">${esc(sw.name || sw.ip)}</b> <span class="muted">${esc(sw.ip)}</span><div class="sub nt">${esc((sw.descr || "").slice(0, 80))}</div></div><table><tbody>${rows}</tbody></table></div>`;
+  }).join("");
+  return `${links.length ? `<h3>Collegamenti tra switch</h3><p class="nt">${[...new Set(links)].map(esc).join("<br>")}</p>` : ""}<div class="swmap">${cards}</div>`;
+}
+
 // Switch ports: which port of which managed switch each device is on.
 function switchView() {
-  openSheet("Porte switch", `<p>wasaping chiede agli switch gestiti (Luminex, Cisco, Netgear, Ubiquiti, MikroTik…) su quale porta si trova ogni dispositivo, via SNMP in sola lettura.</p>
+  openSheet("Mappa della rete", `<p>wasaping chiede agli switch gestiti (Luminex, Cisco, Netgear, Ubiquiti, MikroTik…) su quale porta si trova ogni dispositivo, via SNMP in sola lettura.</p>
     <p class="muted">Sullo switch deve essere attivo SNMP v2c con una community di lettura (spesso <b>public</b>).</p>
     <div class="row"><input id="swComm" value="${esc(snmpCommunity)}" style="width:180px" placeholder="community" title="Community SNMP di lettura"><button class="primary" id="swGo" ${hosts.length ? "" : "disabled"}>Cerca</button>${hosts.length ? "" : '<span class="muted">Fai prima una scansione.</span>'}</div>
     <div id="swOut"></div>`);
@@ -495,7 +571,7 @@ function switchView() {
       const rows = hosts.filter(h => h.swport).sort((a, b) => (a.swport.switch + a.swport.port).localeCompare(b.swport.switch + b.swport.port, "it", {numeric: true}));
       $("swOut").innerHTML = !d.switches || !d.switches.length
         ? "<p>Nessuno switch ha risposto. Controlla che SNMP sia attivo e la community giusta.</p>"
-        : `<p>${d.switches.map(x => `<b>${esc(x.name || x.ip)}</b> <span class="muted">${esc(x.ip)} · ${x.macs} indirizzi</span>`).join("<br>")}</p>
+        : switchMap(d.switches) + `<h3>Tutti i dispositivi</h3><p>${d.switches.map(x => `<b>${esc(x.name || x.ip)}</b> <span class="muted">${esc(x.ip)} · ${x.macs} indirizzi</span>`).join("<br>")}</p>
            <div class="wrap" style="margin:0"><table><thead><tr><th>Switch</th><th>Porta</th><th>Descrizione porta</th><th>Dispositivo</th><th>IP</th></tr></thead><tbody>
            ${rows.map(h => `<tr><td>${esc(h.swport.switch)}</td><td class="mono">${esc(h.swport.port)}</td><td class="nt">${esc(h.swport.alias || "")}</td><td class="nt"><b>${esc(label(h) || h.mac)}</b>${h.swport.shared > 1 ? ` <span class="muted" title="Su questa porta ci sono ${h.swport.shared} indirizzi: probabilmente un altro switch o un collegamento tra switch">· ${h.swport.shared} indirizzi</span>` : ""}</td><td class="mono">${esc(h.ip)}</td></tr>`).join("")}
            </tbody></table></div>`;
@@ -505,30 +581,89 @@ function switchView() {
   };
 }
 
-// RDM: the fixtures behind the Art-Net nodes, read-only.
+// RDM: the fixtures behind the Art-Net nodes; identify and, with two
+// confirmations, change address, mode and label.
 function rdmView() {
   const nodes = hosts.filter(h => h.artnet).length;
-  openSheet("Apparecchi RDM", `<p>wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. Solo lettura: non cambia niente sugli apparecchi.</p>
+  openSheet("Apparecchi RDM", `<p>wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. La ricerca non cambia niente sugli apparecchi; per cambiare indirizzo, modalità o etichetta c'è «Modifica», che chiede conferma.</p>
     <div class="row"><button class="primary" id="rdmGo" ${nodes ? "" : "disabled"}>Cerca apparecchi</button><span class="muted">${nodes ? `${nodes} nodi Art-Net nell'ultima scansione.` : "Nessun nodo Art-Net: fai prima una scansione."}</span></div>
     <div id="rdmOut"></div>`);
+  let fx = [], chHTML = "";
+  const overlaps = (a, b) => a !== b && a.universe === b.universe && a.address && b.address &&
+    a.address <= b.address + Math.max(b.footprint, 1) - 1 && b.address <= a.address + Math.max(a.footprint, 1) - 1;
+  const nodeName = ip => { const h = hosts.find(x => x.ip === ip); return h ? (label(h) || ip) : ip; };
+  const show = () => {
+    const clash = new Set();
+    for (const a of fx) for (const b of fx) if (overlaps(a, b)) { clash.add(a.uid); clash.add(b.uid); }
+    $("rdmOut").innerHTML = chHTML + (!fx.length ? "<p>Nessun apparecchio RDM ha risposto. Controlla che il nodo abbia l'RDM attivo sulle uscite.</p>" :
+      `<div class="sum"><span class="pill ok">${fx.length} apparecchi</span>${clash.size ? `<span class="pill bad">⚠ ${clash.size} con indirizzi sovrapposti</span>` : ""}</div>
+      <div id="rdmEdit"></div>
+      <div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Indirizzo</th><th>Canali</th><th>Etichetta</th><th>Produttore</th><th>Modello</th><th>Modalità</th><th>UID</th><th>Nodo</th><th></th></tr></thead><tbody>
+      ${fx.map((f, i) => `<tr${clash.has(f.uid) ? ' class="st-bad"' : ""}><td>${f.universe}</td><td class="mono">${f.address || "—"}${f.address && f.footprint > 1 ? "–" + (f.address + f.footprint - 1) : ""}</td><td>${f.footprint || ""}</td>
+        <td class="nt"><b>${esc(f.label || "")}</b></td><td class="nt">${esc(f.maker || "")}</td><td class="nt">${esc(f.model || "")}</td><td>${esc(f.personality || "")}</td><td class="mono">${esc(f.uid)}</td><td class="nt">${esc(nodeName(f.node))}</td>
+        <td style="white-space:nowrap"><button class="ident" data-uid="${esc(f.uid)}" data-node="${esc(f.node)}" data-uni="${f.universe}">Identifica</button> <button class="rdmEditBtn" data-i="${i}">Modifica</button></td></tr>`).join("")}
+      </tbody></table></div>`);
+    $("rdmOut").querySelectorAll("button.ident").forEach(b => b.onclick = () => identify(b));
+    $("rdmOut").querySelectorAll("button.rdmEditBtn").forEach(b => b.onclick = () => edit(+b.dataset.i));
+  };
+  // The edit box: step 1 fill in, step 2 read the summary and confirm.
+  const edit = i => {
+    const f = fx[i];
+    const [pers, count] = (f.personality || "").split("/").map(Number);
+    const box = $("rdmEdit");
+    box.innerHTML = `<div class="notice warn" style="display:block;margin:10px 0">
+      <p style="margin-top:0"><b>Modifica <span class="nt">${esc(f.label || f.uid)}</span></b> <span class="muted"><span class="nt">${esc([f.maker, f.model].filter(Boolean).join(" "))}</span> · universo ${f.universe}</span></p>
+      <div class="row" style="flex-wrap:wrap;gap:12px">
+        <label>Indirizzo DMX <input id="reAddr" type="number" min="1" max="512" value="${f.address || ""}" style="width:80px"></label>
+        ${count > 1 ? `<label>Modalità <select id="reMode">${Array.from({length: count}, (_, k) => `<option value="${k + 1}"${k + 1 === pers ? " selected" : ""}>${k + 1}</option>`).join("")}</select></label>` : ""}
+        <label>Etichetta <input id="reLabel" maxlength="32" value="${esc(f.label || "")}" class="nt"></label>
+      </div>
+      <div id="reSum"></div>
+      <div class="row"><button class="primary" id="reNext">Avanti</button><button id="reNo">Annulla</button></div></div>`;
+    box.scrollIntoView({block: "nearest"});
+    $("reNo").onclick = () => box.innerHTML = "";
+    $("reNext").onclick = () => {
+      const want = [];
+      const addr = +$("reAddr").value;
+      if (addr !== (f.address || 0)) {
+        if (!(addr >= 1 && addr <= 512)) { toast("L'indirizzo va da 1 a 512"); return; }
+        want.push(["address", String(addr), LANG === "en" ? `address ${f.address || "—"} → ${addr}` : `indirizzo ${f.address || "—"} → ${addr}`]);
+      }
+      if ($("reMode") && +$("reMode").value !== pers) want.push(["mode", $("reMode").value, LANG === "en" ? `mode ${pers} → ${$("reMode").value} (the channels may change)` : `modalità ${pers} → ${$("reMode").value} (i canali possono cambiare)`]);
+      const lab = $("reLabel").value.trim();
+      if (lab !== (f.label || "")) want.push(["label", lab, LANG === "en" ? `label “${f.label || ""}” → “${lab}”` : `etichetta «${f.label || ""}» → «${lab}»`]);
+      if (!want.length) { toast("Niente da cambiare"); return; }
+      const after = {...f, address: addr || f.address};
+      const hit = fx.filter(o => overlaps(after, o));
+      $("reSum").innerHTML = `<p><b>Sto per cambiare:</b></p><ul>${want.map(w => `<li class="nt">${esc(w[2])}</li>`).join("")}</ul>
+        ${hit.length ? `<p class="bad"><span>⚠ Il nuovo indirizzo si sovrappone a:</span> <span class="nt">${hit.map(o => esc(o.label || o.uid)).join(", ")}</span></p>` : ""}
+        <p>L'apparecchio cambia subito: se è in uso nello show, la console non lo comanderà più come prima. wasaping rilegge l'apparecchio per verificare e scrive la modifica nel registro.</p>
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="reOK"> Ho capito, cambia l'apparecchio</label>`;
+      $("reNext").textContent = "Cambia ora"; $("reNext").disabled = true;
+      $("reOK").onchange = () => $("reNext").disabled = !$("reOK").checked;
+      for (const id of ["reAddr", "reMode", "reLabel"]) if ($(id)) $(id).disabled = true;
+      $("reNext").onclick = async () => {
+        $("reNext").disabled = true; $("reNo").disabled = true;
+        try {
+          let nf = f;
+          for (const [field, value] of want) nf = await post("api/rdm/set", {node: f.node, universe: f.universe, uid: f.uid, field, value}).then(r => r.json());
+          fx[i] = {...f, ...nf};
+          show(); toast("✓ Cambiato e verificato");
+        } catch (e) {
+          $("reSum").insertAdjacentHTML("beforeend", `<p class="bad">Errore: ${esc(e.message)}</p>`);
+          $("reNo").disabled = false;
+        }
+      };
+    };
+  };
   $("rdmGo").onclick = async () => {
     $("rdmGo").disabled = true; $("rdmOut").innerHTML = "<p>Chiedo ai nodi… (può volerci qualche secondo per apparecchio)</p>";
     try {
-      const d = await post("api/rdm", {}).then(r => r.json());
-      const fx = d.fixtures || [];
-      // overlapping DMX addresses on the same universe
-      const clash = new Set();
-      for (const a of fx) for (const b of fx) if (a !== b && a.universe === b.universe && a.address && b.address &&
-        a.address <= b.address + Math.max(b.footprint, 1) - 1 && b.address <= a.address + Math.max(a.footprint, 1) - 1) { clash.add(a.uid); clash.add(b.uid); }
-      const nodeName = ip => { const h = hosts.find(x => x.ip === ip); return h ? (label(h) || ip) : ip; };
-      $("rdmOut").innerHTML = !fx.length ? "<p>Nessun apparecchio RDM ha risposto. Controlla che il nodo abbia l'RDM attivo sulle uscite.</p>" :
-        `<div class="sum"><span class="pill ok">${fx.length} apparecchi</span>${clash.size ? `<span class="pill bad">⚠ ${clash.size} con indirizzi sovrapposti</span>` : ""}</div>
-        <div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Indirizzo</th><th>Canali</th><th>Etichetta</th><th>Produttore</th><th>Modello</th><th>Modalità</th><th>UID</th><th>Nodo</th><th></th></tr></thead><tbody>
-        ${fx.map(f => `<tr${clash.has(f.uid) ? ' class="st-bad"' : ""}><td>${f.universe}</td><td class="mono">${f.address || "—"}${f.address && f.footprint > 1 ? "–" + (f.address + f.footprint - 1) : ""}</td><td>${f.footprint || ""}</td>
-          <td class="nt"><b>${esc(f.label || "")}</b></td><td class="nt">${esc(f.maker || "")}</td><td class="nt">${esc(f.model || "")}</td><td>${esc(f.personality || "")}</td><td class="mono">${esc(f.uid)}</td><td class="nt">${esc(nodeName(f.node))}</td>
-          <td><button class="ident" data-uid="${esc(f.uid)}" data-node="${esc(f.node)}" data-uni="${f.universe}">Identifica</button></td></tr>`).join("")}
-        </tbody></table></div>`;
-      $("rdmOut").querySelectorAll("button.ident").forEach(b => b.onclick = () => identify(b));
+      const d = await post(`api/rdm?lang=${LANG}`, {}).then(r => r.json());
+      fx = d.fixtures || [];
+      const changes = d.changes || [];
+      chHTML = d.previous ? (changes.length ? `<h3>Rispetto alla ricerca precedente</h3><p class="muted">${esc(new Date(d.previous).toLocaleString(LANG === "en" ? "en-GB" : "it"))}</p><ul class="warnlist">${changes.map(c => `<li><b class="nt">${esc(c.label)}</b> <span class="nt">${esc(c.detail)}</span></li>`).join("")}</ul>` : `<p class="muted">Nessun cambiamento rispetto alla ricerca precedente.</p>`) : "";
+      show();
     } catch (e) { $("rdmOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
     $("rdmGo").disabled = false;
   };
@@ -540,7 +675,7 @@ async function identify(b) {
   if (on && !identOK) {
     const note = document.createElement("div");
     note.className = "notice warn"; note.style.cssText = "display:flex;margin:10px 0";
-    note.innerHTML = `<span>«Identifica» fa lampeggiare l'apparecchio (o lo muove, se è una testa mobile). È l'unico comando che wasaping invia agli apparecchi, e non cambia nessuna impostazione. Durante uno show, usalo solo se sei sicuro.</span><span style="display:flex;gap:8px"><button class="primary" id="identYes">Ho capito, identifica</button><button id="identNo">Annulla</button></span>`;
+    note.innerHTML = `<span>«Identifica» fa lampeggiare l'apparecchio (o lo muove, se è una testa mobile). Non cambia nessuna impostazione. Durante uno show, usalo solo se sei sicuro.</span><span style="display:flex;gap:8px"><button class="primary" id="identYes">Ho capito, identifica</button><button id="identNo">Annulla</button></span>`;
     $("rdmOut").prepend(note);
     $("identNo").onclick = () => note.remove();
     $("identYes").onclick = () => { identOK = true; note.remove(); identify(b); };
@@ -588,6 +723,18 @@ async function preshow() {
   };
 }
 
+// A device's response times over the whole report period.
+function rttChart(s, since, until) {
+  const t0 = new Date(since).getTime() / 1000, t1 = new Date(until).getTime() / 1000, W = 760, H = 60;
+  const max = Math.max(5, ...s.points.filter(p => p[1] >= 0).map(p => p[1]));
+  const x = t => ((t - t0) / Math.max(1, t1 - t0) * W).toFixed(1);
+  const pts = s.points.filter(p => p[1] >= 0).map(p => `${x(p[0])},${(H - 4 - (H - 8) * p[1] / max).toFixed(1)}`).join(" ");
+  const lost = s.points.filter(p => p[1] < 0).map(p => `<rect x="${x(p[0])}" y="0" width="2" height="${H}" fill="#d63f3f" opacity=".7"/>`).join("");
+  return `<div class="rtt"><div><b class="nt">${esc(s.name)}</b> <span class="muted mono">${esc(s.ip || "")}</span> <span class="muted">media ${s.avg.toFixed(0)} ms · massimo ${s.max} ms · ${s.loss.toFixed(1)}% senza risposta</span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="rttsvg"><rect width="${W}" height="${H}" fill="none" stroke="var(--line)"/>${lost}<polyline points="${pts}" fill="none" stroke="#81d742" stroke-width="1.3"/>
+    <text x="4" y="12" font-size="10" fill="currentColor" opacity=".6">${max} ms</text></svg></div>`;
+}
+
 // End-of-show report, from the monitor log.
 async function showReportView() {
   const def = (() => { const d = new Date(Date.now() - 6 * 3600e3); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); })();
@@ -601,6 +748,7 @@ async function showReportView() {
       $("srOut").innerHTML = `<div class="verdict v-${r.drops ? "warn" : "ok"}" style="margin-top:12px"><b>${r.drops ? `${r.drops} cadute` : "Nessuna caduta"}</b><span>dalle ${esc(t(r.since))} alle ${esc(t(r.until))}</span></div>
         ${devs.length ? `<h3>Per dispositivo</h3><div class="wrap" style="margin:0"><table><thead><tr><th>Dispositivo</th><th>IP</th><th>Cadute</th><th>Tempo giù in tutto</th><th>Il più lungo</th></tr></thead><tbody>
           ${devs.map(d => `<tr><td class="nt"><b>${esc(d.name)}</b>${d.still_down ? ' <span class="badge off">ancora giù</span>' : ""}</td><td class="mono">${esc(d.ip || "")}</td><td>${d.drops}</td><td>${esc(fmtDur(d.down_total))}</td><td>${esc(fmtDur(d.longest))}</td></tr>`).join("")}</tbody></table></div>` : ""}
+        ${(r.rtt || []).length ? `<h3>Tempi di risposta</h3>${r.rtt.map(s => rttChart(s, r.since, r.until)).join("")}` : ""}
         ${ev.length ? `<h3>Cronologia</h3><div class="wrap" style="margin:0"><table><tbody>${ev.map(e => `<tr><td class="mono">${esc(t(e.at))}</td><td class="nt"><b>${esc(e.name)}</b></td><td class="${e.down ? "st-bad" : e.up ? "st-ok" : "st-warn"}">${esc(e.event)}${e.up ? " · " + esc(fmtDur(e.down_for)) : ""}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Nessun evento nel registro in questo periodo.</p>'}
         <div class="row"><button id="srPrint">Stampa o salva il report</button></div>`;
       $("srPrint").onclick = () => {

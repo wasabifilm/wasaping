@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/wasabifilm/wasaping/scanner"
 )
 
 // Devices, networks (venues), IP plan and settings that live on this computer.
@@ -15,13 +17,14 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Key      string `json:"key"`
-		Net      string `json:"net"`
-		Name     string `json:"name"`
-		Role     string `json:"role"`
-		Note     string `json:"note"`
-		Critical bool   `json:"critical"`
-		Forget   bool   `json:"forget"`
+		Key      string  `json:"key"`
+		Net      string  `json:"net"`
+		Name     string  `json:"name"`
+		Role     string  `json:"role"`
+		Note     string  `json:"note"`
+		Critical bool    `json:"critical"`
+		Forget   bool    `json:"forget"`
+		Kind     *string `json:"kind"` // set only to correct the type ("" = automatic)
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || req.Key == "" {
 		http.Error(w, "richiesta non valida", http.StatusBadRequest)
@@ -29,6 +32,18 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Name) > 200 || len(req.Role) > 200 || len(req.Note) > 2000 {
 		http.Error(w, "testo troppo lungo", http.StatusBadRequest)
+		return
+	}
+	if req.Kind != nil {
+		if *req.Kind != "" && !validKinds[*req.Kind] {
+			http.Error(w, "tipo sconosciuto", http.StatusBadRequest)
+			return
+		}
+		if !devices().SetKind(req.Net, req.Key, *req.Kind) {
+			http.Error(w, "dispositivo sconosciuto", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if req.Forget {
@@ -196,4 +211,11 @@ func handleVenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, v)
+}
+
+var validKinds = map[string]bool{
+	scanner.KindRouter: true, scanner.KindComputer: true, scanner.KindPhone: true, scanner.KindTablet: true,
+	scanner.KindPrinter: true, scanner.KindTV: true, scanner.KindSpeaker: true, scanner.KindNAS: true,
+	scanner.KindCamera: true, scanner.KindIoT: true, scanner.KindLightDesk: true, scanner.KindLighting: true,
+	scanner.KindAudio: true, scanner.KindVideo: true, scanner.KindProjector: true, scanner.KindSwitch: true,
 }

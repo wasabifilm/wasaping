@@ -221,6 +221,13 @@ func (m *monitor) check(ctx context.Context) {
 		}
 	}
 	m.checked = now
+	var samples []rttSample
+	for _, k := range m.order {
+		if d := m.devs[k]; d != nil && len(d.RTTs) > 0 {
+			samples = append(samples, rttSample{now, d.Name, d.IP, d.RTTs[len(d.RTTs)-1]})
+		}
+	}
+	go appendRTTLog(samples)
 	lostU, backU := m.checkShowLocked(now)
 	lost, back = append(lost, lostU...), append(back, backU...)
 	var downNames []string

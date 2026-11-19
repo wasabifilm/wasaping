@@ -36,6 +36,13 @@ func runBox(ctx context.Context, args []string) error {
 	fmt.Printf(TC("   Monitor su iPad o telefono: %s   PIN %s\n", "   Monitor on iPad or phone: %s   PIN %s\n"), remoteURL(*port), s.RemotePIN)
 	fmt.Printf(TC("   Interfaccia completa (dal tuo computer): ssh -L %d:127.0.0.1:%d UTENTE@IP-DEL-BOX, poi http://127.0.0.1:%d/\n",
 		"   Full interface (from your computer): ssh -L %d:127.0.0.1:%d USER@BOX-IP, then http://127.0.0.1:%d/\n"), boxUIPort, boxUIPort, boxUIPort)
+	if s.WebAccess && s.WebPasswordHash != "" {
+		port := s.WebPort
+		if port == 0 {
+			port = defaultWebPort
+		}
+		fmt.Printf(TC("   Interfaccia completa con password: %s\n", "   Full interface with password: %s\n"), webAccessURL(port))
+	}
 	fmt.Printf(TC("   Scansione ogni %d min, monitor ogni %d s.\n", "   Scan every %d min, monitor every %d s.\n"), *repeat, *every)
 	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
 		fmt.Println(TC("   Nota: per ascoltare il clock PTP su Linux servono i permessi per le porte basse (vedi docs/raspberry.md).",

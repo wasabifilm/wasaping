@@ -108,7 +108,7 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 			for i := 0; i < len(types); i += 12 {
 				c.WriteToUDP(dnsQuery(types[i:min(i+12, len(types))], 12), mcast)
 			}
-			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
+			readUntil(ctx, c, "mdns", func(b []byte, from *net.UDPAddr) {
 				ch <- msg{from: from.IP.String(), b: append([]byte(nil), b...)}
 			})
 		}()
@@ -121,7 +121,7 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 			for _, ip := range ips {
 				c.WriteToUDP(q, &net.UDPAddr{IP: net.ParseIP(ip), Port: 137})
 			}
-			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
+			readUntil(ctx, c, "netbios", func(b []byte, from *net.UDPAddr) {
 				ch <- msg{from: from.IP.String(), b: append([]byte(nil), b...), nb: true}
 			})
 		}()
@@ -272,7 +272,7 @@ func firstNonEmpty(s ...string) string {
 	return ""
 }
 
-func readUntil(ctx context.Context, c *net.UDPConn, handle func([]byte, *net.UDPAddr)) {
+func readUntil(ctx context.Context, c *net.UDPConn, kind string, handle func([]byte, *net.UDPAddr)) {
 	dl, _ := ctx.Deadline()
 	c.SetReadDeadline(dl)
 	buf := make([]byte, 9000)
@@ -285,6 +285,7 @@ func readUntil(ctx context.Context, c *net.UDPConn, handle func([]byte, *net.UDP
 			}
 			continue
 		}
+		diag(kind, from.IP.String(), buf[:n])
 		handle(buf[:n], from)
 	}
 }

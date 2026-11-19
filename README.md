@@ -16,6 +16,7 @@ Scarica il file per il tuo sistema dalla pagina [Releases](../../releases).
 | macOS 13 o successivo (Apple Silicon e Intel) | `wasaping-macos.zip` | estrai, sposta **wasaping.app** in Applicazioni, doppio clic |
 | Windows 10 e 11 | `wasaping-windows-amd64.exe` (o `-arm64`) | doppio clic |
 | Linux | `wasaping-linux-amd64` (o `-arm64`) | `./wasaping-linux-amd64 app` |
+| Debian, Ubuntu, Raspberry Pi OS | `wasaping-linux-amd64.deb` (o `-arm64.deb`) | `sudo apt install ./wasaping-linux-arm64.deb` |
 
 Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal browser:
 
@@ -50,13 +51,19 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - i problemi di rete e gli avvisi.
 - **Più reti insieme:** con «Tutte le reti» wasaping scansiona ogni rete del computer (luci, Dante primaria e secondaria, video…) e mostra una scheda per rete. Controlla anche la **ridondanza Dante**: ogni dispositivo deve essere su entrambe le reti.
 - **Dante:** canali in trasmissione, sample rate e latenza, letti da Bonjour.
-- **Report di fine show:** dal registro del Monitor, quante volte è caduto ogni dispositivo, per quanto tempo in tutto e il buco più lungo, più la cronologia. Si stampa o si salva in PDF.
+- **Report di fine show:** dal registro del Monitor, quante volte è caduto ogni dispositivo, per quanto tempo in tutto e il buco più lungo, più la cronologia e il **grafico dei tempi di risposta di tutta la serata**. Si stampa o si salva in PDF.
+- **Confronta con l'ultima volta:** nello stesso locale, chi c'è di nuovo, chi manca, chi ha cambiato IP o nome rispetto alla volta precedente.
+- **Mappa della rete:** dagli switch gestiti (SNMP) e da LLDP, quali switch sono collegati tra loro e su quale porta, e cosa c'è su ogni porta.
 - **Box su Raspberry Pi:** `wasaping box` trasforma un Raspberry Pi in un monitor sempre acceso sulla rete show, che guardi dall'iPad. Vedi la [guida](docs/raspberry.md).
-- **Apparecchi RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti**. Con **Identifica** fai lampeggiare un apparecchio per trovarlo sul traliccio: è l'unico comando che wasaping invia agli apparecchi, e la prima volta chiede conferma.
+- **Apparecchi RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti** e cosa è cambiato rispetto alla ricerca precedente. Con **Identifica** fai lampeggiare un apparecchio per trovarlo sul traliccio. Con **Modifica** cambi **indirizzo DMX, modalità ed etichetta**: wasaping chiede conferma due volte, avvisa se il nuovo indirizzo si sovrappone, rilegge l'apparecchio per verificare e annota ogni modifica in `rdm-changes.csv`.
 - **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere. Continua anche a finestra chiusa. Controlla anche gli **universi critici** (se smettono di arrivare o se compare una seconda sorgente) e il **master del clock PTP** (se cambia o sparisce). Ogni dispositivo ha un piccolo **grafico dei tempi di risposta**.
 - **Allarmi verso altri programmi:** a ogni evento del Monitor wasaping manda un messaggio **OSC** (a QLab, a una console, a un media server: `/wasaping/down`, `/wasaping/up`) e/o chiama un **indirizzo web** con i dettagli in JSON.
+- **Notifiche sul telefono:** con **ntfy** (il più semplice: un'app e un nome di argomento), **Telegram** (un bot) o **Slack**.
 - **Registro degli eventi:** ogni caduta viene annotata con ora e durata ("Rio3224-Palco: non risponde 21:43:10, di nuovo in linea dopo 12 s"). Si esporta in CSV a fine serata, e tutto finisce anche in `monitor-log.csv`.
 - **Monitor su iPad o telefono:** lo vedi da un altro dispositivo della stessa rete (l'iPad in FOH, il telefono sul palco), protetto da un PIN di 6 cifre e in sola lettura. Da lì non si cambia niente.
+- **Interfaccia completa da un altro computer:** in Impostazioni, con una **password** e in **HTTPS** (certificato creato da wasaping, con l'impronta da confrontare). Utile soprattutto per il box su Raspberry Pi.
+- **Tipo corretto a mano:** se wasaping sbaglia il tipo di un dispositivo, lo cambi nel dettaglio e resta così.
+- **Diagnostica:** Strumenti → Aiuto → «Salva diagnostica» (o `wasaping diag`) prepara un file da mandare a chi sviluppa wasaping quando un apparecchio non viene riconosciuto. Non contiene i tuoi nomi, ruoli e note, né PIN e password.
 - **Piano IP:** importi il patch previsto da un foglio di calcolo (CSV con Nome, IP, Ruolo, MAC) e wasaping lo confronta con la rete. Ti dice chi manca, chi ha l'IP sbagliato, chi occupa l'IP di un altro e chi non era previsto. Con un clic dà ai dispositivi i nomi e i ruoli del piano.
 - **Universi DMX dal vivo:** quali universi Art-Net e sACN arrivano, da quale sorgente, a quanti frame al secondo e quanti canali attivi. Con un clic vedi i 512 canali di un universo.
 - **Porta dello switch:** chiede agli switch gestiti (via SNMP in sola lettura) su quale porta è collegato ogni dispositivo, con la descrizione della porta.
@@ -121,10 +128,13 @@ wasaping monitor                  # controlla i critici e stampa gli eventi
 wasaping dmx -t 5s -u sacn:1      # universi dal vivo, e i 512 canali di uno
 wasaping rdm                      # apparecchi RDM dietro i nodi Art-Net
 wasaping rdm identify 2.0.0.10 0 5052:00000001   # fa lampeggiare un apparecchio (off per fermarlo)
+wasaping rdm set 2.0.0.10 0 5052:00000001 address 101   # cambia indirizzo (anche: mode, label); chiede conferma
 wasaping plan import piano.csv    # importa il piano IP; "wasaping plan" lo confronta con la rete
 wasaping venue export arena.wasaping   # condivide il locale (import per caricarlo)
 wasaping report -since 18:00      # report di fine show
 wasaping box                      # modalità box (Raspberry Pi)
+wasaping web-access password      # interfaccia completa da un altro computer, con password (anche: on, off, status)
+wasaping diag                     # file di diagnostica
 ```
 
 | Opzione | Default | Descrizione |
@@ -137,7 +147,7 @@ wasaping box                      # modalità box (Raspberry Pi)
 | `-no-dns` | | non cerca i nomi |
 | `-o` | `table` | `table`, `json`, `csv` |
 
-`wasaping web -addr 0.0.0.0:8080` rende l'interfaccia raggiungibile dagli altri computer della rete, **senza password**. Da lì si può scansionare, ma non salvare file né cambiare niente su questo computer.
+Per usare wasaping da un altro computer, meglio l'**accesso completo con password** (Impostazioni, o `wasaping web-access password`): HTTPS su `https://IP:47443/`. `wasaping web -addr 0.0.0.0:8080` invece rende l'interfaccia raggiungibile **senza password**: da lì si può scansionare, ma non salvare file né cambiare niente su questo computer.
 
 I dispositivi conosciuti sono in `devices.json`, nella cartella delle impostazioni dell'utente:
 - Mac: `~/Library/Application Support/wasaping/`
@@ -171,7 +181,10 @@ devices.go           archivio per rete/locale: nomi, ruoli, note, critici, stori
 monitor.go           monitor dei dispositivi critici e registro degli eventi
 monitor_show.go      monitor di universi critici e master PTP
 multinet.go          più reti insieme, ridondanza Dante
-alerts.go            allarmi OSC e webhook
+alerts.go            allarmi OSC, webhook, ntfy, Telegram, Slack
+webaccess.go         interfaccia completa dalla rete (HTTPS, password)
+rdmset.go            modifiche RDM con verifica e registro
+compare.go, diag.go  confronto con l'ultima volta, file di diagnostica
 selfupdate_*.go      aggiornamento dall'app (macOS)
 remote.go, web/m.html  monitor su iPad/telefono (PIN, sola lettura)
 plan.go              piano IP da CSV, condivisione del locale, porte switch
@@ -191,7 +204,7 @@ internal/showsim/    simulatore di attrezzatura show (anche: go run ./cmd/showsi
 deploy/, docs/       servizio systemd e guida per Raspberry Pi
 scanner/             motore: sonde, ARP, nomi (DNS, mDNS, NetBIOS, UPnP), protocolli
                      show (Art-Net, sACN, PTP, PJLink, RDM), DMX, SNMP, tipi, avvisi
-scripts/             build dell'app macOS, icone, database produttori
+scripts/             build dell'app macOS, pacchetti .deb, icone, database produttori
 ```
 
 ## Idee per le prossime versioni

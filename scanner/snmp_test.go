@@ -101,11 +101,18 @@ func TestSwitchPorts(t *testing.T) {
 		"1.3.6.1.2.1.31.1.1.1.1.1014":             str("Gi1/14"),
 		"1.3.6.1.2.1.31.1.1.1.1.1026":             str("Gi1/26"),
 		"1.3.6.1.2.1.31.1.1.1.18.1014":            str("grandMA3 FOH"),
+		// LLDP: on local port 26 there is another switch, port 1/1
+		"1.0.8802.1.1.2.1.3.7.1.4.26":     str("Gi1/26"),
+		"1.0.8802.1.1.2.1.4.1.1.9.0.26.1": str("GigaCore Palco"),
+		"1.0.8802.1.1.2.1.4.1.1.8.0.26.1": str("Gi1/1"),
 	}
 	defer fakeSwitch(t, table)()
 	sw, ports := SwitchPorts(context.Background(), []string{"127.0.0.1"}, "public")
-	if len(sw) != 1 || sw[0].Name != "GigaCore26i" || sw[0].MACs != 3 {
+	if len(sw) != 1 || sw[0].Name != "GigaCore26i" || sw[0].MACs != 3 || sw[0].Ports["Gi1/26"] != 2 {
 		t.Fatalf("switches %+v", sw)
+	}
+	if n := sw[0].Neighbors; len(n) != 1 || n[0].LocalPort != "Gi1/26" || n[0].Name != "GigaCore Palco" || n[0].RemotePort != "Gi1/1" {
+		t.Errorf("lldp %+v", n)
 	}
 	p := ports["00:0c:29:4a:10:01"]
 	if p.Port != "Gi1/14" || p.Alias != "grandMA3 FOH" || p.Shared != 1 {

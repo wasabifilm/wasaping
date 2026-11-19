@@ -20,8 +20,8 @@ const EN = new Map(Object.entries({
   "ai programmi non firmati da uno sviluppatore Apple registrato, quindi MAC e produttori restano vuoti.\n  wasaping può installare un piccolo aiuto di sistema che li legge: serve la password di amministratore":
     "from apps not signed by a registered Apple developer, so MACs and makers stay empty.\n  wasaping can install a small system helper that reads them: it needs the administrator password",
   "una sola volta": "only once",
-  ", la inserisci nella finestra di macOS (wasaping non la vede) e l'aiuto lavora solo mentre wasaping è aperto. Lo togli quando vuoi con «Disinstalla» in fondo alla pagina.":
-    ", typed in the macOS window (wasaping never sees it), and the helper only works while wasaping is open. Remove it any time with “Uninstall” at the bottom of the page.",
+  ", la inserisci nella finestra di macOS (wasaping non la vede) e l'aiuto lavora solo mentre wasaping è aperto. Lo togli quando vuoi da ⚙ Impostazioni.":
+    ", typed in the macOS window (wasaping never sees it), and the helper only works while wasaping is open. Remove it any time from ⚙ Settings.",
   "Dispositivo": "Device", "IP": "IP", "MAC": "MAC", "Modello / produttore": "Model / maker", "Protocolli": "Protocols", "Porte aperte": "Open ports", "Risposta": "Response",
   "Premi": "Press", "per vedere chi c'è sulla tua rete.": "to see who is on your network.", "Cerco dispositivi…": "Looking for devices…", "Nessun risultato per il filtro.": "Nothing matches the filter.",
   "Nessun dispositivo trovato.": "No devices found.", "tu": "you", "nuovo": "new", "non risponde": "not responding", "critico": "critical", "rete nuova": "new network",
@@ -167,6 +167,18 @@ const EN = new Map(Object.entries({
   "Desktop remoto di Windows aperto (porta 3389).": "Windows Remote Desktop open (port 3389).",
   "PJLink senza password: chiunque sulla rete può spegnere il proiettore.": "PJLink without password: anyone on the network can switch the projector off.",
   "Nessun router su questa rete: normale per una rete show isolata, ma niente internet e niente DHCP dal router.": "No router on this network: normal for an isolated show network, but no internet and no DHCP from a router.",
+  "Apri la pagina web": "Open the web page", "Copia il nome": "Copy the name", "Rinomina…": "Rename…", "Segna come critico": "Mark as critical", "Non è più critico": "No longer critical", "Non è più critico.": "No longer critical.",
+  "Critico: il Monitor lo tiene d'occhio.": "Critical: the Monitor keeps an eye on it.", "Nessun dispositivo da copiare.": "No devices to copy.", "Copia elenco": "Copy list",
+  "I dispositivi mostrati (con il filtro), da incollare in un foglio di calcolo o in una chat.": "The devices shown (with the filter), to paste into a spreadsheet or a chat.", "Universi": "Universes",
+  "Più parole: tutte devono comparire. Anche «critico», «nuovo», «avviso», «non risponde». Tasto: /": "Several words: all must appear. Also “critical”, “new”, “warning”, “offline”. Key: /",
+  "↻ Continua": "↻ Continuous", "Rifà la scansione di continuo finché la finestra è aperta: l'elenco si aggiorna da solo e avvisa se arriva o sparisce qualcuno": "Scans again and again while the window is open: the list updates by itself and tells you when someone arrives or disappears",
+  "Scansione continua spenta.": "Continuous scan off.", "Scansione continua: l'elenco si aggiorna da solo.": "Continuous scan: the list updates by itself.",
+  "Ripeti in background": "Repeat in the background", "Anche a finestra chiusa, sulla rete predefinita, con una notifica quando arriva un dispositivo nuovo. Per aggiornare l'elenco mentre lo guardi c'è «↻ Continua» accanto a Scansiona.": "Also with the window closed, on the default network, with a notification when a new device arrives. To keep the list updated while you look at it, use “↻ Continuous” next to Scan.",
+  "Torna all'elenco": "Back to the list",
+  "L'elenco dei dispositivi": "The list of devices",
+  "attivo, anche a finestra chiusa": "on, with the window closed too", "fermo": "stopped",
+  "Piano IP, IP liberi, mappa della rete, confronto": "IP plan, free IPs, network map, comparison", "Salva e apri, report, stampa, esportazioni, diagnostica": "Save and open, report, print, exports, diagnostics", "Aiuto rimosso.": "Helper removed.",
+  "Ping": "Ping",
 }));
 const PAT = [
   [/^Priorità diverse: gli apparecchi seguono solo la sorgente con priorità (\d+); le altre sono di riserva\.$/, "Different priorities: fixtures follow only the source with priority $1; the others are backups."],
@@ -201,7 +213,8 @@ const PAT = [
   [/^in uso: (.*)$/, "in use: $1"], [/^previsto nel piano: (.*)$/, "planned: $1"], [/^conosciuto, ora spento: (.*)$/, "known, now off: $1"],
   [/^(Art-Net|sACN) universo (\d+)$/, "$1 universe $2"], [/^canale (\d+): (\d+) \((\d+)%\)$/, "channel $1: $2 ($3%)"], [/^prio (\d+)$/, "prio $1"],
   [/^· (\d+) indirizzi$/, "· $1 addresses"], [/^(.+) · (\d+) indirizzi$/, "$1 · $2 addresses"], [/^Su questa porta ci sono (\d+) indirizzi: probabilmente un altro switch o un collegamento tra switch$/, "There are $1 addresses on this port: probably another switch or a link between switches"],
-  [/^ · porta $/, " · port "], [/^Apri con (.+)$/, (m, a) => "Open with " + tr(a)], [/^Copia (.+)$/, "Copy $1"], [/^Copiato: (.+)$/, "Copied: $1"], [/^Porta (\d+)(.*)$/, "Port $1$2"],
+  [/^(\d+) di (\d+)$/, "$1 of $2"], [/^(.+) · di nuovo tra (\d+) s$/, (m, a, n) => tr(a) + ` · again in ${n} s`], [/^Aggiorno (.+)… \(scansione continua\)$/, "Updating $1… (continuous scan)"],
+  [/^Nuovo: (.+)$/, "New: $1"], [/^Nuovi: (.+)$/, "New: $1"], [/^Tornato: (.+)$/, "Back: $1"], [/^(\d+) dispositivi · aggiornato alle (.+)$/, "$1 devices · updated at $2"], [/^ · porta $/, " · port "], [/^Apri con (.+)$/, (m, a) => "Open with " + tr(a)], [/^Copia (.+)$/, "Copy $1"], [/^Copiato: (.+)$/, "Copied: $1"], [/^Porta (\d+)(.*)$/, "Port $1$2"],
   [/^(.*)clic: apri con (.+) · tasto destro: copia$/, (m, n, a) => `${n}click: open with ${tr(a)} · right click: copy`], [/^(.*)clic: copia (.+)$/, "$1click: copy $2"],
   [/^Salvato: (.+)$/, "Saved: $1"], [/^Elenco aperto nel browser: (.+)$/, "List opened in the browser: $1"], [/^Locale importato: (\d+) dispositivi\. Rifaccio la scansione\.$/, "Venue imported: $1 devices. Scanning again."],
   [/^Non risponde: (.+)$/, "Not responding: $1"], [/^È uscita (.+) \(hai la (.+)\)\.$/, "$1 is out (you have $2)."],
@@ -270,14 +283,23 @@ function translateRemoteHint() {
 if (LANG === "en") {
   document.documentElement.lang = "en";
   translateTree(document.body);
-  let pending = false;
+  // Only the parts of the page that changed: walking the whole page after
+  // every update was slow with long lists.
+  let pending = null;
+  const flush = () => {
+    const roots = [...pending]; pending = null;
+    for (const r of roots) if (r.isConnected && !roots.some(o => o !== r && o.contains(r))) translateTree(r);
+    translateRemoteHint();
+  };
   new MutationObserver(muts => {
-    if (pending) return;
-    pending = true;
-    setTimeout(() => { pending = false; translateTree(document.body); translateRemoteHint(); }, 0); // not rAF: it stops in background windows
+    if (!pending) { pending = new Set(); setTimeout(flush, 0); } // not rAF: it stops in background windows
+    for (const m of muts) {
+      const el = m.type === "characterData" ? m.target.parentElement : m.target;
+      if (m.type === "attributes" || !el) continue;
+      if (m.type === "childList") m.addedNodes.forEach(n => pending.add(n.nodeType === 1 ? n : n.parentElement || el));
+      else pending.add(el);
+    }
   }).observe(document.body, {childList: true, subtree: true, characterData: true});
 }
-$("langBtn").textContent = LANG === "en" ? "Italiano" : "English";
-$("langBtn").onclick = () => { try { localStorage.setItem("wasaping.lang", LANG === "en" ? "it" : "en"); } catch {} location.reload(); };
 fetch("api/lang", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({lang: LANG})}).catch(() => {});
 const PORT_NAMES = {21:"FTP",22:"SSH",23:"Telnet",53:"DNS",80:"HTTP",139:"NetBIOS",443:"HTTPS",445:"SMB",548:"AFP",554:"RTSP",631:"IPP",1883:"MQTT",3389:"RDP",5000:"UPnP",5900:"VNC",8000:"HTTP",8080:"HTTP",8443:"HTTPS",9100:"Stampante",32400:"Plex",62078:"iPhone"};

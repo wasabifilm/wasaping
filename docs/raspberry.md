@@ -74,7 +74,7 @@ ssh -L 47480:127.0.0.1:47480 UTENTE@IP-DEL-RASPBERRY
 
 e poi, nel browser del tuo computer, apri **http://127.0.0.1:47480/**. Da lì:
 - fai una scansione;
-- segni i dispositivi **critici**, e in Show → Universi DMX gli universi critici;
+- segni i dispositivi **critici**, e in DMX gli universi critici;
 - dai un nome al locale;
 - importi il piano IP.
 

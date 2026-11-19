@@ -38,6 +38,7 @@ const KIND = {
 const SERVICES = {"netaudio-arc":"Dante", "netaudio-cmc":"Dante", "netaudio-dbc":"Dante", "netaudio-chan":"Dante", ndi:"NDI", blackmagic:"Blackmagic", videohub:"Videohub", qlab:"QLab", osc:"OSC", workstation:"", airplay:"AirPlay", raop:"AirPlay audio", ipp:"Stampa", ipps:"Stampa", printer:"Stampa", "pdl-datastream":"Stampa", scanner:"Scanner", uscan:"Scanner", smb:"Condivisione file", afpovertcp:"Condivisione file (AFP)", ssh:"SSH", "sftp-ssh":"SFTP", rfb:"Condivisione schermo", googlecast:"Chromecast", http:"Pagina web", https:"Pagina web", hap:"HomeKit", homekit:"HomeKit", matter:"Matter", matterc:"Matter", "companion-link":"Dispositivo Apple", "spotify-connect":"Spotify", sonos:"Sonos", "device-info":"", "sleep-proxy":"Sleep proxy", "apple-mobdev2":"Sincronizzazione Apple"};
 
 let hosts = [], gone = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser", showGone = true;
+try { showGone = localStorage.getItem("wasaping.showGone") !== "0"; } catch {}
 let repeatTimer = null, selected = null, autoRun = false, network = null, issues = [], snmpCommunity = "public", swPorts = {};
 let networks = [], activeNet = ""; // several networks: "" = all tabs
 
@@ -91,10 +92,8 @@ async function init() {
     const ping = () => fetch("api/ping", {method: "POST"}).catch(() => {});
     ping(); setInterval(ping, 10000);
   }
-  try { const b = await fetch("api/bg").then(r => r.json()); $("repeat").value = String(b.repeat_minutes || 0); } catch {}
   try { const last = await fetch("api/last").then(r => r.json()); if (last && !hosts.length) applyResult(last); } catch {}
   setInterval(pollLast, 15000);
-  showHelper(info.helper);
   snmpCommunity = info.snmp || "public";
   checkUpdate(); setInterval(checkUpdate, 3600000);
   let dismissed = false;
@@ -103,26 +102,14 @@ async function init() {
 }
 
 // macOS ARP helper: a system service installed once with the password.
-function showHelper(state) {
-  const f = $("helperFoot");
-  if (state === "installed") {
-    f.innerHTML = 'Indirizzi MAC: aiuto di sistema attivo · <a id="helperOff">Disinstalla</a>';
-    $("helperOff").onclick = () => helper("uninstall");
-  } else if (state === "missing") {
-    f.innerHTML = 'Indirizzi MAC nascosti da macOS · <a id="helperOn">Installa l\'aiuto</a> (password una sola volta)';
-    $("helperOn").onclick = () => helper("install");
-  } else f.innerHTML = "";
-}
 async function helper(what) {
-  $("helperFoot").textContent = what === "install" ? "Inserisci la password nella finestra di macOS…" : "Rimuovo l'aiuto…";
+  $("status").textContent = what === "install" ? "Inserisci la password nella finestra di macOS…" : "Rimuovo l'aiuto…";
   const r = await fetch(`api/helper?do=${what}`, {method: "POST"});
   if (r.ok) {
     const d = await r.json();
-    showHelper(d.helper);
     if (d.helper === "installed") $("machidden").style.display = "none";
-    if (what === "install") $("status").textContent = "✓ Aiuto installato: rifai la scansione per vedere i MAC.";
+    $("status").textContent = what === "install" ? "✓ Aiuto installato: rifai la scansione per vedere i MAC." : "Aiuto rimosso.";
   } else {
-    showHelper(what === "install" ? "missing" : "installed");
     $("status").textContent = (what === "install" ? "Aiuto non installato: " : "Aiuto non rimosso: ") + await r.text();
   }
 }
@@ -145,11 +132,9 @@ $("ports").onchange = e => {
   if (custom) { if (!$("custom").value) $("custom").value = "22,80,443"; $("custom").select(); }
 };
 for (const id of ["target", "custom"]) $(id).onkeydown = e => { if (e.key === "Enter" && !es) start(); };
-$("repeat").onchange = () => {
-  post("api/bg", {repeat_minutes: +$("repeat").value})
-    .then(() => toast(+$("repeat").value ? "wasaping ripeterà la scansione da solo, anche a finestra chiusa." : "Ripetizione automatica spenta."))
-    .catch(e => toast("Non salvato: " + e.message));
-};
+const setRepeat = min => post("api/bg", {repeat_minutes: min})
+  .then(() => toast(min ? "wasaping ripeterà la scansione da solo, anche a finestra chiusa." : "Ripetizione automatica spenta."))
+  .catch(e => toast("Non salvato: " + e.message));
 
 // A background scan finished (menu bar, automatic repeat): show it.
 let shownAt = "";
@@ -173,51 +158,108 @@ document.addEventListener("keydown", e => {
   if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === "r" && !e.shiftKey) { e.preventDefault(); wasapingScan(); }
+  else if (/^[1-9]$/.test(k) && !e.shiftKey) { // ⌘1…⌘9: the pages of the header, in order
+    const b = $("quick").querySelectorAll("button")[+k - 1];
+    if (b) { e.preventDefault(); b.click(); }
+  }
   else if (k === "f") { e.preventDefault(); wasapingFind(); }
 });
 
 // Theme: automatic (follows the system), light, dark.
-const THEMES = ["", "light", "dark"], THEME_NAMES = {"": "automatico", light: "chiaro", dark: "scuro"};
-const themeLabel = t => LANG === "en" ? "Theme: " + {"": "automatic", light: "light", dark: "dark"}[t] : "Tema: " + THEME_NAMES[t];
 function applyTheme(t) {
   if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
-  $("theme").textContent = themeLabel(t);
 }
 let theme = "";
 try { theme = localStorage.getItem("wasaping.theme") || ""; } catch {}
 applyTheme(theme);
-$("theme").onclick = () => {
-  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
-  try { localStorage.setItem("wasaping.theme", theme); } catch {}
-  applyTheme(theme);
-};
 
-$("scan").onclick = () => es ? stop("Scansione interrotta.") : start();
+$("scan").onclick = () => { if (es) { setLoop(false); stop("Scansione interrotta."); } else start(); };
+
+// Continuous scan: while the window is open, scan again a few seconds after
+// each scan ends. The list stays on screen and is swapped when the new
+// scan is done; arrivals and departures are announced.
+const LOOP_PAUSE = 10; // seconds between two scans
+let loop = false, loopTimer = null, loopNext = 0;
+function setLoop(on) {
+  loop = on;
+  clearTimeout(loopTimer); clearInterval(setLoop.tick);
+  $("loopBtn").setAttribute("aria-pressed", on ? "true" : "false");
+  $("loopBtn").classList.remove("busy");
+  if (on && !es) start(false, !!hosts.length);
+}
+$("loopBtn").onclick = () => {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {} // sound needs a click first
+  setLoop(!loop);
+  toast(loop ? "Scansione continua: l'elenco si aggiorna da solo." : "Scansione continua spenta.");
+};
+function loopAgain(msg) {
+  if (!loop) return;
+  loopNext = Date.now() + LOOP_PAUSE * 1000;
+  const show = () => { const n = Math.max(0, Math.round((loopNext - Date.now()) / 1000)); $("status").textContent = `${msg} · di nuovo tra ${n} s`; };
+  show(); setLoop.tick = setInterval(show, 1000);
+  const go = () => {
+    clearInterval(setLoop.tick);
+    if (!loop || es) return;
+    if (document.hidden) { loopTimer = setTimeout(go, 2000); return; } // window closed: wait
+    start(false, true);
+  };
+  loopTimer = setTimeout(go, LOOP_PAUSE * 1000);
+}
+// What changed since the previous scan, said in a toast and in the title.
+function announce(before, d) {
+  const name = h => label(h) || h.ip;
+  const was = new Set(before.map(h => h.key));
+  const came = hosts.filter(h => !was.has(h.key));
+  const lost = before.filter(h => !hosts.some(x => x.key === h.key));
+  freshKeys = new Set(came.map(h => h.key));
+  setTimeout(() => { freshKeys = new Set(); }, 3500); // the highlight is played once
+  const back = came.filter(h => !h.new);
+  const nu = came.filter(h => h.new);
+  if (nu.length) toast(`${nu.length === 1 ? "Nuovo" : "Nuovi"}: ${nu.slice(0, 4).map(name).join(", ")}${nu.length > 4 ? "…" : ""}`);
+  else if (back.length) toast(`Tornato: ${back.slice(0, 4).map(name).join(", ")}${back.length > 4 ? "…" : ""}`);
+  const critLost = lost.filter(h => h.critical);
+  if (critLost.length) alarm(critLost.map(name)); // notification, toast and sound
+}
+let freshKeys = new Set();
 
 function schedule() {} // repeats are done by the program (backgroundLoop)
 
-function start(auto = false) {
+// quiet: a repeat of the continuous scan, the current list stays on
+// screen until the new one is complete.
+function start(auto = false, quiet = false) {
   const target = $("target").value.trim();
   if (!target) return;
-  if (!auto && typeof showSection === "function" && section !== "list") showSection("list"); // show the scan
   autoRun = auto;
-  hosts = []; gone = [];
+  clearTimeout(loopTimer); clearInterval(setLoop.tick);
+  const before = hosts, incoming = [];
+  if (!quiet) { hosts = []; gone = []; freshKeys = new Set(); }
   clearTimeout(repeatTimer);
   const ports = $("ports").value === "custom" ? ($("custom").value.trim() || "none") : $("ports").value;
   $("scan").textContent = "Stop"; $("scan").classList.add("stop");
-  $("status").textContent = `Scansione di ${target}…`; $("extra").innerHTML = "";
+  $("loopBtn").classList.toggle("busy", loop);
+  $("status").textContent = quiet ? `Aggiorno ${target}… (scansione continua)` : `Scansione di ${target}…`;
+  if (!quiet) $("extra").innerHTML = "";
   $("prog").style.width = "0";
   es = new EventSource(`api/scan?target=${encodeURIComponent(target)}&ports=${encodeURIComponent(ports)}${auto ? "&auto=1" : ""}`);
+  es.quiet = quiet;
   render();
   es.addEventListener("progress", e => {
     const p = JSON.parse(e.data);
     $("prog").style.width = (100 * p.done / p.total) + "%";
-    $("status").textContent = `Sondaggio ${p.done}/${p.total}… ${p.done === p.total ? "raccolgo i dettagli" : ""}`;
+    if (!quiet) $("status").textContent = `Sondaggio ${p.done}/${p.total}… ${p.done === p.total ? "raccolgo i dettagli" : ""}`;
   });
-  es.addEventListener("host", e => { const h = JSON.parse(e.data); if (h.mac && swPorts[h.mac]) h.swport = swPorts[h.mac]; hosts.push(h); render(); });
-  es.addEventListener("done", e => finish(JSON.parse(e.data)));
-  es.addEventListener("failure", e => stop("Errore: " + JSON.parse(e.data).error));
-  es.onerror = () => { if (es) stop("Connessione interrotta: il target è valido?"); };
+  es.addEventListener("host", e => {
+    const h = JSON.parse(e.data);
+    if (h.mac && swPorts[h.mac]) h.swport = swPorts[h.mac];
+    if (quiet) incoming.push(h); else { hosts.push(h); renderSoon(); }
+  });
+  es.addEventListener("done", e => {
+    const d = JSON.parse(e.data);
+    if (quiet) { hosts = incoming; announce(before, d); }
+    finish(d, quiet ? `${d.count} dispositivi · aggiornato alle ${new Date().toLocaleTimeString("it", {hour: "2-digit", minute: "2-digit", second: "2-digit"})}` : "");
+  });
+  es.addEventListener("failure", e => { const m = "Errore: " + JSON.parse(e.data).error; stop(m); loopAgain(m); });
+  es.onerror = () => { if (es) { const q = es.quiet; stop("Connessione interrotta: il target è valido?"); if (q) loopAgain("Connessione interrotta"); else setLoop(false); } };
 }
 
 function finish(d, msg) {
@@ -227,7 +269,6 @@ function finish(d, msg) {
     networks = d.networks && d.networks.length ? d.networks : (network ? [network] : []);
     if (!networks.some(n => n.id === activeNet)) activeNet = "";
     showNetwork();
-    fetch("api/info").then(r => r.json()).then(i => showHelper(i.helper)).catch(() => {});
     let no = false; try { no = localStorage.getItem("wasaping.helperNo") === "1"; } catch {}
     $("machidden").style.display = d.macHidden && !no ? "flex" : "none";
     if (d.macHidden) $("oui").style.display = "none"; // no MACs, no vendors to look up
@@ -237,9 +278,17 @@ function finish(d, msg) {
     if (d.new) bits.push(`<b>${d.new} ${d.new === 1 ? "nuovo" : "nuovi"}</b>`);
     if (gone.length) bits.push(`<a id="toggleGone">${gone.length} non ${gone.length === 1 ? "risponde" : "rispondono"} (${showGone ? "nascondi" : "mostra"})</a>`);
     $("extra").innerHTML = bits.join(" · ");
-    if ($("toggleGone")) $("toggleGone").onclick = () => { showGone = !showGone; $("toggleGone").textContent = `${gone.length} non ${gone.length === 1 ? "risponde" : "rispondono"} (${showGone ? "nascondi" : "mostra"})`; render(); };
+    if ($("toggleGone")) $("toggleGone").onclick = () => { showGone = !showGone; try { localStorage.setItem("wasaping.showGone", showGone ? "1" : "0"); } catch {} $("toggleGone").textContent = `${gone.length} non ${gone.length === 1 ? "risponde" : "rispondono"} (${showGone ? "nascondi" : "mostra"})`; render(); };
     render();
     if (selected) openDetail(selected);
+    pageTitle(); refreshGroupPage();
+    if (!d.auto) loopAgain($("status").textContent);
+}
+// The window title says how many devices there are, and warns when a
+// critical one is missing (useful with the window in the background).
+function pageTitle() {
+  const down = gone.filter(h => h.critical).length;
+  document.title = `${down ? "⚠ " : ""}wasaping · ${hosts.length}${down ? ` · ${down} ✗` : ""}`;
 }
 
 function stop(msg) {
@@ -247,7 +296,6 @@ function stop(msg) {
   $("scan").textContent = "Scansiona"; $("scan").classList.remove("stop");
   $("prog").style.width = "100%";
   $("status").textContent = msg;
-  $("csv").disabled = $("json").disabled = $("printBtn").disabled = hosts.length === 0;
   render();
   schedule();
 }
@@ -266,7 +314,7 @@ function showNetwork() {
     nb.innerHTML = tabs + `<span class="muted">Scegli una rete per dargli un nome, usare il piano IP o esportare il locale.</span>`;
   } else if (!network) { nb.innerHTML = ""; } else {
     const name = network.name || network.auto;
-    nb.innerHTML = tabs + `Rete: <b>${esc(name)}</b>${network.name ? ` <span class="muted">· ${esc(network.auto)}</span>` : ""}${network.is_new ? ' <span class="badge new">rete nuova</span>' : ""} <a id="netRename">${network.name ? "rinomina" : "dai un nome a questo locale"}</a>
+    nb.innerHTML = tabs + `${/^Rete /.test(name) ? "" : "Rete: "}<b>${esc(name)}</b>${network.name ? ` <span class="muted">· ${esc(network.auto)}</span>` : ""}${network.is_new ? ' <span class="badge new">rete nuova</span>' : ""} <a id="netRename">${network.name ? "rinomina" : "dai un nome a questo locale"}</a>
 `;
     $("netRename").onclick = async () => {
       nb.innerHTML = `Rete: <input id="netName" maxlength="200" value="${esc(network.name || "")}" placeholder="es. Arena Verona, tour 2027" style="width:260px"> <button id="netSave">Salva</button>`;
@@ -282,7 +330,12 @@ function showNetwork() {
   nb.querySelectorAll("a.tab").forEach(a => a.onclick = () => selectNet(a.dataset.net));
   const box = $("issues");
   box.style.display = issues.length ? "flex" : "none";
-  box.innerHTML = issues.map(i => `<span>⚠️ ${esc(i)}</span>`).join("");
+  // Two at most on screen; the others behind "show all".
+  const more = issues.length > 2 && !showNetwork.all;
+  box.innerHTML = (more ? issues.slice(0, 2) : issues).map(i => `<span>⚠️ ${esc(i)}</span>`).join("") +
+    (more ? `<a class="more">${LANG === "en" ? `+${issues.length - 2} more` : `altri ${issues.length - 2}`}</a>` : "");
+  const m = box.querySelector("a.more");
+  if (m) m.onclick = () => { showNetwork.all = true; showNetwork(); };
 }
 
 // New version on GitHub (the program checks once a day).
@@ -299,18 +352,18 @@ async function checkUpdate() {
 $("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updBar").style.display = "none"; toast("Non controllerò più le nuove versioni."); });
 
 // ---- Settings: language, theme, repeat, alarms, remote, updates… ----
-$("setBtn").onclick = settingsView;
+$("setBtn").onclick = () => runTool("settings");
 async function settingsView() {
   const get = u => fetch(u).then(r => r.json()).catch(() => ({}));
-  const [bg, rem, upd, login, alerts, info, wa] = await Promise.all([get("api/bg"), get("api/remote"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info"), get("api/webaccess")]);
+  const [bg, upd, login, alerts, info, wa] = await Promise.all([get("api/bg"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info"), get("api/webaccess")]);
   const waInfo = w => w.on ? `Da un altro computer apri <b class="nt">${esc(w.url)}</b> e inserisci la password. Il browser avviserà che il certificato non è verificato: è normale, l'ha creato wasaping. Impronta SHA-256: <span class="mono nt" style="font-size:11px;word-break:break-all">${esc(w.fingerprint || "")}</span>` : "Tutta l'interfaccia, anche le modifiche, da un altro computer: HTTPS e password.";
   const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}"${String(k) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
-  openSheet("Impostazioni", `<div class="set">
-    <h4>Generali</h4>
+  openSheet("Impostazioni", `<nav class="setidx">${[["sGen", "Generali"], ["sAl", "Allarmi e notifiche"], ["sAcc", "Accesso da altri dispositivi"], ["sSys", "Sistema"]].map(([id, l]) => `<a data-to="${id}">${l}</a>`).join("")}</nav><div class="set">
+    <h4 id="sGen">Generali</h4>
     <b>Lingua</b><div class="opt">${sel("sLang", [["it", "Italiano"], ["en", "English"]], LANG)}</div>
     <b>Tema</b><div class="opt">${sel("sTheme", [["", "automatico"], ["light", "chiaro"], ["dark", "scuro"]], theme)}</div>
-    <b>Ripeti la scansione</b><div class="opt">${sel("sRepeat", [[0, "mai"], [5, "ogni 5 minuti"], [15, "ogni 15 minuti"], [60, "ogni ora"]], bg.repeat_minutes || 0)}<span class="tag">Anche a finestra chiusa, con una notifica quando arriva un dispositivo nuovo.</span></div>
-    <h4>Allarmi e notifiche</h4>
+    <b>Ripeti in background</b><div class="opt">${sel("sRepeat", [[0, "mai"], [5, "ogni 5 minuti"], [15, "ogni 15 minuti"], [60, "ogni ora"]], bg.repeat_minutes || 0)}<span class="tag">Anche a finestra chiusa, sulla rete predefinita, con una notifica quando arriva un dispositivo nuovo. Per aggiornare l'elenco mentre lo guardi c'è «↻ Continua» accanto a Scansiona.</span></div>
+    <h4 id="sAl">Allarmi e notifiche</h4>
     <p class="muted sethint">Quando un dispositivo o un universo critico cade o torna, wasaping avvisa dove scegli qui.</p>
     <b>Altri programmi</b><div class="opt">
       <input id="sOSC" placeholder="OSC: 192.168.1.20:53000" value="${esc(alerts.osc || "")}" style="width:220px" spellcheck="false">
@@ -324,27 +377,24 @@ async function settingsView() {
       <input id="sSlack" placeholder="Slack: https://hooks.slack.com/…" value="${esc(alerts.slack || "")}" style="flex:1 1 260px" spellcheck="false">
       <span class="tag">Il modo più semplice è ntfy: installa l'app ntfy sul telefono, iscriviti a un argomento con un nome difficile da indovinare e scrivi lo stesso nome qui. Per Telegram: crea un bot con @BotFather e scrivi qui il suo token e l'id della chat. Per Slack: un «incoming webhook» del canale.</span></div>
     <b></b><div class="opt"><button class="primary" id="sAlertSave">Salva allarmi e notifiche</button><button id="sAlertTest">Manda una prova</button></div>
-    <h4>Accesso da altri dispositivi</h4>
-    <b>Monitor su iPad o telefono</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sRemote"${rem.on ? " checked" : ""}> attivo</label><span class="tag" id="sRemoteInfo">${rem.on ? `Apri <b>${esc(rem.url)}</b> e inserisci il PIN <b>${esc(rem.pin)}</b>.` : "Sola lettura, protetto da un PIN."}</span></div>
+    <h4 id="sAcc">Accesso da altri dispositivi</h4>
     ${info.remote ? `<b>Accesso dalla rete</b><div class="opt"><span>Sei collegato da un altro computer.</span><form method="post" action="/logout" style="margin:0"><button>Disconnetti</button></form></div>` : `<b>Accesso completo dalla rete</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sWeb"${wa.on ? " checked" : ""}> attivo</label>
       <input type="password" id="sWebPw" placeholder="${wa.has_password ? "nuova password (facoltativa)" : "password (almeno 8 caratteri)"}" autocomplete="new-password" style="width:230px"><button id="sWebPwSave">Salva password</button>
       <span class="tag" id="sWebInfo">${waInfo(wa)}</span></div>`}
-    <h4>Sistema</h4>
+    <h4 id="sSys">Sistema</h4>
     <b>Aggiornamenti</b><div class="opt"><span>wasaping ${esc(upd.current || "")}</span>${upd.newer ? `<button class="primary" id="sUpdNow">Aggiorna a ${esc(upd.latest)}</button>` : ""}<label class="check" style="margin:0"><input type="checkbox" id="sUpdCheck"${upd.off ? "" : " checked"}> controlla le nuove versioni</label><button id="sUpdNowCheck">Controlla ora</button><span class="tag" id="sUpdInfo"></span></div>
     ${login.available ? `<b>Apri al login</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sLogin"${login.enabled ? " checked" : ""}> apri wasaping all'accesso, nella barra dei menu</label></div>` : ""}
     ${info.helper && info.helper !== "notneeded" ? `<b>Indirizzi MAC (macOS)</b><div class="opt">${info.helper === "installed" ? '<span>aiuto di sistema attivo</span><button id="sHelperOff">Disinstalla</button>' : '<span>nascosti da macOS</span><button id="sHelperOn">Installa l\'aiuto</button>'}</div>` : ""}
     <b>Community SNMP</b><div class="opt"><input id="sSNMP" value="${esc(snmpCommunity)}" style="width:160px" spellcheck="false"><span class="tag">Per leggere dagli switch su quale porta è ogni dispositivo.</span></div>
   </div>`);
+  $("shBody").querySelectorAll(".setidx a").forEach(a => a.onclick = () => $("sheet").scrollTo({top: $(a.dataset.to).getBoundingClientRect().top - $("shBody").getBoundingClientRect().top + $("shBody").offsetTop - 70}));
   $("sLang").onchange = () => { try { localStorage.setItem("wasaping.lang", $("sLang").value); } catch {} location.reload(); };
   $("sTheme").onchange = () => { theme = $("sTheme").value; try { localStorage.setItem("wasaping.theme", theme); } catch {} applyTheme(theme); };
-  $("sRepeat").onchange = () => { $("repeat").value = $("sRepeat").value; $("repeat").onchange(); };
+  $("sRepeat").onchange = () => setRepeat(+$("sRepeat").value);
   const alertForm = () => ({osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim(), ntfy: $("sNtfy").value.trim(), slack: $("sSlack").value.trim(),
     telegram: $("sTGToken").value.trim() || $("sTGChat").value.trim() ? $("sTGToken").value.trim() + "|" + $("sTGChat").value.trim() : ""});
   $("sAlertSave").onclick = () => post("api/alerts", alertForm()).then(r => r.json()).then(d => { $("sNtfy").value = d.ntfy || ""; toast("Allarmi salvati."); }).catch(e => toast("Non salvato: " + e.message));
   $("sAlertTest").onclick = () => post("api/alerts", {...alertForm(), test: true}).then(r => r.json()).then(d => toast(d.result || "Niente da provare: scrivi almeno una destinazione.")).catch(e => toast("Errore: " + e.message));
-  $("sRemote").onchange = () => post("api/remote", {on: $("sRemote").checked}).then(r => r.json()).then(r => {
-    $("sRemoteInfo").innerHTML = r.on ? `Apri <b>${esc(r.url)}</b> e inserisci il PIN <b>${esc(r.pin)}</b>.` : "Sola lettura, protetto da un PIN.";
-  }).catch(e => { toast("Non attivato: " + e.message); $("sRemote").checked = false; });
   const webSet = body => post("api/webaccess", body).then(r => r.json()).then(w => { $("sWeb").checked = w.on; $("sWebInfo").innerHTML = waInfo(w); $("sWebPw").value = ""; return w; });
   if ($("sWeb")) {
     $("sWeb").onchange = () => webSet({on: $("sWeb").checked, password: $("sWebPw").value}).catch(e => { toast("Non attivato: " + e.message); $("sWeb").checked = false; });
@@ -381,16 +431,28 @@ async function installUpdate() {
 }
 
 // ---- Sheet: IP plan, free IPs, venue sharing ----
+// A tool is a page like the Monitor, above it if the Monitor is open.
 function openSheet(title, html) {
+  const fresh = !$("sheet").classList.contains("open") || $("shTitle").textContent !== title;
   $("shTitle").textContent = title; $("shBody").innerHTML = html;
   $("sheet").classList.add("open"); $("sheet").setAttribute("aria-hidden", "false");
+  if (fresh) $("sheet").scrollTop = 0;
+  placeNet(); if (typeof markQuick === "function") markQuick();
 }
 function closeSheet() {
   $("sheet").classList.remove("open"); $("sheet").setAttribute("aria-hidden", "true");
   if (dmxES) { dmxES.close(); dmxES = null; }
+  currentTool = "";
+  placeNet(); if (typeof markQuick === "function") markQuick();
 }
-$("shClose").onclick = closeSheet;
-$("sheet").onclick = e => { if (e.target === $("sheet")) closeSheet(); };
+// The network row and its warnings follow the page on screen: the open
+// tool, the Monitor, or the device list. Same elements, links keep working.
+function placeNet() {
+  const where = $("sheet").classList.contains("open") ? $("shNet") : $("monitor").classList.contains("open") ? $("mNet") : null;
+  if (where) where.append($("netbar"), $("issues"));
+  else { $("statusRow").append($("netbar")); $("oui").before($("issues")); } // the list: network on the status row
+}
+let currentTool = "";
 function pickFile(accept, then) {
   const f = $("fileIn"); f.accept = accept; f.value = "";
   f.onchange = () => { const file = f.files[0]; if (!file) return; const r = new FileReader(); r.onload = () => then(String(r.result), file.name); r.readAsText(file); };

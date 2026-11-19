@@ -41,7 +41,12 @@ func newHandler(public bool, allowedHosts map[string]bool, quit func()) http.Han
 func apiMux(quit func()) *http.ServeMux {
 	static, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.FS(static)))
+	if dir := devWebDir(); dir != "" {
+		mux.Handle("/", devFiles(dir))
+		mux.HandleFunc("/api/dev", handleDev)
+	} else {
+		mux.Handle("/", http.FileServer(http.FS(static)))
+	}
 	mux.HandleFunc("/api/info", handleInfo)
 	mux.HandleFunc("/api/scan", handleScan)
 	mux.HandleFunc("/api/update-oui", handleUpdateOUI)

@@ -1,16 +1,38 @@
-// The device list, context menu, Tools menu and the detail panel.
+// The device list, context menu and the detail panel.
+
+// During a scan hosts arrive one by one: draw the list at most every 150 ms
+// instead of once per host (with hundreds of hosts that was slow).
+let renderTimer = 0;
+function renderSoon() { if (!renderTimer) renderTimer = setTimeout(render, 150); }
+
+// What the filter looks into: the fields, plus the words of the badges
+// ("critico", "nuovo", "avviso", "non risponde") in both languages.
+function haystack(h, isGone) {
+  return [h.ip, h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "),
+    (KIND[h.kind] || KIND[""])[0], tr((KIND[h.kind] || KIND[""])[0]), (h.ports || []).join(" "),
+    h.critical ? "critico critical" : "", h.new ? "nuovo new" : "", h.self ? "tu you" : "",
+    (h.warnings || []).length ? "avviso avvisi warning " + h.warnings.join(" ") : "", isGone ? "non risponde offline spento" : ""].join(" ").toLowerCase();
+}
+// Every word must match (in any field): "dante critico", "artnet 10.0.0".
+const filterMatch = (h, words, isGone) => { if (!words.length) return true; const t = haystack(h, isGone); return words.every(w => t.includes(w)); };
+let shownKeys = []; // the rows on screen, in order (keyboard navigation)
+
 function render() {
-  if (typeof drawTools === "function" && section !== "list") drawTools(); // what a scan unlocks
-  const f = $("filter").value.toLowerCase();
-  const match = h => !f || [h.ip, h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "), (KIND[h.kind] || KIND[""])[0], (h.ports || []).join(" ")].join(" ").toLowerCase().includes(f);
+  clearTimeout(renderTimer); renderTimer = 0;
+  const words = $("filter").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const match = (h, isGone) => filterMatch(h, words, isGone);
   const inNet = h => !activeNet || h.net === activeNet;
-  const list = hosts.filter(h => inNet(h) && match(h));
+  const list = hosts.filter(h => inNet(h) && match(h, false));
   list.sort((a, b) => {
     const x = sortValue(a, sortKey), y = sortValue(b, sortKey);
     if (typeof x === "string") { if (!x && y) return 1; if (!y && x) return -1; }
     return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
   });
-  const off = es || !showGone ? [] : gone.filter(h => inNet(h) && match(h));
+  const hideGone = (es && !es.quiet) || !showGone; // a continuous scan keeps them on screen
+  const off = hideGone ? [] : gone.filter(h => inNet(h) && match(h, true));
+  const all = hosts.filter(inNet).length + (hideGone ? 0 : gone.filter(inNet).length);
+  $("fcount").textContent = words.length && all ? `${list.length + off.length} di ${all}` : "";
+  shownKeys = list.concat(off).map(h => h.key);
   if (!list.length && !off.length) {
     $("rows").innerHTML = `<tr><td colspan="7" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
     return;
@@ -19,7 +41,7 @@ function render() {
     const main = label(h);
     const sub = [h.role, h.name ? (h.friendly || h.hostname) : (h.friendly && h.hostname && h.friendly !== h.hostname ? h.hostname : "")].filter(Boolean).join(" · ");
     const warns = (h.warnings || []).length;
-    return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${selected === h.key ? " sel" : ""}">
+    return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${selected === h.key ? " sel" : ""}${!isGone && freshKeys.has(h.key) ? " fresh" : ""}">
     <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${h.critical ? '<span class="badge crit">critico</span>' : ""}${warns ? `<span class="badge warn" title="${esc(h.warnings.map(tr).join("\n"))}">⚠ ${warns}</span>` : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
     <td class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
@@ -45,14 +67,14 @@ function toast(msg) {
   $("toast").textContent = msg; $("toast").classList.add("show");
   clearTimeout(toast.t); toast.t = setTimeout(() => $("toast").classList.remove("show"), 1600);
 }
-async function copy(text) {
+async function copy(text, msg) {
   try { await navigator.clipboard.writeText(text); }
   catch {
     const t = document.createElement("textarea");
     t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
     document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
   }
-  toast("Copiato: " + text);
+  toast(msg || "Copiato: " + text);
 }
 function openURL(url) {
   const a = document.createElement("a");
@@ -93,6 +115,8 @@ document.addEventListener("contextmenu", e => {
     showMenu(e.clientX, e.clientY, `Porta ${p}${PORT_NAMES[p] ? " · " + PORT_NAMES[p] : ""}`, items);
     return;
   }
+  const row = e.target.closest("#rows tr[data-key]");
+  if (row && !e.target.closest("[data-copy]")) { e.preventDefault(); rowMenu(row.dataset.key, e.clientX, e.clientY); return; }
   const cell = e.target.closest("[data-copy]");
   if (cell && cell.dataset.copy) {
     e.preventDefault();
@@ -100,10 +124,58 @@ document.addEventListener("contextmenu", e => {
   }
 });
 
+// Right click on a row: the things done most often, without opening the panel.
+function rowMenu(key, x, y) {
+  const h = findHost(key);
+  if (!h) return;
+  const isGone = !hosts.includes(h), items = [];
+  const web = (h.ports || []).find(p => OPEN[p] && OPEN[p][1] === "browser");
+  if (web && !isGone) items.push(["Apri la pagina web", () => openURL(portURL(h.ip, web))]);
+  items.push([`Copia ${h.ip}`, () => copy(h.ip)]);
+  if (h.mac) items.push([`Copia ${h.mac}`, () => copy(h.mac)]);
+  if (label(h)) items.push(["Copia il nome", () => copy(label(h))]);
+  items.push(["Rinomina…", () => { openDetail(key); $("dName").focus(); $("dName").select(); }]);
+  items.push([h.critical ? "Non è più critico" : "Segna come critico", () => setCritical(h, !h.critical)]);
+  if (!isGone) items.push(["Qualità del collegamento", () => { openDetail(key); $("dTools").open = true; $("dPing").click(); }]);
+  showMenu(x, y, label(h) || h.ip, items);
+}
+async function setCritical(h, critical) {
+  try {
+    await post("api/device", {key: h.key, net: h.net || "", name: h.name || "", role: h.role || "", note: h.note || "", critical});
+    h.critical = critical;
+    toast(critical ? "Critico: il Monitor lo tiene d'occhio." : "Non è più critico.");
+    if (selected === h.key) $("dCrit").checked = critical;
+    render();
+  } catch (e) { toast("Non salvato: " + e.message); }
+}
+
+// Keyboard: / or ⌘F filter, ↑ ↓ move between devices, Esc closes or clears.
+const typing = e => e.target.closest && e.target.closest("input, textarea, select, [contenteditable]");
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if ($("sheet").classList.contains("open") || $("monitor").classList.contains("open")) return;
+  if (e.key === "/" && !typing(e)) { e.preventDefault(); wasapingFind(); return; }
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !typing(e) && shownKeys.length) {
+    e.preventDefault();
+    const i = shownKeys.indexOf(selected), n = e.key === "ArrowDown" ? 1 : -1;
+    const next = shownKeys[i < 0 ? (n > 0 ? 0 : shownKeys.length - 1) : Math.max(0, Math.min(shownKeys.length - 1, i + n))];
+    openDetail(next);
+    const row = document.querySelector(`#rows tr[data-key="${CSS.escape(next)}"]`);
+    if (row) row.scrollIntoView({block: "nearest"});
+  }
+});
+$("filter").addEventListener("keydown", e => {
+  if (e.key === "Escape" && $("filter").value) { e.stopPropagation(); $("filter").value = ""; render(); }
+  if (e.key === "ArrowDown" && shownKeys.length) { e.preventDefault(); $("filter").blur(); openDetail(shownKeys[0]); }
+});
+
 document.querySelectorAll("th").forEach(th => th.onclick = () => {
   const k = th.dataset.k;
-  sortDir = sortKey === k ? -sortDir : 1; sortKey = k; render();
+  sortDir = sortKey === k ? -sortDir : 1; sortKey = k;
+  try { localStorage.setItem("wasaping.sort", `${sortKey} ${sortDir}`); } catch {}
+  render();
 });
+try { const [k, d] = (localStorage.getItem("wasaping.sort") || "").split(" "); if (document.querySelector(`th[data-k="${k}"]`)) { sortKey = k; sortDir = d === "-1" ? -1 : 1; } } catch {}
 $("filter").oninput = render;
 $("rows").onclick = e => {
   if (e.target.closest("a")) return; // port links open the device page
@@ -209,7 +281,9 @@ function closeDetail() {
 $("dClose").onclick = closeDetail;
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
-  if ($("ctx").style.display === "block") hideMenu(); else if (selected) closeDetail();
+  if ($("ctx").style.display === "block") hideMenu();
+  else if ($("sheet").classList.contains("open")) closeSheet();
+  else if (selected) closeDetail();
 });
 
 async function post(url, body) {
@@ -312,6 +386,18 @@ $("dKind").onchange = async () => {
     $("dMsg").textContent = "✓ Tipo corretto: grazie, finisce anche nella diagnostica.";
   } catch (e) { $("dMsg").textContent = "Non salvato: " + e.message; }
 };
+
+// The devices on screen (filter and network included) as a table to paste
+// into a spreadsheet, a chat or the rider.
+function copyList() {
+  const rows = shownKeys.map(findHost).filter(Boolean);
+  if (!rows.length) { toast("Nessun dispositivo da copiare."); return; }
+  const head = ["IP", "Nome", "Ruolo", "Tipo", "Modello", "MAC", "Protocolli", "Universi"].map(tr);
+  const cell = v => String(v ?? "").replace(/[\t\n]+/g, " ");
+  const text = [head].concat(rows.map(h => [h.ip, label(h), h.role, tr((KIND[h.kind] || KIND[""])[0]), h.model || h.vendor, h.mac, (h.protocols || []).join(", "), universeText(h)].map(cell)))
+    .map(r => r.join("\t")).join("\n");
+  copy(text, LANG === "en" ? `${rows.length} devices copied: paste them in a spreadsheet.` : `${rows.length} dispositivi copiati: incollali in un foglio di calcolo.`);
+}
 
 // Diagnostic bundle: a scan that records what devices answer, saved as a zip.
 async function saveDiag() {

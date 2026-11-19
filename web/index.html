@@ -9,16 +9,12 @@
 </head>
 <body>
 <header>
-  <div class="logo"></div>
-  <h1>wasa<b>ping</b></h1>
+  <div class="logo" title="Torna all'elenco"></div>
+  <h1 title="Torna all'elenco">wasa<b>ping</b></h1>
   <span class="tag">a spicy little IP scanner</span>
-  <button id="setBtn" class="langbtn" title="Impostazioni">⚙ Impostazioni</button>
+  <nav id="quick" class="quick" aria-label="Strumenti dello show"></nav>
+  <button id="setBtn" class="hbtn" title="Impostazioni">⚙ Impostazioni</button>
 </header>
-<div hidden>
-  <button id="langBtn">English</button><button id="theme">Tema: automatico</button>
-  <select id="repeat"><option value="0">mai</option><option value="5">5</option><option value="15">15</option><option value="60">60</option></select>
-  <button id="printBtn" disabled></button><button id="csv" disabled></button><button id="json" disabled></button>
-</div>
 
 <div class="bar">
   <div class="group">
@@ -31,18 +27,15 @@
     </select>
     <input id="custom" hidden placeholder="22,80,443 o 1-1024" spellcheck="false" title="Porte da controllare">
     <button id="scan" class="primary">Scansiona</button>
+    <button id="loopBtn" class="loop" aria-pressed="false" title="Rifà la scansione di continuo finché la finestra è aperta: l'elenco si aggiorna da solo e avvisa se arriva o sparisce qualcuno">↻ Continua</button>
   </div>
   <div class="group tools">
-    <input id="filter" placeholder="Filtra per IP, nome, produttore…">
-    <button id="preBtn" title="Controlla tutto prima dello show e prepara un report">Check pre-show</button>
-    <button id="monBtn" title="Tiene d'occhio i dispositivi critici e suona se uno sparisce">Monitor</button>
+    <input id="filter" placeholder="Filtra per IP, nome, produttore…" title="Più parole: tutte devono comparire. Anche «critico», «nuovo», «avviso», «non risponde». Tasto: /"><span id="fcount" class="fcount"></span>
     <button id="quit" hidden title="Chiude wasaping">Esci</button>
   </div>
 </div>
-<nav id="tabs" class="tabs" aria-label="Sezioni"></nav>
 <div class="progress"><div id="prog"></div></div>
-<div class="status"><span id="status">Pronto.</span><span id="extra"></span></div>
-<div class="netbar" id="netbar"></div>
+<div class="status" id="statusRow"><span id="status">Pronto.</span><span id="extra"></span><div class="netbar" id="netbar"></div></div>
 <div class="notice warn" id="issues"></div>
 <div class="notice" id="oui">
   <span>Scarica il database dei produttori (IEEE) per vedere chi ha fatto ogni dispositivo.</span>
@@ -53,11 +46,10 @@
 </div>
 <div class="notice info" id="machidden">
   <span><b>macOS nasconde gli indirizzi MAC</b> ai programmi non firmati da uno sviluppatore Apple registrato, quindi MAC e produttori restano vuoti.
-  wasaping può installare un piccolo aiuto di sistema che li legge: serve la password di amministratore <b>una sola volta</b>, la inserisci nella finestra di macOS (wasaping non la vede) e l'aiuto lavora solo mentre wasaping è aperto. Lo togli quando vuoi con «Disinstalla» in fondo alla pagina.</span>
+  wasaping può installare un piccolo aiuto di sistema che li legge: serve la password di amministratore <b>una sola volta</b>, la inserisci nella finestra di macOS (wasaping non la vede) e l'aiuto lavora solo mentre wasaping è aperto. Lo togli quando vuoi da ⚙ Impostazioni.</span>
   <span style="display:flex;gap:8px;flex:none"><button id="helperBtn" class="primary">Mostra i MAC</button><button id="helperNo">Non ora</button></span>
 </div>
 
-<div id="toolsView"></div>
 <div class="wrap" id="listWrap">
   <table>
     <thead><tr>
@@ -68,7 +60,6 @@
   </table>
 </div>
 
-<div class="foot" id="helperFoot"></div>
 
 <aside id="detail" aria-hidden="true">
   <button class="close" id="dClose" title="Chiudi">×</button>
@@ -93,21 +84,20 @@
     <button id="dForget" class="danger" title="Toglie il dispositivo dall'elenco dei conosciuti">Dimentica</button>
   </div>
   <div class="msg" id="dMsg"></div>
-  <div class="tool">
-    <label for="dToolHost">Strumenti di rete</label>
+  <details class="ntool" id="dTools">
+    <summary>Strumenti di rete</summary>
     <div class="row">
       <input id="dToolHost" spellcheck="false" title="IP o nome: anche un indirizzo internet, es. 8.8.8.8">
-      <button id="dPing" title="20 ping: perdite, tempi e stabilità del collegamento">Qualità del collegamento</button>
+      <button id="dPing" title="20 ping: perdite, tempi e stabilità del collegamento">Ping</button>
       <button id="dTrace" title="Il percorso dei pacchetti fino al dispositivo">Traceroute</button>
     </div>
     <div class="pings" id="dPings" hidden></div>
     <pre id="dToolOut" hidden></pre>
-  </div>
+  </details>
 </aside>
 
 <section id="monitor" aria-hidden="true">
   <header>
-    <div class="logo"></div>
     <h1>Monitor</h1>
     <span class="state ok" id="mState">TUTTO OK</span>
     <span class="tag" id="mInfo"></span>
@@ -117,8 +107,8 @@
     </select>
     <label class="check" style="margin:0"><input type="checkbox" id="mSound" checked> Allarme sonoro</label>
     <button id="mToggle" class="primary">Avvia</button>
-    <button id="mClose" title="Il monitor continua a controllare anche a finestra chiusa">Torna all'elenco</button>
   </header>
+  <div id="mNet"></div>
   <div class="mbody">
     <div class="mmain"><div class="tag" id="mPTP"></div><div id="tiles"></div></div>
     <aside class="mlog">
@@ -134,7 +124,8 @@
 
 <section id="sheet" aria-hidden="true">
   <div class="box">
-    <header><h2 id="shTitle"></h2><button class="close" id="shClose" title="Chiudi">×</button></header>
+    <header><h2 id="shTitle"></h2></header>
+    <div id="shNet"></div>
     <div id="shBody"></div>
   </div>
 </section>

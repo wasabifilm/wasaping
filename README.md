@@ -26,7 +26,7 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 
 > **macOS, la prima volta:** l'app non è firmata da Apple, quindi macOS la blocca. Apri *Impostazioni di Sistema → Privacy e sicurezza* e premi **Apri comunque**, oppure dal Terminale: `xattr -cr /Applications/wasaping.app`
 >
-> **macOS, indirizzi MAC:** le versioni recenti di macOS nascondono gli indirizzi MAC ai programmi non firmati da uno sviluppatore Apple registrato. wasaping te lo dice e propone **«Mostra i MAC»**: installa un piccolo aiuto di sistema che legge la tabella ARP. Serve la password di amministratore **una sola volta**, nella finestra standard di macOS (wasaping non la vede). L'aiuto lavora **solo mentre wasaping è aperto**: a wasaping chiuso non usa né CPU né memoria. Lo togli con *Disinstalla* in fondo alla finestra o con `wasaping helper uninstall`. Su Windows e Linux non serve.
+> **macOS, indirizzi MAC:** le versioni recenti di macOS nascondono gli indirizzi MAC ai programmi non firmati da uno sviluppatore Apple registrato. wasaping te lo dice e propone **«Mostra i MAC»**: installa un piccolo aiuto di sistema che legge la tabella ARP. Serve la password di amministratore **una sola volta**, nella finestra standard di macOS (wasaping non la vede). L'aiuto lavora **solo mentre wasaping è aperto**: a wasaping chiuso non usa né CPU né memoria. Lo togli da *⚙ Impostazioni → Indirizzi MAC → Disinstalla* o con `wasaping helper uninstall`. Su Windows e Linux non serve.
 >
 > **Windows, la prima volta:** se compare SmartScreen, premi *Ulteriori informazioni → Esegui comunque*.
 
@@ -45,7 +45,7 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - più master PTP;
   - lo stesso universo sACN inviato da più sorgenti;
   - rete senza router.
-- **Check pre-show:** un solo pulsante controlla tutto prima dello show e prepara un **report verde/giallo/rosso** da stampare o salvare in PDF. Guarda:
+- **Pre-show:** un solo pulsante controlla tutto prima dello show e prepara un **report verde/giallo/rosso** da stampare o salvare in PDF. Guarda:
   - i dispositivi e gli universi critici;
   - il piano IP;
   - i problemi di rete e gli avvisi.
@@ -53,15 +53,15 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Dante:**
   - canali in trasmissione, frequenza di campionamento e latenza, letti da Bonjour;
   - avvisi su **frequenze diverse**, **primaria e secondaria sullo stesso switch** e dispositivi **non agganciati al clock**;
-  - il **routing in sola lettura** (Show → Dante): a cosa è collegato ogni canale in ricezione, gli abbonamenti non risolti e la banda stimata. Il protocollo di Audinate non è pubblico: questa parte è sperimentale;
+  - il **routing in sola lettura** (Dante, in alto): a cosa è collegato ogni canale in ricezione, gli abbonamenti non risolti e la banda stimata. Il protocollo di Audinate non è pubblico: questa parte è sperimentale;
   - nel Monitor, la **secondaria** dei dispositivi critici e l'aggancio al clock.
-- **Video** (Show → Video): stato di **ATEM** (programma e anteprima), **HyperDeck** (registrazione, spazio libero), **Videohub** (tabella di routing), **vMix** (in onda, registrazione, streaming), Resolume; proiettori PJLink, sorgenti NDI, clock PTPv2.
+- **Video** (Video, in alto): stato di **ATEM** (programma e anteprima), **HyperDeck** (registrazione, spazio libero), **Videohub** (tabella di routing), **vMix** (in onda, registrazione, streaming), Resolume; proiettori PJLink, sorgenti NDI, clock PTPv2.
 - **Velocità delle porte** degli switch (SNMP): avviso se un dispositivo Dante, NDI o video è su una porta a 100 Mbit.
 - **Report di fine show:** dal registro del Monitor, quante volte è caduto ogni dispositivo, per quanto tempo in tutto e il buco più lungo, più la cronologia e il **grafico dei tempi di risposta di tutta la serata**. Si stampa o si salva in PDF.
 - **Confronta con l'ultima volta:** nello stesso locale, chi c'è di nuovo, chi manca, chi ha cambiato IP o nome rispetto alla volta precedente.
 - **Mappa della rete:** dagli switch gestiti (SNMP) e da LLDP, quali switch sono collegati tra loro e su quale porta, e cosa c'è su ogni porta.
 - **Box su Raspberry Pi:** `wasaping box` trasforma un Raspberry Pi in un monitor sempre acceso sulla rete show, che guardi dall'iPad. Vedi la [guida](docs/raspberry.md).
-- **Apparecchi RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti** e cosa è cambiato rispetto alla ricerca precedente. Con **Identifica** fai lampeggiare un apparecchio per trovarlo sul traliccio. Con **Modifica** cambi **indirizzo DMX, modalità ed etichetta**: wasaping chiede conferma due volte, avvisa se il nuovo indirizzo si sovrappone, rilegge l'apparecchio per verificare e annota ogni modifica in `rdm-changes.csv`.
+- **RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti** e cosa è cambiato rispetto alla ricerca precedente. Con **Identifica** fai lampeggiare un apparecchio per trovarlo sul traliccio. Con **Modifica** cambi **indirizzo DMX, modalità ed etichetta**: wasaping chiede conferma due volte, avvisa se il nuovo indirizzo si sovrappone, rilegge l'apparecchio per verificare e annota ogni modifica in `rdm-changes.csv`.
 - **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere. Continua anche a finestra chiusa. Controlla anche gli **universi critici** (se smettono di arrivare o se compare una seconda sorgente) e il **master del clock PTP** (se cambia o sparisce). Ogni dispositivo ha un piccolo **grafico dei tempi di risposta**.
 - **Allarmi verso altri programmi:** a ogni evento del Monitor wasaping manda un messaggio **OSC** (a QLab, a una console, a un media server: `/wasaping/down`, `/wasaping/up`) e/o chiama un **indirizzo web** con i dettagli in JSON.
 - **Notifiche sul telefono:** con **ntfy** (il più semplice: un'app e un nome di argomento), **Telegram** (un bot) o **Slack**.
@@ -83,7 +83,7 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Pulisci i dispositivi vecchi:** toglie in un colpo quelli non visti da 3 mesi, 30 giorni o una settimana (i critici restano sempre).
 - **Un elenco per ogni locale:** ogni rete ha i suoi dispositivi, con nome, ruolo e note. La riconosce dal router, o dalla sottorete sulle reti show senza router. Le dai un nome ("Arena Verona") e la volta dopo vedi cosa c'è di nuovo e cosa manca.
 - **Elenco IP da stampare** o salvare in PDF per la crew e il rider: dispositivo, ruolo, IP, MAC, modello, protocolli, universi e note.
-- **Qualità del collegamento:** 20 ping con perdite, tempi e jitter. Serve per capire se un cavo, uno switch o il Wi-Fi fanno i capricci. C'è anche il traceroute.
+- **Ping e traceroute** (pannello del dispositivo → Strumenti di rete, o tasto destro → Qualità del collegamento): 20 ping con perdite, tempi e jitter. Serve per capire se un cavo, uno switch o il Wi-Fi fanno i capricci.
 
 ## Cosa fa, in generale
 
@@ -96,7 +96,8 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Produttori già inclusi:** il database IEEE (oltre 40.000 marche) è dentro il programma e funziona senza internet. Riconosce i **MAC privati/casuali** di iPhone e Android.
 - **Si ricorda dei dispositivi:** segna quelli **nuovi** e quelli che **non rispondono più**, con la presenza nelle ultime scansioni.
 - **Nomi, ruoli e note personalizzati**, salvati sul tuo computer.
-- **Ripetizione automatica** ogni 5, 15 o 60 minuti, anche a finestra chiusa, con una notifica quando arriva un dispositivo nuovo o un dispositivo critico sparisce. Su macOS può **aprirsi al login**, solo nella barra dei menu.
+- **↻ Continua**, accanto a Scansiona: rifà la scansione di continuo (10 secondi dopo la fine di ognuna) finché la finestra è aperta. L'elenco resta sullo schermo e si aggiorna in un colpo solo; i dispositivi appena arrivati si illuminano un attimo. Un avviso dice chi è nuovo o tornato; se sparisce un dispositivo critico, suona e manda una notifica. Il titolo della finestra dice quanti dispositivi ci sono e quanti critici mancano. Si ferma con Stop o con lo stesso pulsante.
+- **Ripetizione in background** ogni 5, 15 o 60 minuti (Impostazioni), anche a finestra chiusa, con una notifica quando arriva un dispositivo nuovo o un dispositivo critico sparisce. Su macOS può **aprirsi al login**, solo nella barra dei menu.
 - **Porte cliccabili:**
   - le pagine web si aprono nel browser;
   - SSH nel Terminale;
@@ -104,12 +105,18 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - SMB/AFP nel Finder.
 
   Col **tasto destro** copi indirizzo e porta.
+- **Tasto destro su un dispositivo:** apri la pagina web, copia IP, MAC o nome, rinomina, segna come critico, controlla il collegamento.
+- **Filtro con più parole:** devono comparire tutte, per esempio `dante critico` o `artnet 10.0.0`. Riconosce anche `critico`, `nuovo`, `avviso` e `non risponde`. Accanto c'è quanti dispositivi restano («5 di 32»); **Esc** lo svuota (e chiude le finestre aperte).
+- **Copia elenco** (Progetto): i dispositivi mostrati, come tabella da incollare in un foglio di calcolo o in una chat.
 - **Wake-on-LAN**, controllo di tutte le porte 1–1024, avvisi sulle porte rischiose (Telnet, FTP sul router…).
-- Scorciatoie **⌘R** scansiona, **⌘F** cerca, **⇧⌘M** Monitor (Ctrl su Windows e Linux). Tema automatico, chiaro o scuro.
+- Scorciatoie **⌘R** scansiona, **⌘F** o **/** cerca, **↑ ↓** passano da un dispositivo all'altro col pannello aperto, **⇧⌘M** Monitor (Ctrl su Windows e Linux). L'ordine delle colonne resta quello scelto. Tema automatico, chiaro o scuro.
 - **Italiano e inglese:** la lingua segue quella del sistema e si cambia col pulsante in alto. La riga di comando segue `LANG`.
 - **Avviso di nuova versione:** una volta al giorno chiede a GitHub l'ultima versione, senza inviare nessun dato tuo o della rete. Su Mac si **aggiorna dall'app**: scarica, controlla il file con `SHA256SUMS` e la firma, sostituisce l'app e la riavvia. Si spegne in Impostazioni.
-- **Strumenti a portata di mano:** le schede **Dispositivi · Show · Rete · Progetto** sotto la barra; sul Mac anche i menu **Show**, **Rete** e **Progetto** in alto, con le scorciatoie (⇧⌘P check pre-show, ⇧⌘M monitor, ⇧⌘D universi DMX, ⇧⌘I piano IP, ⌘S/⌘O progetto, ⌘, impostazioni).
-- **Impostazioni** in un posto solo (⚙ in alto): lingua, tema, ripetizione, allarmi, accesso da iPad, aggiornamenti, apertura al login, aiuto per i MAC e community SNMP. Gli strumenti stanno nelle schede Show, Rete e Progetto.
+- **Tutto in alto:** **Dispositivi · Pre-show · Monitor · DMX · RDM · Dante · Video · Rete · Progetto · ⚙ Impostazioni**. Ogni strumento è una pagina sotto l'intestazione, come il Monitor, con la riga della rete (nome, router, avvisi) in cima. Il pulsante verde dice dove sei; **Esc** o «Dispositivi» riportano all'elenco. Dal Monitor apri DMX o Dante e, chiudendoli, torni al Monitor. **⌘1…⌘9** (Ctrl su Windows e Linux) aprono le pagine nello stesso ordine. La riga della rete sta accanto allo stato, sopra l'elenco; con più di due avvisi di rete se ne vedono due e gli altri con un clic.
+  - **Rete:** Piano IP, IP liberi, Mappa della rete, Confronta con l'ultima volta.
+  - **Progetto:** Report di fine show, Salva e Apri progetto, Pulisci, Copia elenco, Stampa, CSV, JSON, Diagnostica.
+- **Menu del Mac:** i menu **Show**, **Rete** e **Progetto** in alto, con le scorciatoie (⇧⌘P pre-show, ⇧⌘M monitor, ⇧⌘D DMX, ⇧⌘I piano IP, ⌘S/⌘O progetto, ⌘, impostazioni).
+- **Impostazioni** in un posto solo (⚙ in alto, con un indice delle sezioni in cima): lingua, tema, ripetizione in background, allarmi, accesso completo dalla rete, aggiornamenti, apertura al login, aiuto per i MAC e community SNMP. L'accesso in sola lettura da iPad si attiva nel Monitor.
 - Esporta in **CSV**, **JSON** o elenco stampabile.
 
 ### Come trova i dispositivi senza permessi di amministratore

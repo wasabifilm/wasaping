@@ -10,13 +10,22 @@
   :root { --bg: #171717; --panel: #1f1f1f; --ink: #fafaff; --muted: #8a8a8d; --line: #333335; --wasabi: #81d742; --warn: #d63f3f;
           font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
-  header { display: flex; align-items: center; gap: 10px; padding: 14px 0; flex-wrap: wrap; }
-  .logo { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #b4ec8a, var(--wasabi) 55%, #5ea52a); }
-  h1 { font-size: 20px; margin: 0; }
+  /* Same look as the Monitor of the program: header, title row, network row. */
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; padding: 0 0 env(safe-area-inset-bottom); }
+  .top { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-top: env(safe-area-inset-top); }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px 10px; }
+  .logo { width: 30px; height: 30px; border-radius: 50%; flex: none; background: radial-gradient(circle at 35% 35%, #b4ec8a, var(--wasabi) 55%, #5ea52a); }
+  h1 { font-family: Assistant, "Open Sans", sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -.3px; margin: 0; }
   h1 b { color: var(--wasabi); }
-  .net { color: var(--muted); font-size: 14px; flex-basis: 100%; }
-  .state { font-weight: 800; font-size: 18px; padding: 6px 14px; border-radius: 8px; margin-left: auto; }
+  .tag { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .net { font-size: 14px; padding: 10px 20px; border-bottom: 1px solid var(--line); }
+  .net:empty { display: none; }
+  .body { display: grid; grid-template-columns: 1fr 320px; min-height: 60vh; }
+  .main { padding: 16px 20px; }
+  .log { border-left: 1px solid var(--line); padding: 16px 20px; }
+  @media (max-width: 800px) { .body { grid-template-columns: 1fr; } .log { border-left: none; border-top: 1px solid var(--line); } }
+  .state { font-weight: 800; font-size: 15px; padding: 4px 12px; border-radius: 6px; }
   .ok { background: var(--wasabi); color: #171717; }
   .bad { background: var(--warn); color: #fff; animation: blink 1s steps(2) infinite; }
   .off { background: var(--line); color: var(--muted); }
@@ -28,20 +37,21 @@
   .tile .r { color: var(--muted); font-size: 13px; margin-top: 2px; }
   .tile .s { margin-top: 10px; font-size: 14px; font-weight: 700; color: var(--wasabi); }
   .tile.down .s { color: var(--warn); }
-  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 24px 0 8px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
   ol { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   li { padding: 8px 0; border-bottom: 1px solid var(--line); }
   li .t { color: var(--muted); font-family: ui-monospace, Menlo, monospace; margin-right: 8px; }
   li.down b { color: var(--warn); }
   li.up b { color: var(--wasabi); }
-  .warn { border: 1px solid #f2994a; border-radius: 8px; padding: 10px 12px; font-size: 14px; margin-top: 8px; }
+  .warn { border: 1px solid #f2994a; border-radius: 8px; padding: 9px 12px; font-size: 14px; margin: 0 20px 10px; }
+  #issues:not(:empty) { padding-top: 10px; border-bottom: 1px solid var(--line); }
   form { max-width: 320px; margin: 18vh auto 0; text-align: center; }
   input { font: inherit; font-size: 28px; letter-spacing: 8px; text-align: center; width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
   button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
   button.primary { background: var(--wasabi); border-color: var(--wasabi); color: #171717; font-weight: 700; width: 100%; margin-top: 12px; font-size: 18px; }
   .err { color: var(--warn); min-height: 24px; margin-top: 10px; }
   .muted { color: var(--muted); }
-  .foot { color: var(--muted); font-size: 12px; margin: 24px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .foot { color: var(--muted); font-size: 12px; margin: 20px 0 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -56,16 +66,20 @@
   </form>
 </div>
 <div id="app" hidden>
-  <header>
-    <div class="logo"></div><h1>wasa<b>ping</b></h1>
-    <span class="state off" id="state">…</span>
+  <div class="top">
+    <header><div class="logo"></div><h1>wasa<b>ping</b></h1><span class="tag" id="ro">sola lettura</span></header>
+    <div class="row"><h1>Monitor</h1><span class="state off" id="state">…</span></div>
     <div class="net" id="net"></div>
-  </header>
-  <div id="tiles"></div>
-  <div id="issues"></div>
-  <h2 id="logH">Registro</h2>
-  <ol id="events"></ol>
-  <div class="foot"><span id="upd"></span><button id="sound">🔈 Attiva l'allarme sonoro</button></div>
+    <div id="issues"></div>
+  </div>
+  <div class="body">
+    <div class="main"><div id="tiles"></div></div>
+    <aside class="log">
+      <h2 id="logH">Registro</h2>
+      <ol id="events"></ol>
+      <div class="foot"><span id="upd"></span><button id="sound">🔈 Attiva l'allarme sonoro</button></div>
+    </aside>
+  </div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -75,7 +89,7 @@ const EN = (navigator.language || "it").toLowerCase().startsWith("it") ? null : 
   "MONITOR FERMO": "MONITOR STOPPED", "TUTTO OK": "ALL OK", "NON RISPONDE": "NOT RESPONDING", "controllo…": "checking…", "Nessun evento.": "No events.",
   "non risponde": "not responding", "di nuovo in linea dopo ": "back online after ", "Aggiornato alle ": "Updated at ", "⚠️ Computer non raggiungibile": "⚠️ Computer not reachable",
   "Nessun dispositivo critico. Segnali dal computer, nel pannello di dettaglio.": "No critical devices. Mark them on the computer, in the detail panel.",
-  "PIN sbagliato": "Wrong PIN", "troppi tentativi: riprova tra un minuto": "too many attempts: try again in a minute",
+  "PIN sbagliato": "Wrong PIN", "sola lettura": "read only", "troppi tentativi: riprova tra un minuto": "too many attempts: try again in a minute",
 };
 const L = s => (EN && EN[s]) || s;
 if (EN) document.documentElement.lang = "en";
@@ -107,7 +121,7 @@ async function tick() {
   if (r.status === 401) { clearInterval(timer); $("app").hidden = true; $("login").hidden = false; return; }
   const d = await r.json(), m = d.monitor;
   $("login").hidden = true; $("app").hidden = false;
-  $("net").textContent = m.network || "";
+  $("net").textContent = m.network ? (/^(Rete|Network) /.test(m.network) ? m.network : (EN ? "Network: " : "Rete: ") + m.network) : "";
   const st = $("state");
   st.className = "state " + (!m.on ? "off" : m.down ? "bad" : "ok");
   st.textContent = !m.on ? L("MONITOR FERMO") : m.down ? (EN ? `${m.down} NOT RESPONDING` : `${m.down} NON ${m.down === 1 ? "RISPONDE" : "RISPONDONO"}`) : L("TUTTO OK");
@@ -116,7 +130,7 @@ async function tick() {
     const down = x.known && !x.alive;
     return `<div class="tile${down ? " down" : ""}"><div class="t">${esc(x.name)}</div><div class="r">${esc([x.role, x.ip].filter(Boolean).join(" · "))}</div>
       <div class="s">${!x.known ? L("controllo…") : x.alive ? (x.rtt_ms ? x.rtt_ms + " ms" : "ok") : L("NON RISPONDE")}</div></div>`;
-  }).join("") : `<p class="muted">${L("Nessun dispositivo critico. Segnali dal computer, nel pannello di dettaglio.")}</p>`;
+  }).join("") : `<p class="muted" style="grid-column:1/-1;margin:0">${L("Nessun dispositivo critico. Segnali dal computer, nel pannello di dettaglio.")}</p>`;
   $("issues").innerHTML = ((d.scan && d.scan.issues) || []).map(i => `<div class="warn">⚠️ ${esc(i)}</div>`).join("");
   const ev = m.events || [];
   $("events").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b>${esc(e.name)}</b> ${e.up ? L("di nuovo in linea dopo ") + dur(e.down_for) : L("non risponde")}</li>`).join("") : `<li class="muted">${L("Nessun evento.")}</li>`;
@@ -125,7 +139,7 @@ async function tick() {
   seen = ev.length ? Math.max(seen, ev[ev.length - 1].id) : Math.max(seen, 0);
   $("upd").textContent = L("Aggiornato alle ") + new Date().toLocaleTimeString(EN ? "en-GB" : "it");
 }
-for (const id of ["hint", "enter", "logH", "sound"]) $(id).textContent = L($(id).textContent);
+for (const id of ["hint", "enter", "logH", "sound", "ro"]) $(id).textContent = L($(id).textContent);
 function start() { tick(); clearInterval(timer); timer = setInterval(tick, 2000); }
 start();
 </script>

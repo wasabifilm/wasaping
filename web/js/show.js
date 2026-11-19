@@ -11,7 +11,7 @@ const dmxWantPost = () => fetch(`api/dmx?${dmxQuery()}`, {method: "POST"}).catch
 function dmxView() {
   fetch("api/universe").then(r => r.json()).then(l => { critUnis = new Set(l || []); }).catch(() => {});
   fetch("api/rdm").then(r => r.json()).then(d => { dmxPatch = (d.fixtures || []).filter(f => f.address); dmxGridFor = ""; }).catch(() => {});
-  openSheet("Universi DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Solo ascolto: wasaping non manda DMX. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.</p>
+  openSheet("DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Solo ascolto: wasaping non manda DMX. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.</p>
     <div class="row"><button id="dmxTabList" class="primary">Elenco</button><button id="dmxTabAll">Panoramica</button></div>
     <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxAll"></div><div id="dmxDetail"></div>`);
   dmxTableKey = ""; dmxGridFor = "";
@@ -150,7 +150,7 @@ function chanChart(h) {
 // confirmations, change address, mode and label.
 function rdmView() {
   const nodes = hosts.filter(h => h.artnet).length;
-  openSheet("Apparecchi RDM", `<p>wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. La ricerca non cambia niente sugli apparecchi; per cambiare indirizzo, modalità o etichetta c'è «Modifica», che chiede conferma.</p>
+  openSheet("RDM", `<p>wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. La ricerca non cambia niente sugli apparecchi; per cambiare indirizzo, modalità o etichetta c'è «Modifica», che chiede conferma.</p>
     <div class="row"><button class="primary" id="rdmGo" ${nodes ? "" : "disabled"}>Cerca apparecchi</button><span class="muted">${nodes ? `${nodes} nodi Art-Net nell'ultima scansione.` : "Nessun nodo Art-Net: fai prima una scansione."}</span></div>
     <div id="rdmOut"></div>`);
   let fx = [], chHTML = "";
@@ -322,14 +322,13 @@ async function identify(b) {
 
 // ---- Pre-show check: done by the program (preshow.go), shown here ----
 let lastScanAt = 0;
-$("preBtn").onclick = preshow;
 async function preshow() {
   if (needOneNet()) return;
-  openSheet("Check pre-show", "<p>Controllo in corso: scansione, dispositivi critici, universi, piano IP…</p>");
+  openSheet("Pre-show", "<p>Controllo in corso: scansione, dispositivi critici, universi, piano IP…</p>");
   let rep;
   try {
     rep = await fetch(`api/preshow?net=${encodeURIComponent(activeNet)}&lang=${LANG}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
-  } catch (e) { openSheet("Check pre-show", `<p>Errore: ${esc(e.message)}</p>`); return; }
+  } catch (e) { openSheet("Pre-show", `<p>Errore: ${esc(e.message)}</p>`); return; }
   // The program may have run a fresh scan: show it.
   try { const last = await fetch("api/last").then(r => r.json()); if (last && last.at !== shownAt) applyResult(last); } catch {}
   const icon = c => c === "ok" ? "✓" : c === "bad" ? "✗" : "⚠";
@@ -337,7 +336,7 @@ async function preshow() {
     <p class="muted nt">${esc(rep.network)} · ${esc(new Date(rep.at).toLocaleString(LANG === "en" ? "en-GB" : "it"))}</p>
     ${rep.sections.map(sec => `<h3 class="nt">${esc(sec.title)}</h3>${sec.note ? `<p class="muted nt">${esc(sec.note)}</p>` : ""}${sec.rows.length ? `<div class="wrap" style="margin:0"><table><tbody>${sec.rows.map(r => `<tr><td class="st-${r.class}">${icon(r.class)}</td><td class="nt"><b>${esc(r.name)}</b></td><td class="nt">${esc(r.role || "")}</td><td class="mono">${esc(r.ip || "")}</td><td class="nt">${esc(r.detail || "")}</td></tr>`).join("")}</tbody></table></div>` : ""}`).join("")}
     <div class="row"><button class="primary" id="preSave">Stampa o salva il report</button><button id="preAgain">Ricontrolla</button></div>`;
-  openSheet("Check pre-show", body);
+  openSheet("Pre-show", body);
   $("preAgain").onclick = preshow;
   $("preSave").onclick = () => {
     const doc = $("shBody").cloneNode(true);

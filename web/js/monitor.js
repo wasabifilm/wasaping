@@ -12,13 +12,13 @@ async function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
-$("json").onclick = () => download(`wasaping-${stamp()}.json`, JSON.stringify(hosts, null, 2), "application/json");
-$("csv").onclick = () => {
+const exportJSON = () => download(`wasaping-${stamp()}.json`, JSON.stringify(hosts, null, 2), "application/json");
+function exportCSV() {
   const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [["ip","nome","ruolo","nome dispositivo","hostname","mac","produttore","modello","tipo","protocolli","universi","porte","rtt_ms","critico","note"].join(",")]
     .concat(hosts.map(h => [h.ip, h.name, h.role, h.friendly, h.hostname, h.mac, h.vendor, h.model, (KIND[h.kind] || KIND[""])[0], (h.protocols || []).join(" "), universeText(h), (h.ports||[]).join(" "), h.rtt_ms || "", h.critical ? "sì" : "", h.note].map(q).join(",")));
   download(`wasaping-${stamp()}.csv`, lines.join("\n"), "text/csv");
-};
+}
 
 function universeText(h) {
   const p = [];
@@ -30,7 +30,7 @@ function universeText(h) {
 
 // Printable IP list for the crew / the venue: saved as a web page and
 // opened in the browser, where it can be printed or saved as PDF.
-$("printBtn").onclick = () => {
+function printList() {
   const title = network ? (network.name || network.auto) : "Rete";
   const list = [...hosts].sort((a, b) => ipNum(a.ip) - ipNum(b.ip));
   const rows = list.map(h => `<tr><td>${esc(h.ip)}</td><td><b>${esc(label(h) || "—")}</b>${h.critical ? " ●" : ""}</td><td>${esc(h.role || "")}</td><td>${esc((KIND[h.kind] || KIND[""])[0])}</td><td>${esc(h.model || h.vendor || "")}</td><td>${esc(h.mac || "")}</td><td>${esc((h.protocols || []).join(", "))}</td><td>${esc(universeText(h))}</td><td>${esc(h.swport ? h.swport.switch + " " + h.swport.port : "")}</td><td>${esc(h.note || "")}</td></tr>`).join("");
@@ -56,12 +56,10 @@ td:first-child,td:nth-child(6){font-family:Menlo,Consolas,monospace}tr:nth-child
   post("api/save", {name: `wasaping-elenco-${stamp()}.html`, data: page, open: true})
     .then(r => r.json()).then(d => toast("Elenco aperto nel browser: " + d.path))
     .catch(e => toast("Non salvato: " + e.message));
-};
+}
 
 // ---- Show monitor: runs in the program; the page shows its state ----
 let monTimer = null, monLast = null, audioCtx = null, monSeenEvent = -1;
-$("monBtn").onclick = openMonitor;
-$("mClose").onclick = closeMonitor;
 $("mEvery").onchange = () => post("api/monitor", {on: !!(monLast && monLast.on), every: +$("mEvery").value}).then(monRefresh);
 $("mToggle").onclick = () => post("api/monitor", {on: !(monLast && monLast.on), every: +$("mEvery").value}).then(monRefresh);
 $("mExport").onclick = () => {
@@ -75,7 +73,9 @@ $("mExport").onclick = () => {
 };
 
 async function openMonitor() {
-  $("monitor").classList.add("open"); $("monitor").setAttribute("aria-hidden", "false");
+  if ($("sheet").classList.contains("open")) closeSheet(); // a tool page would hide it
+  $("monitor").classList.add("open"); $("monitor").setAttribute("aria-hidden", "false"); markQuick();
+  placeNet(); // the network the Monitor watches, and its warnings
   // Browsers need a user gesture to allow sound later.
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
   const st = await monRefresh();
@@ -89,7 +89,8 @@ async function openMonitor() {
 }
 function closeMonitor() {
   clearInterval(monTimer); monTimer = null;
-  $("monitor").classList.remove("open"); $("monitor").setAttribute("aria-hidden", "true");
+  $("monitor").classList.remove("open"); $("monitor").setAttribute("aria-hidden", "true"); markQuick();
+  placeNet();
 }
 async function monRefresh() {
   let st;
@@ -98,7 +99,9 @@ async function monRefresh() {
   $("mEvery").value = String(st.every);
   $("mToggle").textContent = st.on ? "Ferma" : "Avvia";
   $("mToggle").classList.toggle("primary", !st.on);
-  $("mInfo").textContent = (st.network || "") + (st.on ? " · attivo, anche a finestra chiusa" : " · fermo");
+  // The network is in the bar below (moved here): repeat it only without one.
+  const where = $("netbar").textContent.trim() ? "" : (st.network || "");
+  $("mInfo").textContent = [where, st.on ? "attivo, anche a finestra chiusa" : "fermo"].filter(Boolean).join(" · ");
   drawTiles(st);
   const ev = st.events || [];
   $("mEvents").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.text ? "warn" : e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b class="nt">${esc(e.name)}</b> ${e.text ? `<span class="nt">${esc(e.text)}</span>` : e.up ? `di nuovo in linea dopo ${esc(fmtDur(e.down_for))}` : (e.kind === "universe" ? "non arriva" : "non risponde")}</li>`).join("") : '<li class="muted">Nessun evento.</li>';

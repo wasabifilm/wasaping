@@ -1,0 +1,20 @@
+# wasaping in box mode, as a systemd service (Raspberry Pi, any Linux).
+# Install: see docs/raspberry.md
+[Unit]
+Description=wasaping box (monitor della rete show)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=wasaping
+ExecStart=/usr/local/bin/wasaping box
+Restart=always
+RestartSec=3
+# Listen to PTP (ports 319/320) and ping without being root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW
+NoNewPrivileges=true
+Environment=LANG=it_IT.UTF-8
+
+[Install]
+WantedBy=multi-user.target

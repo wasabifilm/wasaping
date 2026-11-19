@@ -269,11 +269,7 @@ var logMu sync.Mutex
 func appendMonitorLog(e MonEvent) {
 	logMu.Lock()
 	defer logMu.Unlock()
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return
-	}
-	p := filepath.Join(dir, "wasaping", "monitor-log.csv")
+	p := monitorLogPath()
 	os.MkdirAll(filepath.Dir(p), 0o700)
 	newFile := false
 	if _, err := os.Stat(p); os.IsNotExist(err) {

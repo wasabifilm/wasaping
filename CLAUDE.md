@@ -4,10 +4,11 @@ Scanner IP multipiattaforma in stile LanScan. Go 1.22+, **solo libreria standard
 Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfaccia in italiano; commenti nel codice in inglese.
 
 ## Comandi
-- `go test ./...` · `go vet ./...` anche con `GOOS=windows`, `GOOS=darwin` e **`GOOS=linux GOARCH=amd64`** (il Mac è arm64: alcune costanti di `syscall`, es. SO_REUSEPORT, esistono solo su certe architetture)
+- `go test ./...` · `WASAPING_INTEGRATION=1 go test ./scanner -run Integration` (simulatore show vero: Art-Net, sACN, DMX, RDM, Identifica) · `go vet ./...` anche con `GOOS=windows`, `GOOS=darwin` e **`GOOS=linux GOARCH=amd64`** (il Mac è arm64: alcune costanti di `syscall`, es. SO_REUSEPORT, esistono solo su certe architetture)
 - `go run . app`: finestra (su Mac nativa, serve cgo) · `go run . web`: browser · `go run .`: terminale
 - `make oui`: aggiorna il database produttori incorporato · `make release`: tutti gli eseguibili + `dist/wasaping-macos.zip` · `make macapp` (solo su macOS) · `make icon`
-- Go sul Mac del proprietario: Homebrew, `/opt/homebrew/bin/go` (aggiungerlo al PATH se manca)
+- Go sul Mac del proprietario: Homebrew, `/opt/homebrew/bin/go` (aggiungerlo al PATH se manca). `goimports` in `~/go/bin` (solo strumento di sviluppo).
+- `go run ./cmd/showsim [-ip IP]`: simula l'attrezzatura show sulla rete (`internal/showsim`).
 
 ## Architettura
 - `scanner/`: motore. `Scan()` lavora in 3 fasi: (1) sonde TCP in parallelo, dove anche ECONNREFUSED vuol dire host vivo, con il ping di sistema come ripiego (RTT letto dall'output del ping); (2) lettura della cache ARP del sistema operativo (`/proc/net/arp` su Linux, `arp -a` altrove); (3) arricchimento: DNS inverso, poi mDNS + NetBIOS (`names.go`, tutti gli host insieme), produttore dal database IEEE incorporato (`scanner/oui.txt.gz`, ~380 KB, rigenerato con `make oui` → `scripts/ouigen`; una copia scaricata con update-oui ha la precedenza), porte.
@@ -44,8 +45,17 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
 - Verde **#81d742** (da wasabi.eu, il sito del proprietario) su quasi-nero **#171717**. Font Open Sans / Assistant.
 - Nel tema chiaro, il testo verde usa `#3f7a17` per il contrasto; il testo sopra pulsanti verdi è scuro, non bianco.
 
+- v0.6 (riordino):
+  - **Server:** `api.go` (rotte + filtro `newHandler`, testato in `api_test.go`), `api_scan.go`, `api_devices.go`, `api_show.go`, `api_tools.go`.
+  - **Pagina:** `web/index.html` (solo struttura) + `web/app.css` + `web/js/{core,i18n,app,list,monitor,start}.js`, caricati in quest'ordine. Un gestore assegnato per nome al caricamento va definito nello stesso file o in uno precedente.
+  - **Logica nel programma:** `preshow.go` (confronto col piano IP `comparePlan` e check pre-show `runPreshow`, usati da pagina, riga di comando e test), `showreport.go` (report di fine show dal `monitor-log.csv`).
+  - **Riga di comando:** `cli_show.go` (preshow, rdm [identify], dmx, monitor, plan, venue, report).
+  - **Box:** `box.go` (`wasaping box`: monitor + scansioni + vista iPad; interfaccia completa solo su 127.0.0.1:47480 via tunnel SSH), `deploy/wasaping.service`, `docs/raspberry.md`.
+  - **RDM:** «Identifica» (SET IDENTIFY_DEVICE) è l'unica scrittura verso gli apparecchi, con conferma nella pagina.
+  - **CI:** i test macOS sono un job separato; la release fa da sé i test su macOS (prima restava bloccata dai runner macOS in coda).
+
 ## Stato e prossimi passi
-- v0.1 pubblicata. Provato su Mac reale (macOS 27, arm64): finestra nativa, scansione, nomi mDNS/NetBIOS, esportazione. Windows ancora da provare su hardware reale (finestra Edge, ARP, ping).
+- Pubblicate fino alla v0.5.0 (release su GitHub con file Mac/Windows/Linux). Provato su Mac reale (macOS 27, arm64) con la rete di casa e il simulatore show. Da provare su hardware reale: Windows su un PC, attrezzatura show (Dante, NDI, ATEM, PJLink, PTP, RDM), switch gestiti, Raspberry Pi.
 - Modulo: `github.com/wasabifilm/wasaping`. Repository pubblico: https://github.com/wasabifilm/wasaping
 - Nuova release: `git tag vX.Y.Z && git push --tags` fa partire la CI, che crea la release.
-- Idee: firma/notarizzazione Apple (anche per i MAC), WebView2 + icona nella tray su Windows (da provare su un PC), IPv6, Dante (ARC) per canali e clock.
+- Idee: firma/notarizzazione Apple (anche per i MAC), WebView2 + icona nella tray su Windows (da provare su un PC), IPv6, Dante (ARC) per clock e routing, RDM indirizzi in scrittura (con conferme).

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,35 +201,4 @@ func backgroundScan(ctx context.Context) {
 	if len(lost) > 0 {
 		notify(T("⚠️ wasaping: non risponde", "⚠️ wasaping: not responding"), strings.Join(lost, ", "))
 	}
-}
-
-// handleBackground reads or sets the repeat interval; POST ?now=1 scans now.
-func handleBackground(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		if r.URL.Query().Get("now") == "1" {
-			select {
-			case bgKick <- struct{}{}:
-			default:
-			}
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-		var req settings
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil || req.Repeat < 0 || req.Repeat > 24*60 {
-			http.Error(w, "richiesta non valida", http.StatusBadRequest)
-			return
-		}
-		s := loadSettings()
-		s.Repeat = req.Repeat
-		saveSettings(s)
-	}
-	writeJSON(w, map[string]any{"repeat_minutes": loadSettings().Repeat, "running": bgRunning.Load()})
-}
-
-// handleLast returns the latest finished scan (page reopened, background scans).
-func handleLast(w http.ResponseWriter, r *http.Request) {
-	lastMu.Lock()
-	res := lastResult
-	lastMu.Unlock()
-	writeJSON(w, res)
 }

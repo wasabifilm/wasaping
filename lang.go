@@ -86,8 +86,10 @@ var enMessages = []struct {
 }
 
 // msgCLI translates a scanner message for the command line.
-func msgCLI(s string) string {
-	if cliLang != "en" {
+func msgCLI(s string) string { return msgIn(s, cliLang) }
+
+func msgIn(s, lang string) string {
+	if lang != "en" {
 		return s
 	}
 	for _, m := range enMessages {

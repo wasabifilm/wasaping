@@ -3,8 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
-	"fmt"
 	"math"
 	"net"
 	"net/http"
@@ -30,21 +28,6 @@ func toolTarget(s string) (string, bool) {
 		return ip.String(), true
 	}
 	return s, reHostname.MatchString(s)
-}
-
-func sseStart(w http.ResponseWriter) (func(string, any), bool) {
-	fl, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming non supportato", http.StatusInternalServerError)
-		return nil, false
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	return func(event string, v any) {
-		b, _ := json.Marshal(v)
-		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
-		fl.Flush()
-	}, true
 }
 
 // handlePingTest sends `count` pings and reports each one, then loss,

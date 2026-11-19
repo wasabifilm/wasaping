@@ -45,7 +45,7 @@ func Check(ctx context.Context, ips []string, knownPorts map[string][]int) []Che
 			start := time.Now()
 			poll := append([]byte("Art-Net\x00"), 0x00, 0x20, 0, 14, 0, 0)
 			for _, b := range broadcastAddrs() {
-				c.WriteToUDP(poll, &net.UDPAddr{IP: b, Port: 6454})
+				c.WriteToUDP(poll, &net.UDPAddr{IP: b, Port: ArtNetNodePort})
 			}
 			actx, acancel := context.WithTimeout(ctx, time.Second)
 			defer acancel()

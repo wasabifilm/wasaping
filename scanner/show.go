@@ -46,6 +46,10 @@ type showInfo struct {
 	ptpPrio1 int
 }
 
+// ArtNetNodePort is where requests to Art-Net nodes go (always 6454 on a
+// real network; the tests run a simulated node on another port).
+var ArtNetNodePort = 6454
+
 var artStyles = map[byte]string{0: "nodo", 1: "console", 2: "media server", 3: "router", 4: "backup", 5: "configuratore", 6: "visualizzatore"}
 
 // showDiscover polls Art-Net and listens to sACN and PTP for `wait`, on the
@@ -71,7 +75,7 @@ func showDiscover(ctx context.Context, iface *net.Interface, wait time.Duration)
 			defer c.Close()
 			poll := append([]byte("Art-Net\x00"), 0x00, 0x20, 0, 14, 0, 0)
 			for _, b := range broadcastAddrs() {
-				c.WriteToUDP(poll, &net.UDPAddr{IP: b, Port: 6454})
+				c.WriteToUDP(poll, &net.UDPAddr{IP: b, Port: ArtNetNodePort})
 			}
 			readUntil(ctx, c, func(b []byte, from *net.UDPAddr) {
 				if n := parseArtPollReply(b); n != nil {
@@ -340,4 +344,15 @@ func queryPJLinkAddr(ctx context.Context, addr string, timeout time.Duration) *P
 		p.Errors = strings.Join(bad, ", ")
 	}
 	return p
+}
+
+// FindArtNetNodes polls Art-Net for wait and returns the nodes by IP.
+func FindArtNetNodes(ctx context.Context, wait time.Duration) map[string]*ArtNetNode {
+	out := map[string]*ArtNetNode{}
+	for ip, s := range showDiscover(ctx, nil, wait) {
+		if s.artnet != nil {
+			out[ip] = s.artnet
+		}
+	}
+	return out
 }

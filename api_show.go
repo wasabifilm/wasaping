@@ -1,0 +1,188 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"net"
+	"net/http"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/wasabifilm/wasaping/scanner"
+)
+
+// Show tools: live DMX, critical universes, RDM, switch ports.
+
+// handleSwitchPorts asks the managed switches (SNMP v2c, read-only
+// community) which port each device of the latest scan is on.
+func handleSwitchPorts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Community string `json:"community"`
+	}
+	json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req)
+	comm := strings.TrimSpace(req.Community)
+	if comm == "" {
+		comm = "public"
+	}
+	if len(comm) > 64 {
+		http.Error(w, "community troppo lunga", http.StatusBadRequest)
+		return
+	}
+	s := loadSettings()
+	s.SNMPCommunity = comm
+	saveSettings(s)
+	lastMu.Lock()
+	var ips []string
+	if lastResult != nil {
+		for _, h := range lastResult.Hosts {
+			if !h.Self {
+				ips = append(ips, h.IP)
+			}
+		}
+	}
+	lastMu.Unlock()
+	if len(ips) == 0 {
+		http.Error(w, "fai prima una scansione", http.StatusConflict)
+		return
+	}
+	activeScan.Add(1)
+	defer activeScan.Add(-1)
+	switches, ports := scanner.SwitchPorts(r.Context(), ips, comm)
+	writeJSON(w, map[string]any{"switches": switches, "ports": ports, "community": comm})
+}
+
+// handleRDM lists the RDM fixtures behind the Art-Net nodes of the latest scan.
+func handleRDM(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	nodes := map[string][]int{}
+	lastMu.Lock()
+	if lastResult != nil {
+		for _, h := range lastResult.Hosts {
+			if h.ArtNet == nil {
+				continue
+			}
+			u := append(append([]int{}, h.ArtNet.Out...), h.ArtNet.In...)
+			if len(u) == 0 {
+				u = []int{0}
+			}
+			nodes[h.IP] = u
+		}
+	}
+	lastMu.Unlock()
+	if len(nodes) == 0 {
+		http.Error(w, "nessun nodo Art-Net nell'ultima scansione", http.StatusConflict)
+		return
+	}
+	activeScan.Add(1)
+	defer activeScan.Add(-1)
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	writeJSON(w, map[string]any{"nodes": len(nodes), "fixtures": scanner.RDMDiscover(ctx, nodes)})
+}
+
+// handleDMX streams the live universes (SSE) while the page shows them, for
+// up to 15 minutes. ?u=sacn:1 asks for the levels of one universe; the page
+// changes it with POST ?u=… on the same id (?s=session).
+var (
+	dmxMu     sync.Mutex
+	dmxDetail = map[string]string{}
+)
+
+func handleDMX(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	sess := q.Get("s")
+	if r.Method == http.MethodPost {
+		dmxMu.Lock()
+		dmxDetail[sess] = q.Get("u")
+		dmxMu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	send, ok := sseStart(w)
+	if !ok {
+		return
+	}
+	dmxMu.Lock()
+	dmxDetail[sess] = q.Get("u")
+	dmxMu.Unlock()
+	defer func() { dmxMu.Lock(); delete(dmxDetail, sess); dmxMu.Unlock() }()
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
+	defer cancel()
+	var iface = defaultIface()
+	scanner.ListenDMX(ctx, iface, 64, 500*time.Millisecond, func() string {
+		dmxMu.Lock()
+		defer dmxMu.Unlock()
+		return dmxDetail[sess]
+	}, func(u []scanner.Universe) {
+		if u == nil {
+			u = []scanner.Universe{}
+		}
+		send("snap", u)
+	})
+}
+
+func defaultIface() *net.Interface {
+	i, err := scanner.DefaultInterface()
+	if err != nil {
+		return nil
+	}
+	return scanner.InterfaceFor(net.ParseIP(i.IP))
+}
+
+var reUniverseID = regexp.MustCompile(`^(art|sacn):\d{1,5}$`)
+
+// handleUniverse marks a universe as critical for the monitor: POST {id, critical}.
+func handleUniverse(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req struct {
+			ID       string `json:"id"`
+			Critical bool   `json:"critical"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil || !reUniverseID.MatchString(req.ID) {
+			http.Error(w, "richiesta non valida", http.StatusBadRequest)
+			return
+		}
+		if !devices().SetUniverseCritical(req.ID, req.Critical) {
+			http.Error(w, "fai prima una scansione di questa rete", http.StatusConflict)
+			return
+		}
+	}
+	writeJSON(w, devices().CriticalUniverses())
+}
+
+var reRDMUID = regexp.MustCompile(`^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}$`)
+
+// handleRDMIdentify makes a fixture flash (or stop): POST {node, universe, uid, on}.
+func handleRDMIdentify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Node     string `json:"node"`
+		Universe int    `json:"universe"`
+		UID      string `json:"uid"`
+		On       bool   `json:"on"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil ||
+		net.ParseIP(req.Node).To4() == nil || !reRDMUID.MatchString(req.UID) || req.Universe < 0 || req.Universe > 32767 {
+		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := scanner.RDMIdentify(ctx, req.Node, req.Universe, strings.ToUpper(req.UID), req.On); err != nil {
+		http.Error(w, err.Error(), http.StatusGatewayTimeout)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

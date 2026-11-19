@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wasabifilm/wasaping/scanner"
 )
@@ -105,5 +107,70 @@ func TestDanteRedundancy(t *testing.T) {
 	got := danteRedundancy(r)
 	if len(got) != 1 || !strings.Contains(got[0], "Rio3224") || !strings.Contains(got[0], "Dante secondaria") {
 		t.Errorf("got %v", got)
+	}
+}
+
+func TestComparePlan(t *testing.T) {
+	h := func(ip, mac, name string) HostView {
+		return HostView{Host: scanner.Host{IP: ip, MAC: mac}, Name: name, Key: firstNonEmpty(mac, "ip:"+ip)}
+	}
+	hosts := []HostView{
+		h("10.0.0.10", "00:0c:29:4a:10:01", "Console"),
+		h("10.0.0.30", "aa:bb:cc:00:00:30", "TV"),      // planned at .99 by MAC
+		h("10.0.0.40", "aa:bb:cc:00:00:40", "Intruso"), // takes the IP of the stagebox
+		h("10.0.0.77", "", "Extra"),
+	}
+	plan := []PlanItem{
+		{Name: "Console", IP: "10.0.0.10"},
+		{Name: "TV", IP: "10.0.0.99", MAC: "aa:bb:cc:00:00:30"},
+		{Name: "Stagebox", IP: "10.0.0.40", MAC: "aa:bb:cc:00:00:41"},
+		{Name: "Media server", IP: "10.0.0.50"},
+		{Name: "Dup A", IP: "10.0.0.60"}, {Name: "Dup B", IP: "10.0.0.60"},
+	}
+	pc := comparePlan(plan, hosts, "it")
+	want := []string{"ok", "IP sbagliato: è a 10.0.0.30", "IP occupato da Intruso", "manca", "IP doppio nel piano", "IP doppio nel piano"}
+	for i, w := range want {
+		if pc.Rows[i].Status != w {
+			t.Errorf("row %d (%s): %q, want %q", i, plan[i].Name, pc.Rows[i].Status, w)
+		}
+	}
+	if len(pc.Extra) != 1 || pc.Extra[0].IP != "10.0.0.77" || pc.OK != 1 || pc.Bad != 2 {
+		t.Errorf("extra %v ok %d bad %d", pc.Extra, pc.OK, pc.Bad)
+	}
+	if en := comparePlan(plan, hosts, "en"); en.Rows[3].Status != "missing" {
+		t.Errorf("english: %q", en.Rows[3].Status)
+	}
+}
+
+func TestShowReport(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	p := monitorLogPath()
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	day := time.Now().Format("2006-01-02")
+	log := "data,ora,rete,dispositivo,ip,evento,durata_s\n" +
+		day + ",00:00:10,Arena,CL5-FOH,10.0.0.30,non risponde,\n" +
+		day + ",00:00:22,Arena,CL5-FOH,10.0.0.30,di nuovo in linea,12\n" +
+		day + ",00:01:00,Arena,CL5-FOH,10.0.0.30,non risponde,\n" +
+		day + ",00:01:05,Arena,CL5-FOH,10.0.0.30,di nuovo in linea,5\n" +
+		day + ",00:02:00,Arena,PTP PTPv1,10.0.0.30,nessun master del clock,\n"
+	os.WriteFile(p, []byte(log), 0o600)
+	since := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 0, 0, 0, 0, time.Local)
+	rep, err := buildShowReport(since)
+	if err != nil || rep.Drops != 3 || len(rep.Devices) != 2 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	var cl5 DeviceSummary
+	for _, d := range rep.Devices {
+		if d.Name == "CL5-FOH" {
+			cl5 = d
+		}
+	}
+	if cl5.Drops != 2 || cl5.DownTotal != 17 || cl5.Longest != 12 || cl5.StillDown {
+		t.Errorf("CL5: %+v", cl5)
+	}
+	if at, ok := parseSince("18:00", time.Date(2026, 11, 19, 1, 0, 0, 0, time.Local)); !ok || at.Day() != 18 || at.Hour() != 18 {
+		t.Errorf("since 18:00 after midnight: %v", at)
 	}
 }

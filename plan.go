@@ -2,15 +2,11 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/csv"
-	"encoding/json"
 	"errors"
 	"io"
 	"net"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/wasabifilm/wasaping/scanner"
 )
@@ -89,130 +85,4 @@ func parsePlan(data []byte) ([]PlanItem, error) {
 		return nil, errors.New("nessuna riga con un indirizzo IP valido")
 	}
 	return out, nil
-}
-
-// handleVenue: GET exports the current network, POST imports a venue file.
-func handleVenue(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		var v Venue
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&v); err != nil {
-			http.Error(w, "file non valido", http.StatusBadRequest)
-			return
-		}
-		n, err := devices().ImportVenue(v)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		writeJSON(w, map[string]int{"devices": n})
-		return
-	}
-	v, ok := devices().ExportVenue()
-	if !ok {
-		http.Error(w, "fai prima una scansione di questa rete", http.StatusConflict)
-		return
-	}
-	writeJSON(w, v)
-}
-
-// handlePlan: GET the plan of the current network; POST {csv} to import it,
-// {clear: true} to remove it.
-func handlePlan(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		var req struct {
-			CSV   string `json:"csv"`
-			Clear bool   `json:"clear"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&req); err != nil {
-			http.Error(w, "richiesta non valida", http.StatusBadRequest)
-			return
-		}
-		var plan []PlanItem
-		if !req.Clear {
-			var err error
-			if plan, err = parsePlan([]byte(req.CSV)); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-		}
-		if !devices().SetPlan(plan) {
-			http.Error(w, "fai prima una scansione di questa rete", http.StatusConflict)
-			return
-		}
-	}
-	writeJSON(w, devices().Plan())
-}
-
-// handleSwitchPorts asks the managed switches (SNMP v2c, read-only
-// community) which port each device of the latest scan is on.
-func handleSwitchPorts(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
-		return
-	}
-	var req struct {
-		Community string `json:"community"`
-	}
-	json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req)
-	comm := strings.TrimSpace(req.Community)
-	if comm == "" {
-		comm = "public"
-	}
-	if len(comm) > 64 {
-		http.Error(w, "community troppo lunga", http.StatusBadRequest)
-		return
-	}
-	s := loadSettings()
-	s.SNMPCommunity = comm
-	saveSettings(s)
-	lastMu.Lock()
-	var ips []string
-	if lastResult != nil {
-		for _, h := range lastResult.Hosts {
-			if !h.Self {
-				ips = append(ips, h.IP)
-			}
-		}
-	}
-	lastMu.Unlock()
-	if len(ips) == 0 {
-		http.Error(w, "fai prima una scansione", http.StatusConflict)
-		return
-	}
-	activeScan.Add(1)
-	defer activeScan.Add(-1)
-	switches, ports := scanner.SwitchPorts(r.Context(), ips, comm)
-	writeJSON(w, map[string]any{"switches": switches, "ports": ports, "community": comm})
-}
-
-// handleRDM lists the RDM fixtures behind the Art-Net nodes of the latest scan.
-func handleRDM(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
-		return
-	}
-	nodes := map[string][]int{}
-	lastMu.Lock()
-	if lastResult != nil {
-		for _, h := range lastResult.Hosts {
-			if h.ArtNet == nil {
-				continue
-			}
-			u := append(append([]int{}, h.ArtNet.Out...), h.ArtNet.In...)
-			if len(u) == 0 {
-				u = []int{0}
-			}
-			nodes[h.IP] = u
-		}
-	}
-	lastMu.Unlock()
-	if len(nodes) == 0 {
-		http.Error(w, "nessun nodo Art-Net nell'ultima scansione", http.StatusConflict)
-		return
-	}
-	activeScan.Add(1)
-	defer activeScan.Add(-1)
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
-	defer cancel()
-	writeJSON(w, map[string]any{"nodes": len(nodes), "fixtures": scanner.RDMDiscover(ctx, nodes)})
 }

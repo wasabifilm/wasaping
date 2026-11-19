@@ -50,7 +50,9 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - i problemi di rete e gli avvisi.
 - **Più reti insieme:** con «Tutte le reti» wasaping scansiona ogni rete del computer (luci, Dante primaria e secondaria, video…) e mostra una scheda per rete. Controlla anche la **ridondanza Dante**: ogni dispositivo deve essere su entrambe le reti.
 - **Dante:** canali in trasmissione, sample rate e latenza, letti da Bonjour.
-- **Apparecchi RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti**. È in sola lettura.
+- **Report di fine show:** dal registro del Monitor, quante volte è caduto ogni dispositivo, per quanto tempo in tutto e il buco più lungo, più la cronologia. Si stampa o si salva in PDF.
+- **Box su Raspberry Pi:** `wasaping box` trasforma un Raspberry Pi in un monitor sempre acceso sulla rete show, che guardi dall'iPad. Vedi la [guida](docs/raspberry.md).
+- **Apparecchi RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti**. Con **Identifica** fai lampeggiare un apparecchio per trovarlo sul traliccio: è l'unico comando che wasaping invia agli apparecchi, e la prima volta chiede conferma.
 - **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere. Continua anche a finestra chiusa. Controlla anche gli **universi critici** (se smettono di arrivare o se compare una seconda sorgente) e il **master del clock PTP** (se cambia o sparisce). Ogni dispositivo ha un piccolo **grafico dei tempi di risposta**.
 - **Allarmi verso altri programmi:** a ogni evento del Monitor wasaping manda un messaggio **OSC** (a QLab, a una console, a un media server: `/wasaping/down`, `/wasaping/up`) e/o chiama un **indirizzo web** con i dettagli in JSON.
 - **Registro degli eventi:** ogni caduta viene annotata con ora e durata ("Rio3224-Palco: non risponde 21:43:10, di nuovo in linea dopo 12 s"). Si esporta in CSV a fine serata, e tutto finisce anche in `monitor-log.csv`.
@@ -111,6 +113,20 @@ wasaping update-oui          # aggiorna il database dei produttori (è già incl
 wasaping helper install      # macOS: aiuto per leggere i MAC (anche: uninstall, status)
 ```
 
+Per gli spettacoli, dal terminale (ad esempio sul Raspberry o via SSH):
+
+```sh
+wasaping preshow                  # check pre-show; esce con 1 se non è pronto
+wasaping monitor                  # controlla i critici e stampa gli eventi
+wasaping dmx -t 5s -u sacn:1      # universi dal vivo, e i 512 canali di uno
+wasaping rdm                      # apparecchi RDM dietro i nodi Art-Net
+wasaping rdm identify 2.0.0.10 0 5052:00000001   # fa lampeggiare un apparecchio (off per fermarlo)
+wasaping plan import piano.csv    # importa il piano IP; "wasaping plan" lo confronta con la rete
+wasaping venue export arena.wasaping   # condivide il locale (import per caricarlo)
+wasaping report -since 18:00      # report di fine show
+wasaping box                      # modalità box (Raspberry Pi)
+```
+
 | Opzione | Default | Descrizione |
 |---|---|---|
 | `-i` | automatica | interfaccia da usare (`en0`, `eth0`, `Wi-Fi`…) |
@@ -136,6 +152,8 @@ La finestra nativa di macOS usa Cocoa e WebKit tramite cgo, quindi `wasaping.app
 ```sh
 go build -o wasaping .
 go test ./...
+WASAPING_INTEGRATION=1 go test ./scanner -run Integration   # con il simulatore show
+go run ./cmd/showsim              # simula nodo Art-Net, console sACN, DMX, RDM e PTP sulla rete
 make release        # tutti gli eseguibili + wasaping-macos.zip in dist/
 make macapp         # solo dist/wasaping.app (universale, solo su macOS)
 make icon           # rigenera le icone in assets/ (serve Python + Pillow)
@@ -164,7 +182,13 @@ window.go            finestra di Edge/Chrome, salvataggio delle esportazioni
 native_darwin.go     finestra nativa e barra dei menu macOS (Cocoa + WebKit, cgo)
 arphelper_darwin.go  aiuto di sistema per leggere la tabella ARP (macOS)
 login_darwin.go      apertura al login (macOS)
-web/index.html       interfaccia grafica (incorporata nell'eseguibile)
+web/                 interfaccia grafica (index.html, app.css, js/), incorporata nell'eseguibile
+api*.go              API locale dell'interfaccia (filtro di sicurezza in api.go)
+preshow.go           confronto col piano IP e check pre-show
+showreport.go        report di fine show
+cli_show.go, box.go  comandi da terminale per lo show, modalità box
+internal/showsim/    simulatore di attrezzatura show (anche: go run ./cmd/showsim)
+deploy/, docs/       servizio systemd e guida per Raspberry Pi
 scanner/             motore: sonde, ARP, nomi (DNS, mDNS, NetBIOS, UPnP), protocolli
                      show (Art-Net, sACN, PTP, PJLink, RDM), DMX, SNMP, tipi, avvisi
 scripts/             build dell'app macOS, icone, database produttori

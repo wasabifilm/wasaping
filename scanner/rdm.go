@@ -81,13 +81,16 @@ func parseArtTodData(b []byte) (universe int, uids [][6]byte, ok bool) {
 }
 
 // rdmGet builds an RDM GET request (without the 0xCC start code, as ArtRdm carries it).
-func rdmGet(dst [6]byte, tn byte, pid uint16) []byte {
-	m := []byte{0xCC, 0x01, 24}
+func rdmGet(dst [6]byte, tn byte, pid uint16) []byte { return rdmMessage(dst, tn, 0x20, pid, nil) }
+
+func rdmMessage(dst [6]byte, tn, cc byte, pid uint16, pd []byte) []byte {
+	m := []byte{0xCC, 0x01, byte(24 + len(pd))}
 	m = append(m, dst[:]...)
 	m = append(m, rdmSrc[:]...)
-	m = append(m, tn, 1, 0, 0, 0, 0x20)
+	m = append(m, tn, 1, 0, 0, 0, cc)
 	m = binary.BigEndian.AppendUint16(m, pid)
-	m = append(m, 0) // no parameter data
+	m = append(m, byte(len(pd)))
+	m = append(m, pd...)
 	var sum uint16
 	for _, c := range m {
 		sum += uint16(c)
@@ -108,6 +111,7 @@ func artRdm(universe int, rdm []byte) []byte {
 type rdmReply struct {
 	src [6]byte
 	tn  byte
+	cc  byte
 	pid uint16
 	pd  []byte
 }
@@ -128,9 +132,10 @@ func parseArtRdmReply(b []byte) (rdmReply, bool) {
 	copy(r.src[:], m[8:14])
 	r.tn = m[14]
 	respType, cc := m[15], m[19]
-	if respType != 0x00 || cc != 0x21 { // only ACKs to GET
+	if respType != 0x00 || (cc != 0x21 && cc != 0x31) { // only ACKs to GET and SET
 		return r, false
 	}
+	r.cc = cc
 	r.pid = binary.BigEndian.Uint16(m[20:])
 	pdl := int(m[22])
 	if 23+pdl > len(m) {
@@ -185,7 +190,7 @@ func RDMDiscover(ctx context.Context, nodes map[string][]int) []Fixture {
 	}()
 	for ip, unis := range nodes {
 		for _, u := range unis {
-			c.WriteToUDP(artTodRequest(u), &net.UDPAddr{IP: net.ParseIP(ip), Port: 6454})
+			c.WriteToUDP(artTodRequest(u), &net.UDPAddr{IP: net.ParseIP(ip), Port: ArtNetNodePort})
 		}
 	}
 	select {
@@ -207,7 +212,7 @@ func RDMDiscover(ctx context.Context, nodes map[string][]int) []Fixture {
 		tn++
 		req := artRdm(k.uni, rdmGet(uid, tn, pid))
 		for try := 0; try < 2; try++ {
-			c.WriteToUDP(req, &net.UDPAddr{IP: net.ParseIP(k.node), Port: 6454})
+			c.WriteToUDP(req, &net.UDPAddr{IP: net.ParseIP(k.node), Port: ArtNetNodePort})
 			deadline := time.After(400 * time.Millisecond)
 			for {
 				select {
@@ -268,4 +273,46 @@ func containsUID(a [][6]byte, x [6]byte) bool {
 		}
 	}
 	return false
+}
+
+// RDMIdentify makes a fixture flash (on) or stop (off): RDM SET
+// IDENTIFY_DEVICE, the only thing wasaping ever writes to a fixture.
+func RDMIdentify(ctx context.Context, node string, universe int, uid string, on bool) error {
+	var u [6]byte
+	var hi uint16
+	var lo uint32
+	if _, err := fmt.Sscanf(uid, "%04X:%08X", &hi, &lo); err != nil {
+		return fmt.Errorf("UID non valido %q", uid)
+	}
+	binary.BigEndian.PutUint16(u[:], hi)
+	binary.BigEndian.PutUint32(u[2:], lo)
+	ip := net.ParseIP(node).To4()
+	if ip == nil {
+		return fmt.Errorf("nodo non valido %q", node)
+	}
+	c, err := listenShared("0.0.0.0:6454")
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	v := byte(0)
+	if on {
+		v = 1
+	}
+	req := artRdm(universe, rdmMessage(u, 1, 0x30, 0x1000, []byte{v}))
+	buf := make([]byte, 2048)
+	for try := 0; try < 3 && ctx.Err() == nil; try++ {
+		c.WriteToUDP(req, &net.UDPAddr{IP: ip, Port: ArtNetNodePort})
+		c.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		for {
+			n, _, err := c.ReadFromUDP(buf)
+			if err != nil {
+				break
+			}
+			if r, ok := parseArtRdmReply(buf[:n]); ok && r.src == u && r.cc == 0x31 && r.pid == 0x1000 {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("l'apparecchio %s non ha risposto", uid)
 }

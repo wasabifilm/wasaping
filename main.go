@@ -30,6 +30,17 @@ Uso:
   wasaping app                        come web, ma si chiude con la pagina (doppio clic)
   wasaping interfaces                  elenca le interfacce di rete
   wasaping helper install|uninstall    macOS: aiuto per leggere i MAC (password una volta)
+
+Show:
+  wasaping preshow                     check pre-show (esce con 1 se non è pronto)
+  wasaping monitor                     controlla i critici e stampa gli eventi
+  wasaping dmx [-t 5s] [-u sacn:1]     universi Art-Net/sACN dal vivo
+  wasaping rdm                         apparecchi RDM dietro i nodi Art-Net
+  wasaping rdm identify IP U UID [off] fa lampeggiare un apparecchio
+  wasaping plan import piano.csv       importa il piano IP (plan: confronto)
+  wasaping venue export|import FILE    condivide il locale (.wasaping)
+  wasaping report [-since 18:00]       report di fine show dal registro
+  wasaping box                         Raspberry Pi: monitor sempre acceso + iPad
   wasaping update-oui                  scarica il database dei produttori (IEEE)
   wasaping version
 
@@ -65,6 +76,22 @@ func main() {
 		err = runWeb(ctx, append([]string{"-app"}, args...))
 	case "helper":
 		err = runHelper(args)
+	case "preshow":
+		err = runPreshowCLI(ctx, args)
+	case "rdm":
+		err = runRDMCLI(ctx, args)
+	case "dmx":
+		err = runDMXCLI(ctx, args)
+	case "monitor":
+		err = runMonitorCLI(ctx, args)
+	case "plan":
+		err = runPlanCLI(ctx, args)
+	case "venue":
+		err = runVenueCLI(ctx, args)
+	case "report":
+		err = runReportCLI(args)
+	case "box":
+		err = runBox(ctx, args)
 	case "interfaces", "if":
 		err = runInterfaces()
 	case "update-oui":

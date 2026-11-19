@@ -49,6 +49,7 @@ func apiMux(quit func()) *http.ServeMux {
 	mux.HandleFunc("/api/device", handleDevice)
 	mux.HandleFunc("/api/forget-old", handleForgetOld)
 	mux.HandleFunc("/api/project", handleProject)
+	mux.HandleFunc("/api/clientlog", handleClientLog)
 	mux.HandleFunc("/api/wol", handleWOL)
 	mux.HandleFunc("/api/ports", handlePorts)
 	mux.HandleFunc("/api/helper", handleHelper)

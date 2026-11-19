@@ -122,6 +122,9 @@ func buildDiag(ctx context.Context) ([]byte, error) {
 		w, _ := z.Create("monitor-log.csv")
 		w.Write([]byte(strings.Join(lines, "\n") + "\n"))
 	}
+	clientLogMu.Lock()
+	add("page-errors.json", clientLog)
+	clientLogMu.Unlock()
 	w, _ := z.Create("LEGGIMI.txt")
 	fmt.Fprintf(w, "Diagnostica di wasaping %s, %s.\nContiene la scansione della rete, le risposte ricevute dai dispositivi (packets.jsonl) e le correzioni fatte a mano.\nNon contiene i nomi, i ruoli e le note che hai scritto, né PIN, password o indirizzi degli allarmi.\n", version, time.Now().Format("2006-01-02 15:04"))
 	if err := z.Close(); err != nil {

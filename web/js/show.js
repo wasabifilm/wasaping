@@ -94,7 +94,7 @@ function drawDMXDetail(sel) {
     const clash = new Set(at.filter(a => a.length > 1).flat());
     box.innerHTML = `<h3 style="font-size:14px;margin:16px 0 0">${esc(sel.protocol)} universo ${sel.number}</h3>
       ${fx.length ? `<div class="dmxlegend">${fx.map((f, k) => `<span class="${clash.has(k) ? "fxc" : k % 2 ? "fxb" : "fxa"}"><b class="nt">${esc(f.label || f.model || f.uid)}</b> ${f.address}–${f.address + Math.max(f.footprint, 1) - 1}</span>`).join("")}</div>`
-        : sel.protocol === "Art-Net" ? `<p class="muted">Per vedere gli apparecchi sopra i canali, fai una ricerca in Strumenti → Apparecchi RDM.</p>` : ""}
+        : sel.protocol === "Art-Net" ? `<p class="muted">Per vedere gli apparecchi sopra i canali, fai una ricerca in Show → Apparecchi RDM.</p>` : ""}
       <div class="dmxgrid">${Array.from({length: 512}, (_, i) => { const a = at[i];
         const cls = a.length > 1 ? "fxc" : a.length ? (a[0] % 2 ? "fxb" : "fxa") : "";
         const first = a.some(k => fx[k].address === i + 1) ? " fs" : "";

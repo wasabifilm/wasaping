@@ -53,9 +53,9 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Dante:**
   - canali in trasmissione, frequenza di campionamento e latenza, letti da Bonjour;
   - avvisi su **frequenze diverse**, **primaria e secondaria sullo stesso switch** e dispositivi **non agganciati al clock**;
-  - il **routing in sola lettura** (Strumenti → Dante): a cosa è collegato ogni canale in ricezione, gli abbonamenti non risolti e la banda stimata. Il protocollo di Audinate non è pubblico: questa parte è sperimentale;
+  - il **routing in sola lettura** (Show → Dante): a cosa è collegato ogni canale in ricezione, gli abbonamenti non risolti e la banda stimata. Il protocollo di Audinate non è pubblico: questa parte è sperimentale;
   - nel Monitor, la **secondaria** dei dispositivi critici e l'aggancio al clock.
-- **Video** (Strumenti → Video): stato di **ATEM** (programma e anteprima), **HyperDeck** (registrazione, spazio libero), **Videohub** (tabella di routing), **vMix** (in onda, registrazione, streaming), Resolume; proiettori PJLink, sorgenti NDI, clock PTPv2.
+- **Video** (Show → Video): stato di **ATEM** (programma e anteprima), **HyperDeck** (registrazione, spazio libero), **Videohub** (tabella di routing), **vMix** (in onda, registrazione, streaming), Resolume; proiettori PJLink, sorgenti NDI, clock PTPv2.
 - **Velocità delle porte** degli switch (SNMP): avviso se un dispositivo Dante, NDI o video è su una porta a 100 Mbit.
 - **Report di fine show:** dal registro del Monitor, quante volte è caduto ogni dispositivo, per quanto tempo in tutto e il buco più lungo, più la cronologia e il **grafico dei tempi di risposta di tutta la serata**. Si stampa o si salva in PDF.
 - **Confronta con l'ultima volta:** nello stesso locale, chi c'è di nuovo, chi manca, chi ha cambiato IP o nome rispetto alla volta precedente.
@@ -69,7 +69,7 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Monitor su iPad o telefono:** lo vedi da un altro dispositivo della stessa rete (l'iPad in FOH, il telefono sul palco), protetto da un PIN di 6 cifre e in sola lettura. Da lì non si cambia niente.
 - **Interfaccia completa da un altro computer:** in Impostazioni, con una **password** e in **HTTPS** (certificato creato da wasaping, con l'impronta da confrontare). Utile soprattutto per il box su Raspberry Pi.
 - **Tipo corretto a mano:** se wasaping sbaglia il tipo di un dispositivo, lo cambi nel dettaglio e resta così.
-- **Diagnostica:** Strumenti → Aiuto → «Salva diagnostica» (o `wasaping diag`) prepara un file da mandare a chi sviluppa wasaping quando un apparecchio non viene riconosciuto. Non contiene i tuoi nomi, ruoli e note, né PIN e password.
+- **Diagnostica:** Progetto → «Salva diagnostica» (o `wasaping diag`) prepara un file da mandare a chi sviluppa wasaping quando un apparecchio non viene riconosciuto. Non contiene i tuoi nomi, ruoli e note, né PIN e password.
 - **Piano IP:** importi il patch previsto da un foglio di calcolo (CSV con Nome, IP, Ruolo, MAC) e wasaping lo confronta con la rete. Ti dice chi manca, chi ha l'IP sbagliato, chi occupa l'IP di un altro e chi non era previsto. Con un clic dà ai dispositivi i nomi e i ruoli del piano. Il piano si può anche **scrivere e modificare direttamente** in wasaping (Invio aggiunge una riga con l'IP successivo; IP ripetuti o sbagliati in rosso) ed esportare in CSV.
 - **Visualizzatore DMX dal vivo** (solo ascolto):
   - quali universi Art-Net e sACN arrivano, da quale sorgente, a quanti frame al secondo, con i **frame persi**;
@@ -108,7 +108,8 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - Scorciatoie **⌘R** scansiona, **⌘F** cerca, **⇧⌘M** Monitor (Ctrl su Windows e Linux). Tema automatico, chiaro o scuro.
 - **Italiano e inglese:** la lingua segue quella del sistema e si cambia col pulsante in alto. La riga di comando segue `LANG`.
 - **Avviso di nuova versione:** una volta al giorno chiede a GitHub l'ultima versione, senza inviare nessun dato tuo o della rete. Su Mac si **aggiorna dall'app**: scarica, controlla il file con `SHA256SUMS` e la firma, sostituisce l'app e la riavvia. Si spegne in Impostazioni.
-- **Impostazioni** in un posto solo (⚙ in alto): lingua, tema, ripetizione, allarmi, accesso da iPad, aggiornamenti, apertura al login, aiuto per i MAC e community SNMP. Gli strumenti stanno nel menu **Strumenti**.
+- **Strumenti a portata di mano:** le schede **Dispositivi · Show · Rete · Progetto** sotto la barra; sul Mac anche i menu **Show**, **Rete** e **Progetto** in alto, con le scorciatoie (⇧⌘P check pre-show, ⇧⌘M monitor, ⇧⌘D universi DMX, ⇧⌘I piano IP, ⌘S/⌘O progetto, ⌘, impostazioni).
+- **Impostazioni** in un posto solo (⚙ in alto): lingua, tema, ripetizione, allarmi, accesso da iPad, aggiornamenti, apertura al login, aiuto per i MAC e community SNMP. Gli strumenti stanno nelle schede Show, Rete e Progetto.
 - Esporta in **CSV**, **JSON** o elenco stampabile.
 
 ### Come trova i dispositivi senza permessi di amministratore

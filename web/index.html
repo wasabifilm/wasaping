@@ -36,10 +36,10 @@
     <input id="filter" placeholder="Filtra per IP, nome, produttore…">
     <button id="preBtn" title="Controlla tutto prima dello show e prepara un report">Check pre-show</button>
     <button id="monBtn" title="Tiene d'occhio i dispositivi critici e suona se uno sparisce">Monitor</button>
-    <button id="toolsBtn" title="Piano IP, universi, RDM, switch, esportazioni">Strumenti ▾</button>
     <button id="quit" hidden title="Chiude wasaping">Esci</button>
   </div>
 </div>
+<nav id="tabs" class="tabs" aria-label="Sezioni"></nav>
 <div class="progress"><div id="prog"></div></div>
 <div class="status"><span id="status">Pronto.</span><span id="extra"></span></div>
 <div class="netbar" id="netbar"></div>
@@ -57,7 +57,8 @@
   <span style="display:flex;gap:8px;flex:none"><button id="helperBtn" class="primary">Mostra i MAC</button><button id="helperNo">Non ora</button></span>
 </div>
 
-<div class="wrap">
+<div id="toolsView"></div>
+<div class="wrap" id="listWrap">
   <table>
     <thead><tr>
       <th data-k="label">Dispositivo</th><th data-k="ip">IP</th><th data-k="mac">MAC</th>
@@ -149,6 +150,7 @@
 <script src="js/show.js"></script>
 <script src="js/list.js"></script>
 <script src="js/monitor.js"></script>
+<script src="js/tools.js"></script>
 <script src="js/start.js"></script>
 </body>
 </html>

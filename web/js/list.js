@@ -1,5 +1,6 @@
 // The device list, context menu, Tools menu and the detail panel.
 function render() {
+  if (typeof drawTools === "function" && section !== "list") drawTools(); // what a scan unlocks
   const f = $("filter").value.toLowerCase();
   const match = h => !f || [h.ip, h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "), (KIND[h.kind] || KIND[""])[0], (h.ports || []).join(" ")].join(" ").toLowerCase().includes(f);
   const inNet = h => !activeNet || h.net === activeNet;
@@ -68,40 +69,12 @@ function showMenu(x, y, hint, items) {
 }
 function hideMenu() { $("ctx").style.display = "none"; $("ctx").style.maxHeight = ""; }
 
-// "Strumenti" menu: everything that is not scanning, grouped.
-$("toolsBtn").onclick = e => {
-  e.stopPropagation();
-  const r = $("toolsBtn").getBoundingClientRect();
-  const none = !hosts.length;
-  const groups = [
-    ["Rete", [["Piano IP", planView], ["IP liberi", freeView], ["Mappa della rete", switchView, none], ["Confronta con l'ultima volta", compareView, !network]]],
-    ["Show", [["Universi DMX", dmxView], ["Apparecchi RDM", rdmView], ["Dante", danteView], ["Video", videoView], ["Report di fine show", showReportView]]],
-    ["Progetto", [["Salva progetto…", saveProjectView, !network], ["Apri progetto…", () => pickFile(".wasaping,.json", openProjectView)], ["Pulisci i dispositivi vecchi", cleanupView, !network],
-      ["Stampa elenco IP", () => $("printBtn").click(), none], ["Esporta CSV", () => $("csv").click(), none], ["Esporta JSON", () => $("json").click(), none]]],
-    ["Aiuto", [["Salva diagnostica", saveDiag]]],
-  ];
-  const m = $("ctx");
-  const group = ([g, items]) => `<div class="hint">${esc(g)}</div>` + items.map(([l, , dis], i) => `<div data-g="${esc(g)}" data-i="${i}"${dis ? ' class="dis"' : ""}>${esc(l)}</div>`).join("");
-  // Two columns (network and project | show and help) where there is room.
-  const byName = Object.fromEntries(groups.map(g => [g[0], g]));
-  m.innerHTML = innerWidth > 560
-    ? `<div class="cols"><div class="col">${group(byName["Rete"])}${group(byName["Progetto"])}</div><div class="col">${group(byName["Show"])}${group(byName["Aiuto"])}</div></div>`
-    : groups.map(group).join("");
-  m.querySelectorAll("[data-i]").forEach(d => d.onclick = () => {
-    if (d.classList.contains("dis")) return;
-    hideMenu();
-    groups.find(x => x[0] === d.dataset.g)[1][+d.dataset.i][1]();
-  });
-  m.style.display = "block";
-  const w = m.getBoundingClientRect().width;
-  m.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
-  m.style.top = (r.bottom + 6) + "px";
-  m.style.maxHeight = (innerHeight - r.bottom - 14) + "px";
-  translateTree(m);
-};
 document.addEventListener("click", e => { if (!e.target.closest("#ctx")) hideMenu(); });
 document.addEventListener("scroll", hideMenu, true);
-window.addEventListener("blur", hideMenu);
+// Not on "blur": the macOS app window sends one right after the click that
+// opens the menu, which closed it at once. When the page is really hidden
+// (window closed or minimized), close it.
+document.addEventListener("visibilitychange", () => { if (document.hidden) hideMenu(); });
 
 // Left click on a port: open it, or copy it when there is nothing to open.
 document.addEventListener("click", e => {

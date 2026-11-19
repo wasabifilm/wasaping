@@ -83,6 +83,12 @@ static void runJS(NSString *js) {
 		});
 	}] resume];
 }
+// Rete, Show, Progetto menus: the page runs the tool (same ids as tools.js).
+- (void)runTool:(NSMenuItem *)sender {
+	[self showWindow:nil];
+	NSString *id = sender.representedObject;
+	runJS([NSString stringWithFormat:@"window.wasapingTool && wasapingTool('%@')", id]);
+}
 - (void)findInList:(id)sender { [self showWindow:nil]; runJS(@"window.wasapingFind && wasapingFind()"); }
 - (void)openMonitor:(id)sender { [self showWindow:nil]; runJS(@"window.wasapingMonitor && wasapingMonitor()"); }
 
@@ -127,12 +133,36 @@ static NSMenuItem *mine(NSString *title, SEL action, NSString *key) {
 	return i;
 }
 
-static void buildMenu(void) {
+// toolMenus adds one menu per group from lines "Group\tid\tLabel\tkey\tshift".
+static NSArray<NSMenu *> *toolMenus(NSString *spec) {
+	NSMutableArray<NSMenu *> *menus = [NSMutableArray new];
+	NSMenu *cur = nil;
+	for (NSString *line in [spec componentsSeparatedByString:@"\n"]) {
+		NSArray<NSString *> *f = [line componentsSeparatedByString:@"\t"];
+		if (f.count < 5) continue;
+		if (!cur || ![cur.title isEqualToString:f[0]]) {
+			cur = [[NSMenu alloc] initWithTitle:f[0]];
+			[menus addObject:cur];
+		}
+		if ([f[1] isEqualToString:@"-"]) { [cur addItem:[NSMenuItem separatorItem]]; continue; }
+		NSMenuItem *i = mine(f[2], @selector(runTool:), f[3]);
+		i.representedObject = f[1];
+		if ([f[4] isEqualToString:@"1"]) i.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
+		[cur addItem:i];
+	}
+	return menus;
+}
+
+static void buildMenu(NSString *toolSpec, NSString *settingsLabel) {
 	NSMenu *bar = [NSMenu new];
 	NSString *name = [[NSProcessInfo processInfo] processName];
 
 	NSMenu *app = [NSMenu new];
 	[app addItem:item([@"Informazioni su " stringByAppendingString:name], @selector(orderFrontStandardAboutPanel:), @"")];
+	[app addItem:[NSMenuItem separatorItem]];
+	NSMenuItem *prefs = mine(settingsLabel, @selector(runTool:), @",");
+	prefs.representedObject = @"settings";
+	[app addItem:prefs];
 	[app addItem:[NSMenuItem separatorItem]];
 	[app addItem:item([@"Nascondi " stringByAppendingString:name], @selector(hide:), @"h")];
 	[app addItem:[NSMenuItem separatorItem]];
@@ -150,9 +180,6 @@ static void buildMenu(void) {
 	NSMenu *scan = [[NSMenu alloc] initWithTitle:@"Scansione"];
 	[scan addItem:mine(@"Scansiona", @selector(scanNow:), @"r")];
 	[scan addItem:mine(@"Cerca nell'elenco", @selector(findInList:), @"f")];
-	NSMenuItem *mon = mine(@"Monitor", @selector(openMonitor:), @"m");
-	mon.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
-	[scan addItem:mon];
 
 	NSMenu *view = [[NSMenu alloc] initWithTitle:@"Vista"];
 	NSMenuItem *reload = item(@"Ricarica la pagina", @selector(reload:), @"r");
@@ -166,7 +193,10 @@ static void buildMenu(void) {
 	[win addItem:item(@"Riduci a icona", @selector(performMiniaturize:), @"m")];
 	[win addItem:item(@"Chiudi (resta nella barra dei menu)", @selector(performClose:), @"w")];
 
-	for (NSMenu *m in @[app, edit, scan, view, win]) {
+	NSMutableArray<NSMenu *> *all = [NSMutableArray arrayWithObjects:app, edit, scan, nil];
+	[all addObjectsFromArray:toolMenus(toolSpec)];
+	[all addObjectsFromArray:@[view, win]];
+	for (NSMenu *m in all) {
 		NSMenuItem *top = [NSMenuItem new];
 		top.submenu = m;
 		[bar addItem:top];
@@ -214,14 +244,14 @@ static void setStatus(const char *l1, const char *l2, int alert) {
 	});
 }
 
-static void runWindow(const char *curl, const char *cbase, int hidden, int login) {
+static void runWindow(const char *curl, const char *cbase, int hidden, int login, const char *ctools, const char *csettings) {
 	@autoreleasepool {
 		[NSApplication sharedApplication];
 		[NSApp setActivationPolicy:hidden ? NSApplicationActivationPolicyAccessory : NSApplicationActivationPolicyRegular];
 		gDelegate = [WPDelegate new];
 		NSApp.delegate = gDelegate;
 		gBase = [NSString stringWithUTF8String:cbase];
-		buildMenu();
+		buildMenu([NSString stringWithUTF8String:ctools], [NSString stringWithUTF8String:csettings]);
 		buildStatusItem(login);
 
 		gWin = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1120, 720)
@@ -286,7 +316,10 @@ func nativeWindow(url string, hidden bool) {
 	if hidden {
 		h = 1
 	}
-	C.runWindow(cu, cb, C.int(h), C.int(login))
+	ct, cs := C.CString(toolMenuSpec()), C.CString(T("Impostazioni…", "Settings…"))
+	defer C.free(unsafe.Pointer(ct))
+	defer C.free(unsafe.Pointer(cs))
+	C.runWindow(cu, cb, C.int(h), C.int(login), ct, cs)
 }
 
 var (

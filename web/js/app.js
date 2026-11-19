@@ -199,6 +199,7 @@ function schedule() {} // repeats are done by the program (backgroundLoop)
 function start(auto = false) {
   const target = $("target").value.trim();
   if (!target) return;
+  if (!auto && typeof showSection === "function" && section !== "list") showSection("list"); // show the scan
   autoRun = auto;
   hosts = []; gone = [];
   clearTimeout(repeatTimer);

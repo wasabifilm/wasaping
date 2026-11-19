@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wasabifilm/wasaping/scanner"
@@ -316,4 +318,37 @@ var validKinds = map[string]bool{
 	scanner.KindPrinter: true, scanner.KindTV: true, scanner.KindSpeaker: true, scanner.KindNAS: true,
 	scanner.KindCamera: true, scanner.KindIoT: true, scanner.KindLightDesk: true, scanner.KindLighting: true,
 	scanner.KindAudio: true, scanner.KindVideo: true, scanner.KindProjector: true, scanner.KindSwitch: true,
+}
+
+// Errors of the page (it has no console in the app window): kept for the
+// diagnostic file and printed on the terminal.
+var (
+	clientLogMu sync.Mutex
+	clientLog   []string
+)
+
+func handleClientLog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		clientLogMu.Lock()
+		defer clientLogMu.Unlock()
+		writeJSON(w, clientLog)
+		return
+	}
+	var req struct {
+		Msg   string `json:"msg"`
+		Where string `json:"where"`
+	}
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req) != nil {
+		http.Error(w, "richiesta non valida", http.StatusBadRequest)
+		return
+	}
+	line := time.Now().Format("15:04:05") + " " + req.Msg + " @ " + req.Where
+	fmt.Fprintln(os.Stderr, "pagina:", line)
+	clientLogMu.Lock()
+	clientLog = append(clientLog, line)
+	if len(clientLog) > 100 {
+		clientLog = clientLog[len(clientLog)-100:]
+	}
+	clientLogMu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
 }

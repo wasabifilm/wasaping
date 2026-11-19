@@ -236,3 +236,22 @@ button.ident.on { animation: blink 1s steps(2) infinite; }
 .pledit td { padding: 3px 4px; }
 .pledit .plDel { padding: 4px 8px; }
 .dncard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+
+/* Sections: Dispositivi | Show | Rete | Progetto */
+.tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--line); }
+.tabs button { border: none; background: none; border-radius: 0; padding: 8px 14px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tabs button:hover { color: var(--ink); background: none; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--wasabi); }
+body.in-tools #listWrap, body.in-tools #netbar, body.in-tools .foot { display: none; }
+body:not(.in-tools) #toolsView { display: none; }
+#toolsView { padding: 16px 24px; }
+.toolgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.tool { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); min-height: 88px; }
+.tool b { font-size: 15px; }
+.tool span { color: var(--muted); font-size: 13px; line-height: 1.35; font-weight: 400; }
+.tool em { font-style: normal; font-size: 12px; color: var(--wasabi-text); margin-top: auto; }
+.tool:hover { border-color: var(--wasabi); background: var(--panel); }
+.tool.dis { opacity: .6; }
+.tool.dis:hover { border-color: var(--line); }
+@media (max-width: 640px) { .tabs { padding: 0 8px; overflow-x: auto; } .tabs button { padding: 8px 10px; } #toolsView { padding: 12px 16px; } }
+body.in-tools #filter { visibility: hidden; }

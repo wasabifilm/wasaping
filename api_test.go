@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -77,5 +78,21 @@ func TestAPIValidation(t *testing.T) {
 	}
 	if got := do("POST", "/api/rdm/identify", `{"node":"x","uid":"nope"}`); got != 400 {
 		t.Errorf("bad identify: %d", got)
+	}
+}
+
+// The macOS menu calls the page's tools by id: every id must exist there.
+func TestToolMenuIDs(t *testing.T) {
+	b, err := os.ReadFile("web/js/tools.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range toolMenuItems {
+		if it.id != "-" && !strings.Contains(string(b), `id: "`+it.id+`"`) {
+			t.Errorf("menu item %q has no tool in tools.js", it.id)
+		}
+	}
+	if spec := toolMenuSpec(); strings.Count(spec, "\n") != len(toolMenuItems) {
+		t.Errorf("spec lines %d", strings.Count(spec, "\n"))
 	}
 }

@@ -49,7 +49,7 @@ func isRemoteWeb(r *http.Request) bool { return r.Context().Value(remoteWebKey{}
 // Never from another computer, even with the password.
 var remoteWebBlocked = map[string]bool{
 	"/api/quit": true, "/api/helper": true, "/api/update/install": true, "/api/webaccess": true,
-	"/api/save": true, "/api/diag": true, "/api/ping": true, "/api/login": true,
+	"/api/save": true, "/api/diag": true, "/api/ping": true, "/api/login": true, "/api/prefs/reveal": true,
 }
 
 type webAccessServer struct {

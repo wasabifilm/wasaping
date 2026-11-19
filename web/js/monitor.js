@@ -77,7 +77,7 @@ async function openMonitor() {
   $("monitor").classList.add("open"); $("monitor").setAttribute("aria-hidden", "false"); markQuick();
   placeNet(); // the network the Monitor watches, and its warnings
   // Browsers need a user gesture to allow sound later.
-  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
+  unlockSound();
   const st = await monRefresh();
   // Opening the monitor starts it, if there is something to watch.
   if (st && !st.on) {
@@ -149,6 +149,8 @@ function showRemoteHint(r) {
   $("mRemote").innerHTML = r && r.on
     ? `Apri <b>${esc(r.url)}</b> sul dispositivo (stessa rete) e inserisci il PIN <b style="font-size:16px;letter-spacing:2px">${esc(r.pin)}</b>. Da lì si guarda soltanto, non si cambia niente. <a id="rNew">Nuovo PIN</a>`
     : "Mostra questo Monitor su un iPad o un telefono della stessa rete, protetto da un PIN.";
+  $("mQR").hidden = !(r && r.on);
+  if (r && r.on) $("mQR").src = `api/qr?for=remote&t=${Date.now()}`;
   if ($("rNew")) $("rNew").onclick = () => post("api/remote", {on: true, new_pin: true}).then(r => r.json()).then(showRemoteHint).catch(e => toast(e.message));
 }
 $("rOn").onchange = () => post("api/remote", {on: $("rOn").checked}).then(r => r.json()).then(showRemoteHint)
@@ -157,13 +159,23 @@ function alarm(names, quiet) {
   // The program sends the system notification; the page adds sound and a toast.
   if (!quiet) post("api/notify", {title: "⚠️ wasaping: non risponde", body: names.join(", ")}).catch(() => {});
   toast("Non risponde: " + names.join(", "));
-  if (!$("mSound").checked || !audioCtx) return;
+  if ($("mSound").checked) playAlarm();
+}
+// Browsers allow sound only after a click: every button that may lead to
+// an alarm calls this.
+function unlockSound() {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
+}
+// Three beeps, at the volume of Settings → Allarmi.
+function playAlarm() {
+  if (!audioCtx) return;
+  const vol = 0.25 * (prefs.alarm_volume || 60) / 100;
   try {
     const t = audioCtx.currentTime;
     for (let i = 0; i < 3; i++) {
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
       o.type = "square"; o.frequency.value = i % 2 ? 660 : 880;
-      g.gain.setValueAtTime(0.15, t + i * 0.25); g.gain.setValueAtTime(0, t + i * 0.25 + 0.18);
+      g.gain.setValueAtTime(vol, t + i * 0.25); g.gain.setValueAtTime(0, t + i * 0.25 + 0.18);
       o.connect(g).connect(audioCtx.destination); o.start(t + i * 0.25); o.stop(t + i * 0.25 + 0.2);
     }
   } catch {}

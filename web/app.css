@@ -158,6 +158,8 @@ a.port:hover { text-decoration: underline; }
 .mbody { flex: 1; display: flex; min-height: 0; }
 .mlog { width: 320px; border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: 14px 16px; gap: 8px; overflow: hidden; }
 .remote { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+img.qr { width: 132px; height: 132px; border-radius: 8px; background: #fff; padding: 4px; image-rendering: pixelated; flex-basis: auto; }
+.tag.bad { color: var(--warn); }
 .remote .tag a { color: var(--wasabi-text); cursor: pointer; }
 .mlog-h { display: flex; align-items: center; gap: 8px; }
 .mlog-h .spacer { flex: 1; }

@@ -116,7 +116,13 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - **Rete:** Piano IP, IP liberi, Mappa della rete, Confronta con l'ultima volta.
   - **Progetto:** Report di fine show, Salva e Apri progetto, Pulisci, Copia elenco, Stampa, CSV, JSON, Diagnostica.
 - **Menu del Mac:** i menu **Show**, **Rete** e **Progetto** in alto, con le scorciatoie (⇧⌘P pre-show, ⇧⌘M monitor, ⇧⌘D DMX, ⇧⌘I piano IP, ⌘S/⌘O progetto, ⌘, impostazioni).
-- **Impostazioni** in un posto solo (⚙ in alto, con un indice delle sezioni in cima): lingua, tema, ripetizione in background, allarmi, accesso completo dalla rete, aggiornamenti, apertura al login, aiuto per i MAC e community SNMP. L'accesso in sola lettura da iPad si attiva nel Monitor.
+- **Impostazioni** (⚙ in alto, con un indice in cima), tutte salvate da sole:
+  - **Generali:** lingua (cambiandola resti dove sei, con la scansione) e tema.
+  - **Scansione:** porte da controllare di solito, pausa della scansione continua, ripetizione in background, community SNMP.
+  - **Allarmi:** volume dell'allarme con «Prova il suono»; OSC, webhook, ntfy, Telegram (token nascosto), Slack; «Manda una prova».
+  - **Rete e accesso:** accesso completo dalla rete con password e **codice QR** da inquadrare.
+  - **Sistema:** aggiornamenti, apertura al login, aiuto per i MAC, **dati di wasaping** (cartella e file, «Mostra nella cartella») ed **Esporta / Importa** le impostazioni per un altro computer (senza PIN e password).
+- **iPad e telefono:** nel Monitor, «Accesso da iPad o telefono» mostra indirizzo, PIN e un **codice QR** da inquadrare con la fotocamera.
 - Esporta in **CSV**, **JSON** o elenco stampabile.
 
 ### Come trova i dispositivi senza permessi di amministratore

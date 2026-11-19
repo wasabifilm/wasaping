@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -192,40 +193,9 @@ func handleAlerts(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "richiesta non valida", http.StatusBadRequest)
 			return
 		}
-		a := req.alertCfg
-		for _, p := range []*string{&a.OSC, &a.OSCAddr, &a.Webhook, &a.Telegram, &a.Ntfy, &a.Slack} {
-			*p = strings.TrimSpace(*p)
-		}
-		if a.OSC != "" {
-			if _, _, err := net.SplitHostPort(a.OSC); err != nil {
-				http.Error(w, T("OSC: scrivi indirizzo:porta, es. 192.168.1.20:53000", "OSC: write address:port, e.g. 192.168.1.20:53000"), http.StatusBadRequest)
-				return
-			}
-		}
-		if a.OSCAddr != "" && !strings.HasPrefix(a.OSCAddr, "/") {
-			a.OSCAddr = "/" + a.OSCAddr
-		}
-		if a.Webhook != "" && !validWebURL(a.Webhook) {
-			http.Error(w, T("indirizzo web non valido", "invalid web address"), http.StatusBadRequest)
-			return
-		}
-		if a.Telegram != "" {
-			token, chat, _ := strings.Cut(a.Telegram, "|")
-			if !reTGToken.MatchString(strings.TrimSpace(token)) || !reTGChat.MatchString(strings.TrimSpace(chat)) {
-				http.Error(w, T("Telegram: serve il token del bot (da @BotFather) e l'id della chat", "Telegram: the bot token (from @BotFather) and the chat id are needed"), http.StatusBadRequest)
-				return
-			}
-			a.Telegram = strings.TrimSpace(token) + "|" + strings.TrimSpace(chat)
-		}
-		if a.Ntfy != "" && !strings.Contains(a.Ntfy, "://") {
-			a.Ntfy = "https://ntfy.sh/" + strings.TrimPrefix(a.Ntfy, "/") // just the topic name
-		}
-		if a.Ntfy != "" && !validWebURL(a.Ntfy) {
-			http.Error(w, T("ntfy: scrivi il nome dell'argomento o l'indirizzo completo", "ntfy: write the topic name or the full address"), http.StatusBadRequest)
-			return
-		}
-		if a.Slack != "" && !strings.HasPrefix(a.Slack, "https://") {
-			http.Error(w, T("Slack: incolla l'indirizzo del webhook (https://hooks.slack.com/…)", "Slack: paste the webhook address (https://hooks.slack.com/…)"), http.StatusBadRequest)
+		a, err := cleanAlerts(req.alertCfg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if req.Test {
@@ -238,4 +208,40 @@ func handleAlerts(w http.ResponseWriter, r *http.Request) {
 		saveSettings(s)
 	}
 	writeJSON(w, alertsOf(loadSettings()))
+}
+
+// cleanAlerts checks and normalizes the alert destinations (settings page
+// and settings import).
+func cleanAlerts(a alertCfg) (alertCfg, error) {
+	for _, p := range []*string{&a.OSC, &a.OSCAddr, &a.Webhook, &a.Telegram, &a.Ntfy, &a.Slack} {
+		*p = strings.TrimSpace(*p)
+	}
+	if a.OSC != "" {
+		if _, _, err := net.SplitHostPort(a.OSC); err != nil {
+			return a, errors.New(T("OSC: scrivi indirizzo:porta, es. 192.168.1.20:53000", "OSC: write address:port, e.g. 192.168.1.20:53000"))
+		}
+	}
+	if a.OSCAddr != "" && !strings.HasPrefix(a.OSCAddr, "/") {
+		a.OSCAddr = "/" + a.OSCAddr
+	}
+	if a.Webhook != "" && !validWebURL(a.Webhook) {
+		return a, errors.New(T("indirizzo web non valido", "invalid web address"))
+	}
+	if a.Telegram != "" {
+		token, chat, _ := strings.Cut(a.Telegram, "|")
+		if !reTGToken.MatchString(strings.TrimSpace(token)) || !reTGChat.MatchString(strings.TrimSpace(chat)) {
+			return a, errors.New(T("Telegram: serve il token del bot (da @BotFather) e l'id della chat", "Telegram: the bot token (from @BotFather) and the chat id are needed"))
+		}
+		a.Telegram = strings.TrimSpace(token) + "|" + strings.TrimSpace(chat)
+	}
+	if a.Ntfy != "" && !strings.Contains(a.Ntfy, "://") {
+		a.Ntfy = "https://ntfy.sh/" + strings.TrimPrefix(a.Ntfy, "/") // just the topic name
+	}
+	if a.Ntfy != "" && !validWebURL(a.Ntfy) {
+		return a, errors.New(T("ntfy: scrivi il nome dell'argomento o l'indirizzo completo", "ntfy: write the topic name or the full address"))
+	}
+	if a.Slack != "" && !strings.HasPrefix(a.Slack, "https://") {
+		return a, errors.New(T("Slack: incolla l'indirizzo del webhook (https://hooks.slack.com/…)", "Slack: paste the webhook address (https://hooks.slack.com/…)"))
+	}
+	return a, nil
 }

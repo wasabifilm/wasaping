@@ -41,6 +41,15 @@ let hosts = [], gone = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser
 try { showGone = localStorage.getItem("wasaping.showGone") !== "0"; } catch {}
 let repeatTimer = null, selected = null, autoRun = false, network = null, issues = [], snmpCommunity = "public", swPorts = {};
 let networks = [], activeNet = ""; // several networks: "" = all tabs
+// Preferences kept by the program (Settings → Scansione, Allarmi).
+let prefs = {default_ports: "common", loop_pause: 10, alarm_volume: 60, snmp_community: "public"};
+// The port menu of the bar starts from the saved choice.
+function applyDefaultPorts() {
+  const p = prefs.default_ports || "common", custom = !["common", "none"].includes(p);
+  $("ports").value = custom ? "custom" : p;
+  $("custom").hidden = !custom;
+  if (custom) $("custom").value = p;
+}
 
 const ipNum = ip => ip.split(".").reduce((a, b) => a * 256 + +b, 0);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -95,6 +104,11 @@ async function init() {
   try { const last = await fetch("api/last").then(r => r.json()); if (last && !hosts.length) applyResult(last); } catch {}
   setInterval(pollLast, 15000);
   snmpCommunity = info.snmp || "public";
+  try { prefs = await fetch("api/prefs").then(r => r.json()); snmpCommunity = prefs.snmp_community; } catch {}
+  applyDefaultPorts();
+  // Back where the page was before a reload (language change).
+  let reopen = ""; try { reopen = sessionStorage.getItem("wasaping.reopen") || ""; sessionStorage.removeItem("wasaping.reopen"); } catch {}
+  if (reopen) runTool(reopen);
   checkUpdate(); setInterval(checkUpdate, 3600000);
   let dismissed = false;
   try { dismissed = localStorage.getItem("wasaping.helperNo") === "1"; } catch {}
@@ -178,7 +192,6 @@ $("scan").onclick = () => { if (es) { setLoop(false); stop("Scansione interrotta
 // Continuous scan: while the window is open, scan again a few seconds after
 // each scan ends. The list stays on screen and is swapped when the new
 // scan is done; arrivals and departures are announced.
-const LOOP_PAUSE = 10; // seconds between two scans
 let loop = false, loopTimer = null, loopNext = 0;
 function setLoop(on) {
   loop = on;
@@ -188,13 +201,14 @@ function setLoop(on) {
   if (on && !es) start(false, !!hosts.length);
 }
 $("loopBtn").onclick = () => {
-  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {} // sound needs a click first
+  unlockSound(); // sound needs a click first
   setLoop(!loop);
   toast(loop ? "Scansione continua: l'elenco si aggiorna da solo." : "Scansione continua spenta.");
 };
 function loopAgain(msg) {
   if (!loop) return;
-  loopNext = Date.now() + LOOP_PAUSE * 1000;
+  const pause = prefs.loop_pause || 10; // seconds between two scans
+  loopNext = Date.now() + pause * 1000;
   const show = () => { const n = Math.max(0, Math.round((loopNext - Date.now()) / 1000)); $("status").textContent = `${msg} · di nuovo tra ${n} s`; };
   show(); setLoop.tick = setInterval(show, 1000);
   const go = () => {
@@ -203,7 +217,7 @@ function loopAgain(msg) {
     if (document.hidden) { loopTimer = setTimeout(go, 2000); return; } // window closed: wait
     start(false, true);
   };
-  loopTimer = setTimeout(go, LOOP_PAUSE * 1000);
+  loopTimer = setTimeout(go, pause * 1000);
 }
 // What changed since the previous scan, said in a toast and in the title.
 function announce(before, d) {
@@ -355,47 +369,92 @@ $("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updB
 $("setBtn").onclick = () => runTool("settings");
 async function settingsView() {
   const get = u => fetch(u).then(r => r.json()).catch(() => ({}));
-  const [bg, upd, login, alerts, info, wa] = await Promise.all([get("api/bg"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info"), get("api/webaccess")]);
+  const [bg, upd, login, alerts, info, wa, pr] = await Promise.all([get("api/bg"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info"), get("api/webaccess"), get("api/prefs")]);
+  if (pr.default_ports) prefs = pr;
   const waInfo = w => w.on ? `Da un altro computer apri <b class="nt">${esc(w.url)}</b> e inserisci la password. Il browser avviserà che il certificato non è verificato: è normale, l'ha creato wasaping. Impronta SHA-256: <span class="mono nt" style="font-size:11px;word-break:break-all">${esc(w.fingerprint || "")}</span>` : "Tutta l'interfaccia, anche le modifiche, da un altro computer: HTTPS e password.";
   const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}"${String(k) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
-  openSheet("Impostazioni", `<nav class="setidx">${[["sGen", "Generali"], ["sAl", "Allarmi e notifiche"], ["sAcc", "Accesso da altri dispositivi"], ["sSys", "Sistema"]].map(([id, l]) => `<a data-to="${id}">${l}</a>`).join("")}</nav><div class="set">
+  const portMode = ["common", "none"].includes(prefs.default_ports) ? prefs.default_ports : "custom";
+  const kb = n => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+  const SECTS = [["sGen", "Generali"], ["sScan", "Scansione"], ["sAl", "Allarmi"], ["sAcc", "Rete e accesso"], ["sSys", "Sistema"]];
+  openSheet("Impostazioni", `<nav class="setidx">${SECTS.map(([id, l]) => `<a data-to="${id}">${l}</a>`).join("")}</nav><div class="set">
     <h4 id="sGen">Generali</h4>
     <b>Lingua</b><div class="opt">${sel("sLang", [["it", "Italiano"], ["en", "English"]], LANG)}</div>
     <b>Tema</b><div class="opt">${sel("sTheme", [["", "automatico"], ["light", "chiaro"], ["dark", "scuro"]], theme)}</div>
-    <b>Ripeti in background</b><div class="opt">${sel("sRepeat", [[0, "mai"], [5, "ogni 5 minuti"], [15, "ogni 15 minuti"], [60, "ogni ora"]], bg.repeat_minutes || 0)}<span class="tag">Anche a finestra chiusa, sulla rete predefinita, con una notifica quando arriva un dispositivo nuovo. Per aggiornare l'elenco mentre lo guardi c'è «↻ Continua» accanto a Scansiona.</span></div>
-    <h4 id="sAl">Allarmi e notifiche</h4>
-    <p class="muted sethint">Quando un dispositivo o un universo critico cade o torna, wasaping avvisa dove scegli qui.</p>
+
+    <h4 id="sScan">Scansione</h4>
+    <b>Porte da controllare</b><div class="opt">${sel("sPorts", [["common", "Porte comuni"], ["none", "Nessuna porta (più veloce)"], ["custom", "Porte personalizzate…"]], portMode)}
+      <input id="sPortsCustom" placeholder="22,80,443 o 1-1024" value="${portMode === "custom" ? esc(prefs.default_ports) : ""}" style="width:200px" spellcheck="false"${portMode === "custom" ? "" : " hidden"}>
+      <span class="tag">Quelle scelte all'apertura di wasaping. Per una scansione sola si cambiano nella barra.</span></div>
+    <b>Scansione continua</b><div class="opt">${sel("sPause", [[5, "pausa di 5 s"], [10, "pausa di 10 s"], [30, "pausa di 30 s"], [60, "pausa di 1 minuto"]], prefs.loop_pause)}<span class="tag">Quanto aspetta «↻ Continua» tra una scansione e l'altra.</span></div>
+    <b>Ripeti in background</b><div class="opt">${sel("sRepeat", [[0, "mai"], [5, "ogni 5 minuti"], [15, "ogni 15 minuti"], [60, "ogni ora"]], bg.repeat_minutes || 0)}<span class="tag">Anche a finestra chiusa, sulla rete predefinita, con una notifica quando arriva un dispositivo nuovo.</span></div>
+    <b>Community SNMP</b><div class="opt"><input id="sSNMP" value="${esc(prefs.snmp_community)}" style="width:160px" spellcheck="false"><span class="tag">Per leggere dagli switch su quale porta è ogni dispositivo (Mappa della rete).</span></div>
+
+    <h4 id="sAl">Allarmi</h4>
+    <p class="muted sethint">Quando un dispositivo o un universo critico cade o torna, wasaping avvisa dove scegli qui. Si salva da solo.</p>
+    <b>Allarme sonoro</b><div class="opt"><input type="range" id="sVol" min="10" max="100" step="10" value="${prefs.alarm_volume}" style="width:180px"><span id="sVolN" class="tag">${prefs.alarm_volume}%</span><button id="sVolTest">Prova il suono</button><span class="tag">Acceso o spento si sceglie nel Monitor.</span></div>
     <b>Altri programmi</b><div class="opt">
-      <input id="sOSC" placeholder="OSC: 192.168.1.20:53000" value="${esc(alerts.osc || "")}" style="width:220px" spellcheck="false">
-      <input id="sOSCAddr" placeholder="/wasaping" value="${esc(alerts.osc_address || "")}" style="width:140px" spellcheck="false">
-      <input id="sHook" placeholder="Indirizzo web (webhook): https://…" value="${esc(alerts.webhook || "")}" style="flex:1 1 260px" spellcheck="false">
+      <input id="sOSC" class="al" placeholder="OSC: 192.168.1.20:53000" value="${esc(alerts.osc || "")}" style="width:220px" spellcheck="false">
+      <input id="sOSCAddr" class="al" placeholder="/wasaping" value="${esc(alerts.osc_address || "")}" style="width:140px" spellcheck="false">
+      <input id="sHook" class="al" placeholder="Indirizzo web (webhook): https://…" value="${esc(alerts.webhook || "")}" style="flex:1 1 260px" spellcheck="false">
       <span class="tag">Un messaggio OSC (a QLab, a una console, a un media server) e/o una chiamata all'indirizzo web con i dettagli in JSON.</span></div>
     <b>Notifiche sul telefono</b><div class="opt">
-      <input id="sNtfy" placeholder="ntfy: nome dell'argomento" value="${esc(alerts.ntfy || "")}" style="width:240px" spellcheck="false">
-      <input id="sTGToken" placeholder="Telegram: token del bot" value="${esc((alerts.telegram || "").split("|")[0])}" style="width:240px" spellcheck="false">
-      <input id="sTGChat" placeholder="id della chat" value="${esc((alerts.telegram || "").split("|")[1] || "")}" style="width:130px" spellcheck="false">
-      <input id="sSlack" placeholder="Slack: https://hooks.slack.com/…" value="${esc(alerts.slack || "")}" style="flex:1 1 260px" spellcheck="false">
+      <input id="sNtfy" class="al" placeholder="ntfy: nome dell'argomento" value="${esc(alerts.ntfy || "")}" style="width:240px" spellcheck="false">
+      <input id="sTGToken" class="al" type="password" autocomplete="off" placeholder="Telegram: token del bot" value="${esc((alerts.telegram || "").split("|")[0])}" style="width:240px" spellcheck="false">
+      <input id="sTGChat" class="al" placeholder="id della chat" value="${esc((alerts.telegram || "").split("|")[1] || "")}" style="width:130px" spellcheck="false">
+      <input id="sSlack" class="al" placeholder="Slack: https://hooks.slack.com/…" value="${esc(alerts.slack || "")}" style="flex:1 1 260px" spellcheck="false">
       <span class="tag">Il modo più semplice è ntfy: installa l'app ntfy sul telefono, iscriviti a un argomento con un nome difficile da indovinare e scrivi lo stesso nome qui. Per Telegram: crea un bot con @BotFather e scrivi qui il suo token e l'id della chat. Per Slack: un «incoming webhook» del canale.</span></div>
-    <b></b><div class="opt"><button class="primary" id="sAlertSave">Salva allarmi e notifiche</button><button id="sAlertTest">Manda una prova</button></div>
-    <h4 id="sAcc">Accesso da altri dispositivi</h4>
+    <b></b><div class="opt"><button id="sAlertTest">Manda una prova</button><span class="tag" id="sAlertMsg"></span></div>
+
+    <h4 id="sAcc">Rete e accesso</h4>
     ${info.remote ? `<b>Accesso dalla rete</b><div class="opt"><span>Sei collegato da un altro computer.</span><form method="post" action="/logout" style="margin:0"><button>Disconnetti</button></form></div>` : `<b>Accesso completo dalla rete</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sWeb"${wa.on ? " checked" : ""}> attivo</label>
       <input type="password" id="sWebPw" placeholder="${wa.has_password ? "nuova password (facoltativa)" : "password (almeno 8 caratteri)"}" autocomplete="new-password" style="width:230px"><button id="sWebPwSave">Salva password</button>
-      <span class="tag" id="sWebInfo">${waInfo(wa)}</span></div>`}
+      <span class="tag" id="sWebInfo">${waInfo(wa)}</span><img id="sWebQR" class="qr" alt=""${wa.on ? ` src="api/qr?for=web&t=${Date.now()}"` : " hidden"}></div>`}
+
     <h4 id="sSys">Sistema</h4>
     <b>Aggiornamenti</b><div class="opt"><span>wasaping ${esc(upd.current || "")}</span>${upd.newer ? `<button class="primary" id="sUpdNow">Aggiorna a ${esc(upd.latest)}</button>` : ""}<label class="check" style="margin:0"><input type="checkbox" id="sUpdCheck"${upd.off ? "" : " checked"}> controlla le nuove versioni</label><button id="sUpdNowCheck">Controlla ora</button><span class="tag" id="sUpdInfo"></span></div>
     ${login.available ? `<b>Apri al login</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sLogin"${login.enabled ? " checked" : ""}> apri wasaping all'accesso, nella barra dei menu</label></div>` : ""}
     ${info.helper && info.helper !== "notneeded" ? `<b>Indirizzi MAC (macOS)</b><div class="opt">${info.helper === "installed" ? '<span>aiuto di sistema attivo</span><button id="sHelperOff">Disinstalla</button>' : '<span>nascosti da macOS</span><button id="sHelperOn">Installa l\'aiuto</button>'}</div>` : ""}
-    <b>Community SNMP</b><div class="opt"><input id="sSNMP" value="${esc(snmpCommunity)}" style="width:160px" spellcheck="false"><span class="tag">Per leggere dagli switch su quale porta è ogni dispositivo.</span></div>
+    <b>Dati di wasaping</b><div class="opt"><span class="mono nt" style="font-size:12px;word-break:break-all">${esc(prefs.data_dir || "")}</span>${info.remote ? "" : '<button id="sReveal">Mostra nella cartella</button>'}
+      <span class="tag">${(prefs.files || []).map(f => `<span class="nt">${esc(f.name)}</span> ${kb(f.size)}`).join(" · ")}</span></div>
+    <b>Impostazioni</b><div class="opt"><button id="sExport">Esporta…</button><button id="sImport">Importa…</button><span class="tag">Allarmi, notifiche, scansione e community in un file, da portare su un altro computer. Senza PIN e password.</span></div>
   </div>`);
   $("shBody").querySelectorAll(".setidx a").forEach(a => a.onclick = () => $("sheet").scrollTo({top: $(a.dataset.to).getBoundingClientRect().top - $("shBody").getBoundingClientRect().top + $("shBody").offsetTop - 70}));
-  $("sLang").onchange = () => { try { localStorage.setItem("wasaping.lang", $("sLang").value); } catch {} location.reload(); };
+  const savePrefs = body => post("api/prefs", body).then(r => r.json()).then(p => { prefs = p; snmpCommunity = p.snmp_community; return p; });
+  $("sLang").onchange = () => {
+    try { localStorage.setItem("wasaping.lang", $("sLang").value); sessionStorage.setItem("wasaping.reopen", "settings"); } catch {}
+    location.reload();
+  };
   $("sTheme").onchange = () => { theme = $("sTheme").value; try { localStorage.setItem("wasaping.theme", theme); } catch {} applyTheme(theme); };
+  const portsChanged = () => {
+    const custom = $("sPorts").value === "custom";
+    $("sPortsCustom").hidden = !custom;
+    const v = custom ? $("sPortsCustom").value.trim() : $("sPorts").value;
+    if (custom && !v) { $("sPortsCustom").focus(); return; }
+    savePrefs({default_ports: v}).then(() => { applyDefaultPorts(); toast("Porte salvate."); }).catch(e => toast("Non salvato: " + e.message));
+  };
+  $("sPorts").onchange = portsChanged; $("sPortsCustom").onchange = portsChanged;
+  $("sPause").onchange = () => savePrefs({loop_pause: +$("sPause").value}).then(() => toast("Salvato.")).catch(e => toast("Non salvato: " + e.message));
   $("sRepeat").onchange = () => setRepeat(+$("sRepeat").value);
+  $("sSNMP").onchange = () => savePrefs({snmp_community: $("sSNMP").value.trim()}).then(() => toast("Salvato.")).catch(e => toast("Non salvato: " + e.message));
+  $("sVol").oninput = () => { $("sVolN").textContent = $("sVol").value + "%"; };
+  $("sVol").onchange = () => savePrefs({alarm_volume: +$("sVol").value}).then(() => playAlarm()).catch(e => toast("Non salvato: " + e.message));
+  $("sVolTest").onclick = () => { unlockSound(); playAlarm(); };
+  // Alarms save themselves when a field is left.
   const alertForm = () => ({osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim(), ntfy: $("sNtfy").value.trim(), slack: $("sSlack").value.trim(),
     telegram: $("sTGToken").value.trim() || $("sTGChat").value.trim() ? $("sTGToken").value.trim() + "|" + $("sTGChat").value.trim() : ""});
-  $("sAlertSave").onclick = () => post("api/alerts", alertForm()).then(r => r.json()).then(d => { $("sNtfy").value = d.ntfy || ""; toast("Allarmi salvati."); }).catch(e => toast("Non salvato: " + e.message));
-  $("sAlertTest").onclick = () => post("api/alerts", {...alertForm(), test: true}).then(r => r.json()).then(d => toast(d.result || "Niente da provare: scrivi almeno una destinazione.")).catch(e => toast("Errore: " + e.message));
-  const webSet = body => post("api/webaccess", body).then(r => r.json()).then(w => { $("sWeb").checked = w.on; $("sWebInfo").innerHTML = waInfo(w); $("sWebPw").value = ""; return w; });
+  const alertMsg = (t, bad) => { $("sAlertMsg").textContent = t; $("sAlertMsg").classList.toggle("bad", !!bad); };
+  const saveAlerts = () => {
+    const tg = [$("sTGToken").value.trim(), $("sTGChat").value.trim()];
+    if (!tg[0] !== !tg[1]) { alertMsg("Telegram: servono sia il token sia l'id della chat."); return; }
+    post("api/alerts", alertForm()).then(r => r.json()).then(d => { $("sNtfy").value = d.ntfy || ""; alertMsg("✓ Salvato."); }).catch(e => alertMsg("Non salvato: " + e.message, true));
+  };
+  $("shBody").querySelectorAll("input.al").forEach(i => i.onchange = saveAlerts);
+  $("sAlertTest").onclick = () => post("api/alerts", {...alertForm(), test: true}).then(r => r.json()).then(d => alertMsg(d.result || "Niente da provare: scrivi almeno una destinazione.")).catch(e => alertMsg("Errore: " + e.message, true));
+  const webSet = body => post("api/webaccess", body).then(r => r.json()).then(w => {
+    $("sWeb").checked = w.on; $("sWebInfo").innerHTML = waInfo(w); $("sWebPw").value = "";
+    $("sWebQR").hidden = !w.on; if (w.on) $("sWebQR").src = `api/qr?for=web&t=${Date.now()}`;
+    return w;
+  });
   if ($("sWeb")) {
     $("sWeb").onchange = () => webSet({on: $("sWeb").checked, password: $("sWebPw").value}).catch(e => { toast("Non attivato: " + e.message); $("sWeb").checked = false; });
     $("sWebPwSave").onclick = () => { if (!$("sWebPw").value) { toast("Scrivi la password"); return; } webSet({on: $("sWeb").checked, password: $("sWebPw").value}).then(() => toast("Password salvata.")).catch(e => toast("Non salvata: " + e.message)); };
@@ -416,7 +475,17 @@ async function settingsView() {
   if ($("sLogin")) $("sLogin").onchange = () => post("api/login", {enabled: $("sLogin").checked}).catch(e => { toast(e.message); $("sLogin").checked = !$("sLogin").checked; });
   if ($("sHelperOff")) $("sHelperOff").onclick = () => { closeSheet(); helper("uninstall"); };
   if ($("sHelperOn")) $("sHelperOn").onclick = () => { closeSheet(); helper("install"); };
-  $("sSNMP").onchange = () => { snmpCommunity = $("sSNMP").value.trim() || "public"; };
+  if ($("sReveal")) $("sReveal").onclick = () => post("api/prefs/reveal").catch(e => toast("Errore: " + e.message));
+  $("sExport").onclick = async () => {
+    try { download(`wasaping-impostazioni-${stamp()}.json`, JSON.stringify(await fetch("api/prefs/export").then(r => r.json()), null, 2), "application/json"); }
+    catch (e) { toast("Non esportato: " + e.message); }
+  };
+  $("sImport").onclick = () => pickFile(".json", async text => {
+    try {
+      await post("api/prefs/import", JSON.parse(text));
+      toast("Impostazioni importate."); applyDefaultPorts(); settingsView();
+    } catch (e) { toast("Non importato: " + (e instanceof SyntaxError ? "il file non è JSON" : e.message)); }
+  });
 }
 async function installUpdate() {
   toast("Scarico l'aggiornamento…");

@@ -104,6 +104,9 @@ type settings struct {
 	WebPasswordHash string    `json:"web_password_hash,omitempty"`
 	WebPasswordSalt string    `json:"web_password_salt,omitempty"`
 	WebPort         int       `json:"web_port,omitempty"`
+	DefaultPorts    string    `json:"default_ports,omitempty"` // "common", "none" or a list
+	LoopPause       int       `json:"loop_pause,omitempty"`    // seconds between continuous scans
+	AlarmVolume     int       `json:"alarm_volume,omitempty"`  // 10–100, 0 = default
 }
 
 var (

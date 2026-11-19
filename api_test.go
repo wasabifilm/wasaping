@@ -96,3 +96,57 @@ func TestToolMenuIDs(t *testing.T) {
 		t.Errorf("spec lines %d", strings.Count(spec, "\n"))
 	}
 }
+
+func TestPrefsAndSettingsFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("AppData", dir)
+	setMu.Lock()
+	setCache = &settings{RemotePIN: "424242", WebPasswordHash: "x", Telegram: "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ0123456789|-100123"}
+	setMu.Unlock()
+	h := apiMux(func() {})
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if w := do("POST", "/api/prefs", `{"default_ports":"22,80","loop_pause":30,"alarm_volume":250,"snmp_community":"show"}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	s := loadSettings()
+	if s.DefaultPorts != "22,80" || s.LoopPause != 30 || s.AlarmVolume != 100 || s.SNMPCommunity != "show" {
+		t.Fatalf("%+v", s)
+	}
+	if w := do("POST", "/api/prefs", `{"default_ports":"abc"}`); w.Code != 400 {
+		t.Fatal("bad ports accepted")
+	}
+	exp := do("GET", "/api/prefs/export", "").Body.String()
+	if strings.Contains(exp, "424242") || strings.Contains(exp, "web_password") || !strings.Contains(exp, "wasaping-settings") {
+		t.Fatal("export:", exp)
+	}
+	setMu.Lock()
+	setCache = &settings{RemotePIN: "999999"}
+	setMu.Unlock()
+	if w := do("POST", "/api/prefs/import", exp); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if s := loadSettings(); s.DefaultPorts != "22,80" || s.RemotePIN != "999999" || s.SNMPCommunity != "show" {
+		t.Fatalf("import: %+v", s)
+	}
+	if w := do("POST", "/api/prefs/import", `{"format":"other"}`); w.Code != 400 {
+		t.Fatal("wrong file accepted")
+	}
+	if w := do("GET", "/api/qr?for=remote", ""); w.Code != 200 || !strings.HasPrefix(w.Body.String(), "<svg") {
+		t.Fatal("qr", w.Code)
+	}
+	for _, p := range []string{"/api/prefs", "/api/prefs/reveal", "/api/prefs/import", "/api/qr"} {
+		if !localOnly[p] {
+			t.Error("not local only:", p)
+		}
+	}
+	setMu.Lock()
+	setCache = nil
+	setMu.Unlock()
+}

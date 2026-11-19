@@ -53,14 +53,14 @@ var remoteWebBlocked = map[string]bool{
 }
 
 type webAccessServer struct {
-	mu       sync.Mutex
-	srv      *http.Server
-	port     int
-	tokens   map[string]time.Time
-	failures map[string][]time.Time
+	mu     sync.Mutex
+	srv    *http.Server
+	port   int
+	tokens map[string]time.Time
+	limit  loginLimit
 }
 
-var webAcc = &webAccessServer{tokens: map[string]time.Time{}, failures: map[string][]time.Time{}}
+var webAcc = &webAccessServer{tokens: map[string]time.Time{}}
 
 // ---- Password: PBKDF2-HMAC-SHA256 (written out: the standard library has
 // it only from Go 1.24) ----
@@ -310,25 +310,13 @@ func (wa *webAccessServer) handleLogin(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	ip := clientIP(r)
-	wa.mu.Lock()
-	var recent []time.Time
-	for _, t := range wa.failures[ip] {
-		if time.Since(t) < time.Minute {
-			recent = append(recent, t)
-		}
-	}
-	wa.failures[ip] = recent
-	blocked := len(recent) >= 5
-	wa.mu.Unlock()
-	if blocked {
+	if wa.limit.blocked(ip) {
 		page("Troppi tentativi: riprova tra un minuto · Too many attempts: try again in a minute", http.StatusTooManyRequests)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 	if !passwordOK(r.PostFormValue("password")) {
-		wa.mu.Lock()
-		wa.failures[ip] = append(wa.failures[ip], time.Now())
-		wa.mu.Unlock()
+		wa.limit.fail(ip)
 		page("Password sbagliata · Wrong password", http.StatusForbidden)
 		return
 	}

@@ -502,7 +502,8 @@ func (s *Store) Forget(id, key string) {
 // ForgetOld removes the devices of a network ("" = current) not seen for
 // more than days (0 = not found by the latest scan). Critical ones always
 // stay; those the user named or wrote a note on stay unless named is true.
-func (s *Store) ForgetOld(id string, days int, named bool) int {
+// With dry, it only counts.
+func (s *Store) ForgetOld(id string, days int, named, dry bool) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := s.netLocked(id)
@@ -518,10 +519,12 @@ func (s *Store) ForgetOld(id string, days int, named bool) int {
 		if d.Critical || !d.LastSeen.Before(limit) || (!named && (d.Name != "" || d.Role != "" || d.Note != "")) {
 			continue
 		}
-		delete(n.Devices, k)
+		if !dry {
+			delete(n.Devices, k)
+		}
 		removed++
 	}
-	if removed > 0 {
+	if removed > 0 && !dry {
 		s.saveLocked()
 	}
 	return removed
@@ -597,9 +600,6 @@ type Project struct {
 	Venues  []Venue   `json:"venues"`
 }
 
-// ExportVenue returns the current network as a Venue.
-func (s *Store) ExportVenue() (Venue, bool) { return s.ExportNetwork("") }
-
 // ExportNetwork returns a network ("" = current) as a Venue.
 func (s *Store) ExportNetwork(id string) (Venue, bool) {
 	s.mu.Lock()
@@ -622,12 +622,6 @@ func (s *Store) ExportNetwork(id string) (Venue, bool) {
 	}
 	sort.Slice(v.Devices, func(i, j int) bool { return ipLess(v.Devices[i].IP, v.Devices[j].IP) })
 	return v, true
-}
-
-// ImportVenue merges a venue into the current network.
-func (s *Store) ImportVenue(v Venue) (int, error) {
-	n, _, err := s.ImportVenueInto(v, "")
-	return n, err
 }
 
 var reNetID = regexp.MustCompile(`^(gw:[0-9a-f:]{17}|gw:[0-9.]{7,15}@[0-9./]{9,18}|net:[0-9./]{9,18})$`)

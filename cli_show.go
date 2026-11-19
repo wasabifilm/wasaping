@@ -313,7 +313,7 @@ func runVenueCLI(ctx context.Context, args []string) error {
 		}
 		fmt.Printf(TC("✓ importato: %d reti, %d dispositivi\n", "✓ imported: %d networks, %d devices\n"), len(venues), total)
 	case len(args) >= 1 && args[0] == "export":
-		v, _ := devices().ExportVenue()
+		v, _ := devices().ExportNetwork("")
 		b, _ := json.MarshalIndent(v, "", "  ")
 		if len(args) >= 2 {
 			return os.WriteFile(args[1], b, 0o644)

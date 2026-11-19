@@ -58,7 +58,8 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleForgetOld cleans a network's list: POST {net, days, named}.
+// handleForgetOld cleans a network's list: POST {net, days, named, dry}
+// (dry: only count, for the page to show the numbers).
 func handleForgetOld(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "usa POST", http.StatusMethodNotAllowed)
@@ -68,12 +69,13 @@ func handleForgetOld(w http.ResponseWriter, r *http.Request) {
 		Net   string `json:"net"`
 		Days  int    `json:"days"`
 		Named bool   `json:"named"`
+		Dry   bool   `json:"dry"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil || req.Days < 0 || req.Days > 3650 {
 		http.Error(w, "richiesta non valida", http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, map[string]int{"removed": devices().ForgetOld(req.Net, req.Days, req.Named)})
+	writeJSON(w, map[string]int{"removed": devices().ForgetOld(req.Net, req.Days, req.Named, req.Dry)})
 }
 
 // handleProject: GET ?nets=id1,id2&name=… saves the show's project (the
@@ -305,30 +307,6 @@ func handlePlan(w http.ResponseWriter, r *http.Request) {
 		devices().Select(q.Get("net"))
 	}
 	writeJSON(w, comparePlan(devices().Plan(), hostsOf(q.Get("net")), q.Get("lang")))
-}
-
-// handleVenue: GET exports the current network, POST imports a venue file.
-func handleVenue(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		var v Venue
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&v); err != nil {
-			http.Error(w, "file non valido", http.StatusBadRequest)
-			return
-		}
-		n, err := devices().ImportVenue(v)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		writeJSON(w, map[string]int{"devices": n})
-		return
-	}
-	v, ok := devices().ExportVenue()
-	if !ok {
-		http.Error(w, "fai prima una scansione di questa rete", http.StatusConflict)
-		return
-	}
-	writeJSON(w, v)
 }
 
 func validKind(k string) bool { return validKinds[k] }

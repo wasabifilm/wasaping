@@ -19,7 +19,7 @@ function render() {
     const sub = [h.role, h.name ? (h.friendly || h.hostname) : (h.friendly && h.hostname && h.friendly !== h.hostname ? h.hostname : "")].filter(Boolean).join(" · ");
     const warns = (h.warnings || []).length;
     return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${selected === h.key ? " sel" : ""}">
-    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${h.critical ? '<span class="badge crit">critico</span>' : ""}${warns ? `<span class="badge warn" title="${esc(h.warnings.join("\n"))}">⚠ ${warns}</span>` : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
+    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${h.critical ? '<span class="badge crit">critico</span>' : ""}${warns ? `<span class="badge warn" title="${esc(h.warnings.map(tr).join("\n"))}">⚠ ${warns}</span>` : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
     <td class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
@@ -66,7 +66,7 @@ function showMenu(x, y, hint, items) {
   m.style.left = Math.min(x, innerWidth - r.width - 8) + "px";
   m.style.top = Math.min(y, innerHeight - r.height - 8) + "px";
 }
-function hideMenu() { $("ctx").style.display = "none"; }
+function hideMenu() { $("ctx").style.display = "none"; $("ctx").style.maxHeight = ""; }
 
 // "Strumenti" menu: everything that is not scanning, grouped.
 $("toolsBtn").onclick = e => {
@@ -76,12 +76,17 @@ $("toolsBtn").onclick = e => {
   const groups = [
     ["Rete", [["Piano IP", planView], ["IP liberi", freeView], ["Mappa della rete", switchView, none], ["Confronta con l'ultima volta", compareView, !network]]],
     ["Show", [["Universi DMX", dmxView], ["Apparecchi RDM", rdmView], ["Dante", danteView], ["Video", videoView], ["Report di fine show", showReportView]]],
-    ["Progetto", [["Salva progetto…", saveProjectView, !network], ["Apri progetto…", () => pickFile(".wasaping,.json", openProjectView)], ["Pulisci i dispositivi vecchi", cleanupView, !network]]],
-    ["Esporta", [["Stampa elenco IP", () => $("printBtn").click(), none], ["CSV", () => $("csv").click(), none], ["JSON", () => $("json").click(), none]]],
+    ["Progetto", [["Salva progetto…", saveProjectView, !network], ["Apri progetto…", () => pickFile(".wasaping,.json", openProjectView)], ["Pulisci i dispositivi vecchi", cleanupView, !network],
+      ["Stampa elenco IP", () => $("printBtn").click(), none], ["Esporta CSV", () => $("csv").click(), none], ["Esporta JSON", () => $("json").click(), none]]],
     ["Aiuto", [["Salva diagnostica", saveDiag]]],
   ];
   const m = $("ctx");
-  m.innerHTML = groups.map(([g, items]) => `<div class="hint">${esc(g)}</div>` + items.map(([l, , dis], i) => `<div data-g="${esc(g)}" data-i="${i}"${dis ? ' class="dis"' : ""}>${esc(l)}</div>`).join("")).join("");
+  const group = ([g, items]) => `<div class="hint">${esc(g)}</div>` + items.map(([l, , dis], i) => `<div data-g="${esc(g)}" data-i="${i}"${dis ? ' class="dis"' : ""}>${esc(l)}</div>`).join("");
+  // Two columns (network and project | show and help) where there is room.
+  const byName = Object.fromEntries(groups.map(g => [g[0], g]));
+  m.innerHTML = innerWidth > 560
+    ? `<div class="cols"><div class="col">${group(byName["Rete"])}${group(byName["Progetto"])}</div><div class="col">${group(byName["Show"])}${group(byName["Aiuto"])}</div></div>`
+    : groups.map(group).join("");
   m.querySelectorAll("[data-i]").forEach(d => d.onclick = () => {
     if (d.classList.contains("dis")) return;
     hideMenu();
@@ -91,6 +96,7 @@ $("toolsBtn").onclick = e => {
   const w = m.getBoundingClientRect().width;
   m.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
   m.style.top = (r.bottom + 6) + "px";
+  m.style.maxHeight = (innerHeight - r.bottom - 14) + "px";
   translateTree(m);
 };
 document.addEventListener("click", e => { if (!e.target.closest("#ctx")) hideMenu(); });
@@ -349,23 +355,24 @@ async function saveDiag() {
   };
 }
 
-// Remove in one go the devices not seen for a while (never the critical ones).
+// Remove in one go the devices not seen for a while (never the critical
+// ones). The numbers come from the program: it knows every device of the
+// venue, also those outside the range scanned last.
 function cleanupView() {
   if (needOneNet()) return;
-  const day = 86400000, now = Date.now();
-  const list = gone.filter(h => !activeNet || h.net === activeNet);
-  const pick = (days, named) => list.filter(h => !h.critical && (named || !(h.name || h.role || h.note)) &&
-    (days === 0 || now - new Date(h.last_seen).getTime() > days * day));
-  const count = (days, named) => pick(days, named).length;
   const opts = [[90, "non visti da più di 3 mesi"], [30, "non visti da più di 30 giorni"], [7, "non visti da più di una settimana"], [0, "tutti quelli che non rispondono ora"]];
   openSheet("Pulisci i dispositivi vecchi", `<p>Toglie dall'elenco di questo locale i dispositivi spariti. Se tornano, wasaping li ritrova come nuovi. I dispositivi <b>critici</b> restano sempre.</p>
     <div class="set">${opts.map(([d, l], i) => `<label class="check"><input type="radio" name="clDays" value="${d}"${i === 1 ? " checked" : ""}> <span>${esc(l)}</span> <span class="muted cl-n" data-d="${d}"></span></label>`).join("")}
     <label class="check"><input type="checkbox" id="clNamed"> anche quelli a cui hai dato un nome, un ruolo o una nota</label></div>
-    <div class="row"><button class="primary" id="clGo"></button></div>`);
-  const upd = () => {
-    const named = $("clNamed").checked, d = +document.querySelector("input[name=clDays]:checked").value;
-    document.querySelectorAll(".cl-n").forEach(x => x.textContent = `(${count(+x.dataset.d, named)})`);
-    const n = count(d, named);
+    <div class="row"><button class="primary" id="clGo" disabled></button></div>`);
+  const ask = (days, named, dry) => post("api/forget-old", {net: activeNet, days, named, dry}).then(r => r.json()).then(r => r.removed);
+  const days = () => +document.querySelector("input[name=clDays]:checked").value;
+  const upd = async () => {
+    const named = $("clNamed").checked;
+    const counts = await Promise.all(opts.map(([d]) => ask(d, named, true).catch(() => 0)));
+    if (!$("clGo")) return;
+    document.querySelectorAll(".cl-n").forEach((x, i) => x.textContent = `(${counts[i]})`);
+    const n = counts[opts.findIndex(([d]) => d === days())];
     $("clGo").textContent = LANG === "en" ? `Remove ${n} devices` : `Togli ${n} dispositivi`;
     $("clGo").disabled = !n;
   };
@@ -373,12 +380,12 @@ function cleanupView() {
   upd();
   $("clGo").onclick = async () => {
     $("clGo").disabled = true;
-    const days = +document.querySelector("input[name=clDays]:checked").value, named = $("clNamed").checked;
     try {
-      const r = await post("api/forget-old", {net: activeNet, days, named}).then(x => x.json());
-      const out = new Set(pick(days, named));
-      gone = gone.filter(h => !out.has(h));
-      toast(LANG === "en" ? `${r.removed} devices removed.` : `${r.removed} dispositivi tolti.`);
+      const n = await ask(days(), $("clNamed").checked, false);
+      toast(LANG === "en" ? `${n} devices removed.` : `${n} dispositivi tolti.`);
+      const d = days(), named = $("clNamed").checked, limit = Date.now() - d * 86400000;
+      gone = gone.filter(h => (activeNet && h.net !== activeNet) || h.critical || (!named && (h.name || h.role || h.note)) ||
+        (d > 0 && new Date(h.last_seen).getTime() >= limit));
       closeSheet(); render();
     } catch (e) { toast("Errore: " + e.message); $("clGo").disabled = false; }
   };

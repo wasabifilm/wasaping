@@ -102,5 +102,11 @@ func msgIn(s, lang string) string {
 			return m.re.ReplaceAllString(s, m.rep)
 		}
 	}
+	// "<network>: <message>" (several networks): translate the message.
+	if net, msg, ok := strings.Cut(s, ": "); ok && len(net) < 80 {
+		if t := msgIn(msg, lang); t != msg {
+			return strings.Replace(net, "Rete ", "Network ", 1) + ": " + t
+		}
+	}
 	return s
 }

@@ -62,7 +62,6 @@ func apiMux(quit func()) *http.ServeMux {
 	mux.HandleFunc("/api/monitor", handleMonitor)
 	mux.HandleFunc("/api/remote", handleRemote)
 	mux.HandleFunc("/api/plan", handlePlan)
-	mux.HandleFunc("/api/venue", handleVenue)
 	mux.HandleFunc("/api/dmx", handleDMX)
 	mux.HandleFunc("/api/switchports", handleSwitchPorts)
 	mux.HandleFunc("/api/update", handleUpdate)
@@ -101,7 +100,7 @@ func apiMux(quit func()) *http.ServeMux {
 // the network.
 var localOnly = map[string]bool{
 	"/api/save": true, "/api/helper": true, "/api/quit": true, "/api/notify": true,
-	"/api/device": true, "/api/forget-old": true, "/api/project": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/venue": true, "/api/switchports": true, "/api/update": true, "/api/lang": true, "/api/universe": true, "/api/alerts": true, "/api/rdm": true, "/api/rdm/identify": true, "/api/rdm/set": true, "/api/preshow": true, "/api/diag": true, "/api/compare": true, "/api/update/install": true, "/api/webaccess": true,
+	"/api/device": true, "/api/forget-old": true, "/api/project": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/switchports": true, "/api/update": true, "/api/lang": true, "/api/universe": true, "/api/alerts": true, "/api/rdm": true, "/api/rdm/identify": true, "/api/rdm/set": true, "/api/preshow": true, "/api/diag": true, "/api/compare": true, "/api/update/install": true, "/api/webaccess": true,
 }
 
 func fromLoopback(r *http.Request) bool {

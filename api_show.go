@@ -244,7 +244,10 @@ func handleDante(w http.ResponseWriter, r *http.Request) {
 // GET. Blackmagic, vMix, Resolume… are asked now; projectors, NDI sources
 // and PTPv2 clocks come from the scan.
 func handleVideo(w http.ResponseWriter, r *http.Request) {
-	type target struct{ ip, kind string }
+	type target struct {
+		ip, kind string
+		asked    bool // typed by the user: show it even when it does not answer
+	}
 	var targets []target
 	var projectors, ndi, ptp []map[string]any
 	lastMu.Lock()
@@ -255,7 +258,7 @@ func handleVideo(w http.ResponseWriter, r *http.Request) {
 			}
 			name := firstNonEmpty(h.Name, h.Friendly, h.Hostname, h.IP)
 			if k := scanner.VideoCandidate(h.Host); k != "" {
-				targets = append(targets, target{h.IP, k})
+				targets = append(targets, target{h.IP, k, false})
 			}
 			if h.PJLink != nil {
 				projectors = append(projectors, map[string]any{"ip": h.IP, "name": name, "pjlink": h.PJLink})
@@ -276,7 +279,7 @@ func handleVideo(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "tipo non valido", http.StatusBadRequest)
 			return
 		}
-		targets = append(targets, target{ip.String(), kind})
+		targets = append(targets, target{ip.String(), kind, true})
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
@@ -287,5 +290,13 @@ func handleVideo(w http.ResponseWriter, r *http.Request) {
 		go func() { defer wg.Done(); out[i] = scanner.VideoStatus(ctx, t.ip, t.kind) }()
 	}
 	wg.Wait()
-	writeJSON(w, map[string]any{"devices": out, "projectors": projectors, "ndi": ndi, "ptp2": ptp})
+	// Found by a guess (a Blackmagic device, port 8088…) and not answering:
+	// it is not what it looked like, leave it out.
+	var devs []scanner.VideoInfo
+	for i, v := range out {
+		if v.Err == "" || targets[i].asked || targets[i].kind == "Videohub" || targets[i].kind == "HyperDeck" {
+			devs = append(devs, v)
+		}
+	}
+	writeJSON(w, map[string]any{"devices": devs, "projectors": projectors, "ndi": ndi, "ptp2": ptp})
 }

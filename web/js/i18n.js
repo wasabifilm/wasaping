@@ -97,7 +97,15 @@ const EN = new Map(Object.entries({
   "Stampa o salva il report": "Print or save the report", "Ricontrolla": "Check again", "NON ARRIVA": "NOT ARRIVING", "non arriva": "not arriving", "Il Monitor ora controlla questo universo.": "The Monitor now watches this universe.", "Universo tolto dal Monitor.": "Universe removed from the Monitor.",
   "Il Monitor avvisa se l'universo smette di arrivare": "The Monitor warns if the universe stops arriving", "Clock PTP: master": "PTP clock: master", "Cerca apparecchi": "Find fixtures", "Indirizzo": "Address", "Canali": "Channels", "Etichetta": "Label", "Modalità": "Mode", "UID": "UID", "Nodo": "Node",
   "wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. La ricerca non cambia niente sugli apparecchi; per cambiare indirizzo, modalità o etichetta c'è «Modifica», che chiede conferma.": "wasaping asks the Art-Net nodes which RDM fixtures they have connected, and each fixture who it is: maker, model, label, DMX address, channels and mode. The search changes nothing on the fixtures; to change address, mode or label there is “Edit”, which asks for confirmation.",
-  "Modifica": "Edit", "Velocità": "Speed", "Video": "Video", "Leggi lo stato": "Read the status", "Uscita": "Output", "Ingresso": "Input", "Uscita bloccata": "Output locked", "Proiettori (PJLink)": "Projectors (PJLink)", "Proiettore": "Projector", "Ore lampada": "Lamp hours", "Errori": "Errors", "serve la password PJLink": "PJLink password needed", "Clock PTPv2 (SMPTE 2110, AES67)": "PTPv2 clock (SMPTE 2110, AES67)", "NDI": "NDI",
+  "Modifica": "Edit", "Generali": "General", "Allarmi e notifiche": "Alarms and notifications", "Accesso da altri dispositivi": "Access from other devices", "Sistema": "System", "Altri programmi": "Other programs", "Salva allarmi e notifiche": "Save alarms and notifications", "Manda una prova": "Send a test",
+  "Quando un dispositivo o un universo critico cade o torna, wasaping avvisa dove scegli qui.": "When a critical device or universe drops or comes back, wasaping tells the places you choose here.",
+  "Un messaggio OSC (a QLab, a una console, a un media server) e/o una chiamata all'indirizzo web con i dettagli in JSON.": "An OSC message (to QLab, a console, a media server) and/or a call to the web address with the details in JSON.", "Esporta CSV": "Export CSV", "Esporta JSON": "Export JSON", "Stampa elenco IP": "Print IP list", "Indirizzo web (webhook): https://…": "Web address (webhook): https://…", "Elenco": "List", "Panoramica": "Overview",
+  "In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Solo ascolto: wasaping non manda DMX. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.": "Listening to Art-Net (packets in broadcast or sent to this computer) and sACN (universes 1–64). Listening only: wasaping sends no DMX. Click a universe to see its 512 channels, click a channel to follow it over time.",
+  "Per vedere gli apparecchi sopra i canali, fai una ricerca in Strumenti → Apparecchi RDM.": "To see the fixtures over the channels, run a search in Tools → RDM fixtures.", "Scegli un universo dall'elenco.": "Pick a universe from the list.",
+  "Sorgenti a confronto": "Sources compared", "Differiscono su": "They differ on", "canali:": "channels:", "Mandano gli stessi valori.": "They send the same values.", "Raccolgo i valori…": "Collecting values…",
+  "Stessa priorità: i ricevitori uniscono le sorgenti e tengono il valore più alto (HTP). Di solito non è voluto: controlla le priorità sulle console.": "Same priority: receivers merge the sources and keep the highest value (HTP). Usually not intended: check the priorities on the consoles.",
+  "Su Art-Net i nodi uniscono le due sorgenti, di solito tenendo il valore più alto (HTP); alcuni nodi tengono l'ultimo arrivato (LTP).": "On Art-Net the nodes merge the two sources, usually keeping the highest value (HTP); some nodes keep the latest (LTP).",
+  "Pacchetti mancanti nell'ultimo secondo (numeri di sequenza saltati): rete congestionata, Wi-Fi o switch in difficoltà": "Packets missing in the last second (skipped sequence numbers): congested network, Wi-Fi or a struggling switch", "Velocità": "Speed", "Video": "Video", "Leggi lo stato": "Read the status", "Uscita": "Output", "Ingresso": "Input", "Uscita bloccata": "Output locked", "Proiettori (PJLink)": "Projectors (PJLink)", "Proiettore": "Projector", "Ore lampada": "Lamp hours", "Errori": "Errors", "serve la password PJLink": "PJLink password needed", "Clock PTPv2 (SMPTE 2110, AES67)": "PTPv2 clock (SMPTE 2110, AES67)", "NDI": "NDI",
   "wasaping chiede lo stato ai dispositivi video trovati nell'ultima scansione: ATEM, HyperDeck, Videohub, vMix, Resolume. Solo lettura. Alcuni accettano pochi collegamenti di controllo: wasaping si collega un attimo e si stacca.": "wasaping asks the video devices of the latest scan for their status: ATEM, HyperDeck, Videohub, vMix, Resolume. Read-only. Some accept few control connections: wasaping connects for a moment and leaves.",
   "Nessun ATEM, HyperDeck, Videohub, vMix o Resolume nell'ultima scansione.": "No ATEM, HyperDeck, Videohub, vMix or Resolume in the latest scan.",
   "Una sorgente NDI a piena qualità in 1080p usa circa 100–150 Mbit/s: va su porte da 1 Gbit, non sul Wi-Fi.": "A full-quality 1080p NDI source uses about 100–150 Mbit/s: it needs 1 Gbit ports, not Wi-Fi.", "Dante": "Dante", "Frequenza": "Sample rate", "Latenza": "Latency", "Canali in trasmissione": "Transmit channels", "Clock": "Clock", "✓ segue": "✓ follows", "master": "master",
@@ -146,6 +154,8 @@ const EN = new Map(Object.entries({
   "Nessun router su questa rete: normale per una rete show isolata, ma niente internet e niente DHCP dal router.": "No router on this network: normal for an isolated show network, but no internet and no DHCP from a router.",
 }));
 const PAT = [
+  [/^Priorità diverse: gli apparecchi seguono solo la sorgente con priorità (\d+); le altre sono di riserva\.$/, "Different priorities: fixtures follow only the source with priority $1; the others are backups."],
+  [/^(\d+) attivi$/, "$1 active"], [/^(\d+) persi$/, "$1 lost"],
   [/^Stato: (.+), timecode (.*)$/, (m, a, b) => `Status: ${({"fermo": "stopped", "in riproduzione": "playing", "IN REGISTRAZIONE": "RECORDING", "anteprima": "preview", "avanti": "forward", "indietro": "rewind"})[a] || a}, timecode ${b}`],
   [/^Formato: (.+)$/, "Format: $1"], [/^Slot (\d+): vuoto$/, "Slot $1: empty"], [/^Slot (\d+): (.+), (.+) di registrazione liberi$/, "Slot $1: $2, $3 of recording left"],
   [/^Slot (\d+): meno di 30 minuti di registrazione liberi\.$/, "Slot $1: less than 30 minutes of recording left."],
@@ -209,6 +219,12 @@ function tr(s) {
     if (!rep) continue;
     const m = core.match(re);
     if (m) return lead + (typeof rep === "function" ? rep(...m) : core.replace(re, rep)) + trail;
+  }
+  // "<network>: <message>" (several networks): translate the message.
+  const c = core.indexOf(": ");
+  if (c > 0 && c < 80) {
+    const rest = tr(core.slice(c + 2));
+    if (rest !== core.slice(c + 2)) return lead + core.slice(0, c).replace(/^Rete /, "Network ") + ": " + rest + trail;
   }
   return s;
 }

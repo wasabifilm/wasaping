@@ -252,13 +252,16 @@ func TestForgetOld(t *testing.T) {
 	}
 	s.mu.Unlock()
 
-	if r := s.ForgetOld("", 30, false); r != 1 {
+	if r := s.ForgetOld("", 30, false, true); r != 1 {
+		t.Errorf("dry run counts %d, want 1", r)
+	}
+	if r := s.ForgetOld("", 30, false, false); r != 1 {
 		t.Errorf("older than 30 days: removed %d, want 1 (.4)", r)
 	}
-	if r := s.ForgetOld("", 0, false); r != 0 {
+	if r := s.ForgetOld("", 0, false, false); r != 0 {
 		t.Errorf("not answering, keep named: removed %d, want 0", r)
 	}
-	if r := s.ForgetOld("", 0, true); r != 1 {
+	if r := s.ForgetOld("", 0, true, false); r != 1 {
 		t.Errorf("not answering, named too: removed %d, want 1 (.2)", r)
 	}
 	if _, ok := s.Networks[s.current].Devices["ip:192.168.78.3"]; !ok {
@@ -341,5 +344,12 @@ func TestDanteSecondaries(t *testing.T) {
 	got := danteSecondaries(crit)
 	if len(got) != 2 || got[1].IP != "10.1.0.2" || got[1].Key != "aa#dante2" || !strings.Contains(got[1].Name, "Stagebox") {
 		t.Errorf("%+v", got)
+	}
+}
+
+func TestMsgInPrefixed(t *testing.T) {
+	got := msgIn("Rete 10.0.0.0/24 senza router: Dante: Rio3224 non risulta agganciato al clock (nessuna richiesta al master durante la scansione). Controllalo in Dante Controller → Clock Status.", "en")
+	if !strings.HasPrefix(got, "Network 10.0.0.0/24 senza router: Dante: Rio3224 does not seem locked") {
+		t.Errorf("%q", got)
 	}
 }

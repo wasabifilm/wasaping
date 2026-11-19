@@ -34,7 +34,7 @@ func hexs(b []byte) string {
 }
 
 func TestWebAccessHandler(t *testing.T) {
-	wa := &webAccessServer{tokens: map[string]time.Time{}, failures: map[string][]time.Time{}}
+	wa := &webAccessServer{tokens: map[string]time.Time{}}
 	inner := http.NewServeMux()
 	inner.HandleFunc("/api/info", func(w http.ResponseWriter, r *http.Request) {
 		if !isRemoteWeb(r) {

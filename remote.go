@@ -25,14 +25,49 @@ import (
 const defaultRemotePort = 47474
 
 type remoteServer struct {
+	mu     sync.Mutex
+	srv    *http.Server
+	port   int
+	tokens map[string]time.Time // session cookie -> expiry
+	limit  loginLimit
+}
+
+var remote = &remoteServer{tokens: map[string]time.Time{}}
+
+// loginLimit allows 5 wrong PINs or passwords per minute from one address.
+type loginLimit struct {
 	mu       sync.Mutex
-	srv      *http.Server
-	port     int
-	tokens   map[string]time.Time // session cookie -> expiry
 	failures map[string][]time.Time
 }
 
-var remote = &remoteServer{tokens: map[string]time.Time{}, failures: map[string][]time.Time{}}
+func (l *loginLimit) blocked(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var recent []time.Time
+	for _, t := range l.failures[ip] {
+		if time.Since(t) < time.Minute {
+			recent = append(recent, t)
+		}
+	}
+	if l.failures == nil {
+		l.failures = map[string][]time.Time{}
+	}
+	if len(recent) == 0 {
+		delete(l.failures, ip)
+	} else {
+		l.failures[ip] = recent
+	}
+	return len(recent) >= 5
+}
+
+func (l *loginLimit) fail(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.failures == nil {
+		l.failures = map[string][]time.Time{}
+	}
+	l.failures[ip] = append(l.failures[ip], time.Now())
+}
 
 func newPIN() string {
 	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
@@ -117,17 +152,7 @@ func (rs *remoteServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
-	rs.mu.Lock()
-	var recent []time.Time
-	for _, t := range rs.failures[ip] {
-		if time.Since(t) < time.Minute {
-			recent = append(recent, t)
-		}
-	}
-	rs.failures[ip] = recent
-	blocked := len(recent) >= 5
-	rs.mu.Unlock()
-	if blocked {
+	if rs.limit.blocked(ip) {
 		http.Error(w, "troppi tentativi: riprova tra un minuto", http.StatusTooManyRequests)
 		return
 	}
@@ -137,9 +162,7 @@ func (rs *remoteServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req)
 	pin := loadSettings().RemotePIN
 	if pin == "" || subtle.ConstantTimeCompare([]byte(req.PIN), []byte(pin)) != 1 {
-		rs.mu.Lock()
-		rs.failures[ip] = append(rs.failures[ip], time.Now())
-		rs.mu.Unlock()
+		rs.limit.fail(ip)
 		http.Error(w, "PIN sbagliato", http.StatusForbidden)
 		return
 	}

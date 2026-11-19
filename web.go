@@ -65,6 +65,9 @@ func runWeb(ctx context.Context, args []string) error {
 	helperState.Store(setupARP(false))
 	go backgroundLoop(ctx)
 	go mon.loop(ctx)
+	if err := oscIn.apply(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
 	go updateLoop(ctx)
 	if err := remote.apply(); err != nil {
 		fmt.Fprintln(os.Stderr, "Accesso da iPad/telefono non attivo:", err)

@@ -237,7 +237,8 @@ func handleDante(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	devs := scanner.DanteRouting(ctx, ips)
-	writeJSON(w, map[string]any{"devices": devs, "summary": scanner.SummarizeDante(devs, rate), "rates": rate})
+	since, changes := devices().AddRouting("dante", danteLinks(devs))
+	writeJSON(w, map[string]any{"devices": devs, "summary": scanner.SummarizeDante(devs, rate), "rates": rate, "changes": changes, "changes_since": since})
 }
 
 // handleVideo reads the video gear of the latest scan (plus ?ip=…&kind=…):
@@ -298,5 +299,6 @@ func handleVideo(w http.ResponseWriter, r *http.Request) {
 			devs = append(devs, v)
 		}
 	}
-	writeJSON(w, map[string]any{"devices": devs, "projectors": projectors, "ndi": ndi, "ptp2": ptp})
+	since, changes := devices().AddRouting("videohub", videohubLinks(devs))
+	writeJSON(w, map[string]any{"devices": devs, "projectors": projectors, "ndi": ndi, "ptp2": ptp, "changes": changes, "changes_since": since})
 }

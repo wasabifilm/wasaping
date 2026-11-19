@@ -165,6 +165,7 @@ type ShowReport struct {
 	Events  []LogEvent      `json:"events"`
 	Drops   int             `json:"drops"`
 	RTT     []RTTSeries     `json:"rtt"`
+	Show    bool            `json:"show,omitempty"` // the period is a show marked start-end
 }
 
 func monitorLogPath() string {
@@ -219,8 +220,51 @@ func readMonitorLog(since time.Time) ([]LogEvent, error) {
 
 // buildShowReport sums up the log from since to now.
 func buildShowReport(since time.Time) (ShowReport, error) {
+	return buildShowReportRange(since, time.Time{})
+}
+
+// lastShow finds the latest show marked in the log (Monitor, OSC):
+// its start and its end (zero while it is still running).
+func lastShow() (start, end time.Time, ok bool) {
+	ev, _ := readMonitorLog(time.Now().AddDate(0, 0, -14))
+	for _, e := range ev {
+		switch e.Event {
+		case showStartText:
+			start, end = e.At, time.Time{}
+		case showEndText:
+			if !start.IsZero() {
+				end = e.At
+			}
+		}
+	}
+	return start, end, !start.IsZero()
+}
+
+// buildShowReportRange sums up the log from since to until (zero = now).
+func buildShowReportRange(since, until time.Time) (ShowReport, error) {
 	ev, err := readMonitorLog(since)
-	rep := ShowReport{Since: since, Until: time.Now(), Events: ev, RTT: readRTT(since)}
+	if until.IsZero() {
+		until = time.Now()
+	}
+	n := 0
+	for _, e := range ev {
+		if !e.At.After(until) {
+			ev[n] = e
+			n++
+		}
+	}
+	ev = ev[:n]
+	rtt := readRTT(since)
+	for i := range rtt {
+		p := rtt[i].Points[:0]
+		for _, x := range rtt[i].Points {
+			if x[0] <= until.Unix() {
+				p = append(p, x)
+			}
+		}
+		rtt[i].Points = p
+	}
+	rep := ShowReport{Since: since, Until: until, Events: ev, RTT: rtt}
 	if err != nil {
 		return rep, err
 	}
@@ -288,8 +332,29 @@ func parseSince(s string, now time.Time) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// handleShowReport: GET ?since=18:00
+// handleShowReport: GET ?since=18:00, or ?show=last (the latest show
+// marked with "inizio show" / "fine show"). GET ?show=info says if there is one.
 func handleShowReport(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Query().Get("show") {
+	case "info":
+		start, end, ok := lastShow()
+		writeJSON(w, map[string]any{"ok": ok, "start": start, "end": end})
+		return
+	case "last":
+		start, end, ok := lastShow()
+		if !ok {
+			http.Error(w, T("nessuno show segnato: usa «Inizio show» nel Monitor", "no show marked: use “Show start” in the Monitor"), http.StatusNotFound)
+			return
+		}
+		rep, err := buildShowReportRange(start, end)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		rep.Show = true
+		writeJSON(w, rep)
+		return
+	}
 	since, ok := parseSince(r.URL.Query().Get("since"), time.Now())
 	if !ok {
 		http.Error(w, T("ora non valida: usa 18:00, 6h o 2026-11-18 18:00", "invalid time: use 18:00, 6h or 2026-11-18 18:00"), http.StatusBadRequest)

@@ -176,6 +176,11 @@ img.qr { width: 132px; height: 132px; border-radius: 8px; background: #fff; padd
 #tiles { flex: 1; padding: 20px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; align-content: start; }
 .tile { border-radius: 12px; padding: 14px 16px; border: 2px solid var(--wasabi); background: var(--panel); }
 .tile.down { border-color: var(--warn); background: rgba(214,63,63,.12); }
+.tile.slow { border-color: #f2994a; }
+.tile.slow .s b { color: #f2994a; }
+#monitor .state.slow { background: #f2994a; color: #171717; }
+#monitor header button.on { border-color: #f2994a; color: #f2994a; }
+#mEvents li.warn b { color: #f2994a; }
 .tile .t { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
 .tile .r { font-size: 13px; color: var(--muted); }
 .tile .s { margin-top: 10px; font-size: 13px; display: flex; justify-content: space-between; }
@@ -278,3 +283,14 @@ button.ident.on { animation: blink 1s steps(2) infinite; }
 .tool:hover { border-color: var(--wasabi); background: var(--panel); }
 .tool.dis { opacity: .6; }
 .tool.dis:hover { border-color: var(--line); }
+
+/* Labels with QR (Progetto → Etichette con QR): the preview. */
+.labels { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 14px; }
+.labels.l { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+.label { display: flex; gap: 12px; align-items: center; border: 1px dashed var(--line); border-radius: 8px; padding: 10px; background: var(--panel); }
+.label .qr { width: 84px; height: 84px; flex: none; border-radius: 4px; overflow: hidden; }
+.labels.l .label .qr { width: 120px; height: 120px; }
+.label .qr svg { width: 100%; height: 100%; display: block; }
+.label .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
+.label .txt b { font-size: 15px; }
+.label .mac { color: var(--muted); font-size: 11px; }

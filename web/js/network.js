@@ -263,3 +263,53 @@ async function openProjectView(text, fileName) {
 }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("sheet").classList.contains("open")) closeSheet(); });
 
+
+// Labels to stick on the gear: name, IP, role, and a QR code that opens
+// the device's web page (or, without one, says who it is).
+function labelsView() {
+  const named = hosts.filter(h => h.name || h.role), crit = hosts.filter(h => h.critical);
+  openSheet("Etichette con QR", `<p>Adesivi per switch, nodi, stagebox e media server: nome, IP, ruolo e un codice QR. Con la fotocamera del telefono il QR apre la pagina web dell'apparecchio; se non ne ha, mostra nome, IP e MAC.</p>
+    <div class="set">
+      <b>Quali</b><div class="opt"><select id="lbWhich">
+        <option value="crit">i critici (${crit.length})</option><option value="named"${crit.length ? "" : " selected"}>quelli con un nome o un ruolo (${named.length})</option><option value="shown">quelli mostrati nell'elenco (${shownKeys.length})</option>
+      </select></div>
+      <b>Formato</b><div class="opt"><select id="lbSize"><option value="s">piccole: A4, 3 × 8</option><option value="l">grandi: A4, 2 × 5</option></select></div>
+    </div>
+    <div class="row"><button class="primary" id="lbPrint">Stampa le etichette</button><span class="muted" id="lbN"></span></div>
+    <div id="lbPrev" class="labels"></div>`);
+  const pick = () => ({crit, named, shown: shownKeys.map(findHost).filter(Boolean)})[$("lbWhich").value].filter(h => !h.self);
+  const qrText = h => {
+    const web = (h.ports || []).find(p => OPEN[p] && OPEN[p][1] === "browser");
+    return web ? portURL(h.ip, web) : [label(h), h.ip, h.mac].filter(Boolean).join(" · ");
+  };
+  let cache = {};
+  const draw = async () => {
+    const list = pick();
+    $("lbN").textContent = LANG === "en" ? `${list.length} labels` : `${list.length} etichette`;
+    $("lbPrint").disabled = !list.length;
+    const need = list.map(qrText).filter(t => !(t in cache));
+    if (need.length) {
+      try {
+        const d = await post("api/qr", {texts: need}).then(r => r.json());
+        need.forEach((t, i) => cache[t] = d.svgs[i]);
+      } catch (e) { toast("Errore: " + e.message); }
+    }
+    if (!$("lbPrev")) return;
+    $("lbPrev").className = "labels " + $("lbSize").value;
+    $("lbPrev").innerHTML = list.map(h => `<div class="label"><div class="qr">${cache[qrText(h)] || ""}</div><div class="txt">
+      <b class="nt">${esc(label(h) || h.ip)}</b><span class="mono">${esc(h.ip)}</span>${h.role ? `<span class="nt">${esc(h.role)}</span>` : ""}${h.mac ? `<span class="mono mac">${esc(h.mac)}</span>` : ""}</div></div>`).join("") || `<p class="muted">${LANG === "en" ? "No devices to label." : "Nessun dispositivo da etichettare."}</p>`;
+  };
+  $("lbWhich").onchange = draw; $("lbSize").onchange = draw;
+  $("lbPrint").onclick = () => {
+    const big = $("lbSize").value === "l";
+    const css = `@page{size:A4;margin:10mm}body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;color:#171717}
+.labels{display:grid;grid-template-columns:repeat(${big ? 2 : 3},1fr);gap:4mm}
+.label{border:1px dashed #bbb;border-radius:2mm;padding:3mm;display:flex;gap:3mm;align-items:center;height:${big ? 50 : 30}mm;box-sizing:border-box;break-inside:avoid;overflow:hidden}
+.qr svg{width:${big ? 38 : 22}mm;height:${big ? 38 : 22}mm;display:block}.txt{display:flex;flex-direction:column;gap:1mm;min-width:0;font-size:${big ? 11 : 8}pt}
+.txt b{font-size:${big ? 15 : 10}pt}.mono{font-family:Menlo,Consolas,monospace}.mac{color:#666;font-size:${big ? 8 : 6.5}pt}`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>wasaping · ${LANG === "en" ? "labels" : "etichette"}</title><style>${css}</style></head><body><div class="labels">${$("lbPrev").innerHTML}</div><script>addEventListener("load",()=>setTimeout(()=>print(),300))<\/script></body></html>`;
+    if (ui === "browser") { const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); return; } }
+    post("api/save", {name: `wasaping-etichette-${stamp()}.html`, data: html, open: true}).then(r => r.json()).then(d => toast("Elenco aperto nel browser: " + d.path)).catch(e => toast("Non salvato: " + e.message));
+  };
+  draw();
+}

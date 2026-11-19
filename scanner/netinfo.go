@@ -19,7 +19,7 @@ type Interface struct {
 }
 
 // MaxHosts is the largest number of addresses a single scan accepts.
-const MaxHosts = 4096
+const MaxHosts = 65536
 
 // LocalInterfaces returns the active IPv4 interfaces (non-loopback).
 func LocalInterfaces() ([]Interface, error) {
@@ -115,7 +115,7 @@ func parseOne(s string) ([]net.IP, error) {
 		ones, bits := n.Mask.Size()
 		size := uint64(1) << uint(bits-ones)
 		if size > MaxHosts+2 {
-			return nil, fmt.Errorf("rete %s troppo grande (massimo /20)", s)
+			return nil, fmt.Errorf("rete %s troppo grande (massimo /16)", s)
 		}
 		start := ipToU32(n.IP)
 		end := start + uint32(size) - 1

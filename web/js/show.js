@@ -256,6 +256,7 @@ function danteView() {
         const cls = {ok: "ok", bad: "bad", wait: "warn", none: ""};
         const bw = Object.entries(sm.TxMbps || {}).sort((a, b) => b[1] - a[1]);
         $("dnOut").innerHTML = `<div class="sum"><span class="pill ok">${sm.OK || 0} collegati</span>${sm.Bad ? `<span class="pill bad">✗ ${sm.Bad} con problemi</span>` : ""}${sm.Wait ? `<span class="pill warn">${sm.Wait} in attesa</span>` : ""}</div>
+          ${routeChanges(d)}
           ${bw.length ? `<p class="muted"><span>Banda stimata in uscita (unicast):</span> ${bw.map(([n, m]) => `<span class="nt">${esc(n)}</span> ${m.toFixed(1)} Mbit/s`).join(" · ")}</p>` : ""}
           ${devs.map(x => x.error ? `<div class="dncard"><b class="nt">${esc(x.name || x.ip)}</b> <span class="muted mono">${esc(x.ip)}</span><p class="bad">${esc(x.error)}</p></div>` :
           `<div class="dncard"><b class="nt">${esc(x.name || x.ip)}</b> <span class="muted mono">${esc(x.ip)}</span> <span class="muted">· ${x.tx_count} in trasmissione · ${x.rx_count} in ricezione</span>
@@ -267,6 +268,18 @@ function danteView() {
     } catch (e) { $("dnOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
     $("dnGo").disabled = false;
   };
+}
+// What changed in the patch since the last session in this venue (the
+// program saves it every time it is read).
+function routeChanges(d) {
+  const ch = d.changes || [];
+  if (!d.changes_since || d.changes_since.startsWith("0001")) return "";
+  const when = new Date(d.changes_since).toLocaleString(LANG === "en" ? "en-GB" : "it", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+  if (!ch.length) return `<p class="st-ok">✓ ${LANG === "en" ? `Same patch as last time (${esc(when)}).` : `Stesso patch dell'ultima volta (${esc(when)}).`}</p>`;
+  return `<div class="dncard"><b>${LANG === "en" ? `${ch.length} connections changed since ${esc(when)}` : `${ch.length} collegamenti cambiati dal ${esc(when)}`}</b>
+    <div class="wrap" style="margin:6px 0 0"><table><thead><tr><th>Dispositivo</th><th>Destinazione</th><th>Prima</th><th>Ora</th></tr></thead><tbody>
+    ${ch.map(c => `<tr><td class="nt">${esc(c.device)}</td><td class="nt">${esc(c.dest)}</td><td class="nt">${c.was ? esc(c.was) : '<span class="muted">—</span>'}</td><td class="nt ${c.now ? "" : "st-bad"}">${c.now ? esc(c.now) : (LANG === "en" ? "disconnected" : "scollegato")}</td></tr>`).join("")}
+    </tbody></table></div></div>`;
 }
 // Video: Blackmagic, vMix, Resolume… asked now; projectors, NDI, PTPv2 from the scan.
 function videoView() {
@@ -281,7 +294,7 @@ function videoView() {
       const d = await fetch(`api/video${ip ? `?ip=${encodeURIComponent(ip)}&kind=${encodeURIComponent($("vdKind").value)}` : ""}`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
       const devs = d.devices || [], pj = d.projectors || [], ndi = d.ndi || [], ptp = d.ptp2 || [];
       const hostName = ip => { const h = hosts.find(x => x.ip === ip); return h ? label(h) : ""; };
-      let html = "";
+      let html = routeChanges(d);
       html += devs.length ? devs.map(v => `<div class="dncard"><b class="nt">${esc(v.model || v.kind)}</b> <span class="muted"><span class="mono">${esc(v.ip)}</span>${hostName(v.ip) ? ` · <span class="nt">${esc(hostName(v.ip))}</span>` : ""}${v.version ? ` · v${esc(v.version)}` : ""}</span>
           ${v.error ? `<p class="bad">${esc(v.error)}</p>` : ""}
           ${(v.lines || []).map(l => `<div class="nt">${esc(l)}</div>`).join("")}
@@ -368,13 +381,13 @@ function rttChart(s, since, until) {
 async function showReportView() {
   const def = (() => { const d = new Date(Date.now() - 6 * 3600e3); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); })();
   openSheet("Report di fine show", `<p>Riassunto di quello che è successo durante lo show, dal registro del Monitor: quante volte è caduto ogni dispositivo, per quanto tempo in tutto, il buco più lungo.</p>
-    <div class="row"><span>Dalle</span><input id="srSince" value="${def}" style="width:90px" title="18:00, 6h o 2026-11-18 18:00"><button class="primary" id="srGo">Mostra</button></div><div id="srOut"></div>`);
-  const go = async () => {
+    <div class="row"><button id="srShow" hidden>Ultimo show segnato</button><span>Dalle</span><input id="srSince" value="${def}" style="width:90px" title="18:00, 6h o 2026-11-18 18:00"><button class="primary" id="srGo">Mostra</button></div><div id="srOut"></div>`);
+  const go = async (show) => {
     try {
-      const r = await fetch(`api/showreport?since=${encodeURIComponent($("srSince").value)}`).then(x => x.ok ? x.json() : x.text().then(t => { throw new Error(t); }));
+      const r = await fetch(show ? "api/showreport?show=last" : `api/showreport?since=${encodeURIComponent($("srSince").value)}`).then(x => x.ok ? x.json() : x.text().then(t => { throw new Error(t); }));
       const devs = r.devices || [], ev = r.events || [];
       const t = d => new Date(d).toLocaleString(LANG === "en" ? "en-GB" : "it", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit"});
-      $("srOut").innerHTML = `<div class="verdict v-${r.drops ? "warn" : "ok"}" style="margin-top:12px"><b>${r.drops ? `${r.drops} cadute` : "Nessuna caduta"}</b><span>dalle ${esc(t(r.since))} alle ${esc(t(r.until))}</span></div>
+      $("srOut").innerHTML = `<div class="verdict v-${r.drops ? "warn" : "ok"}" style="margin-top:12px"><b>${r.drops ? `${r.drops} cadute` : "Nessuna caduta"}</b><span>${r.show ? (LANG === "en" ? "Show: " : "Show: ") : ""}dalle ${esc(t(r.since))} alle ${esc(t(r.until))}</span></div>
         ${devs.length ? `<h3>Per dispositivo</h3><div class="wrap" style="margin:0"><table><thead><tr><th>Dispositivo</th><th>IP</th><th>Cadute</th><th>Tempo giù in tutto</th><th>Il più lungo</th></tr></thead><tbody>
           ${devs.map(d => `<tr><td class="nt"><b>${esc(d.name)}</b>${d.still_down ? ' <span class="badge off">ancora giù</span>' : ""}</td><td class="mono">${esc(d.ip || "")}</td><td>${d.drops}</td><td>${esc(fmtDur(d.down_total))}</td><td>${esc(fmtDur(d.longest))}</td></tr>`).join("")}</tbody></table></div>` : ""}
         ${(r.rtt || []).length ? `<h3>Tempi di risposta</h3>${r.rtt.map(s => rttChart(s, r.since, r.until)).join("")}` : ""}
@@ -387,7 +400,9 @@ async function showReportView() {
       };
     } catch (e) { $("srOut").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; }
   };
-  $("srGo").onclick = go; $("srSince").onkeydown = e => { if (e.key === "Enter") go(); };
-  go();
+  $("srGo").onclick = () => go(false); $("srSince").onkeydown = e => { if (e.key === "Enter") go(false); };
+  $("srShow").onclick = () => go(true);
+  // A show marked with "Inizio show" (Monitor or OSC): report that one.
+  fetch("api/showreport?show=info").then(r => r.json()).then(i => { if ($("srShow")) { $("srShow").hidden = !i.ok; } go(!!i.ok); }).catch(() => go(false));
 }
 

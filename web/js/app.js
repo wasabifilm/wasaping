@@ -188,6 +188,16 @@ try { theme = localStorage.getItem("wasaping.theme") || ""; } catch {}
 applyTheme(theme);
 
 $("scan").onclick = () => { if (es) { setLoop(false); stop("Scansione interrotta."); } else start(); };
+// Clear the list on screen (the archive keeps names, notes and history).
+$("clearBtn").onclick = () => {
+  if (es) { setLoop(false); stop(""); }
+  setLoop(false);
+  hosts = []; gone = []; freshKeys = new Set(); issues = []; network = null; networks = []; activeNet = "";
+  closeDetail(); showNetwork();
+  $("extra").innerHTML = ""; $("status").textContent = "Pronto."; $("prog").style.width = "0";
+  $("rows").innerHTML = `<tr><td colspan="7" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr>`;
+  shownKeys = []; $("fcount").textContent = ""; pageTitle(); refreshGroupPage();
+};
 
 // Continuous scan: while the window is open, scan again a few seconds after
 // each scan ends. The list stays on screen and is swapped when the new
@@ -369,7 +379,8 @@ $("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updB
 $("setBtn").onclick = () => runTool("settings");
 async function settingsView() {
   const get = u => fetch(u).then(r => r.json()).catch(() => ({}));
-  const [bg, upd, login, alerts, info, wa, pr] = await Promise.all([get("api/bg"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info"), get("api/webaccess"), get("api/prefs")]);
+  const [bg, upd, login, alerts, info, wa, pr, osc] = await Promise.all([get("api/bg"), get("api/update"), get("api/login"), get("api/alerts"), get("api/info"), get("api/webaccess"), get("api/prefs"), get("api/oscin")]);
+  const oscInfo = o => o.on ? `In ascolto su <b class="nt">${esc((o.ips || [])[0] || "questo computer")}</b>, porta <b>${o.port}</b> (UDP). Comandi: <span class="mono nt" style="font-size:11px">${(o.commands || []).map(esc).join(" · ")}</span>${o.last ? `<br>Ultimo comando: <span class="mono nt">${esc(o.last)}</span> alle ${esc(new Date(o.last_at).toLocaleTimeString("it"))}` : ""}` : "Da QLab, da una console luci o da uno Stream Deck: avvia il Monitor, segna inizio e fine dello show, silenzia gli allarmi, fa il pre-show. Nessun comando cambia gli apparecchi.";
   if (pr.default_ports) prefs = pr;
   const waInfo = w => w.on ? `Da un altro computer apri <b class="nt">${esc(w.url)}</b> e inserisci la password. Il browser avviserà che il certificato non è verificato: è normale, l'ha creato wasaping. Impronta SHA-256: <span class="mono nt" style="font-size:11px;word-break:break-all">${esc(w.fingerprint || "")}</span>` : "Tutta l'interfaccia, anche le modifiche, da un altro computer: HTTPS e password.";
   const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}"${String(k) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
@@ -408,7 +419,9 @@ async function settingsView() {
     <h4 id="sAcc">Rete e accesso</h4>
     ${info.remote ? `<b>Accesso dalla rete</b><div class="opt"><span>Sei collegato da un altro computer.</span><form method="post" action="/logout" style="margin:0"><button>Disconnetti</button></form></div>` : `<b>Accesso completo dalla rete</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sWeb"${wa.on ? " checked" : ""}> attivo</label>
       <input type="password" id="sWebPw" placeholder="${wa.has_password ? "nuova password (facoltativa)" : "password (almeno 8 caratteri)"}" autocomplete="new-password" style="width:230px"><button id="sWebPwSave">Salva password</button>
-      <span class="tag" id="sWebInfo">${waInfo(wa)}</span><img id="sWebQR" class="qr" alt=""${wa.on ? ` src="api/qr?for=web&t=${Date.now()}"` : " hidden"}></div>`}
+      <span class="tag" id="sWebInfo">${waInfo(wa)}</span><img id="sWebQR" class="qr" alt=""${wa.on ? ` src="api/qr?for=web&t=${Date.now()}"` : " hidden"}></div>
+    <b>Comandi OSC in ingresso</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sOSCIn"${osc.on ? " checked" : ""}> attivi</label>
+      <input id="sOSCPort" value="${osc.port || 53001}" style="width:90px" inputmode="numeric" title="Porta UDP"><span class="tag" id="sOSCInfo">${oscInfo(osc)}</span></div>`}
 
     <h4 id="sSys">Sistema</h4>
     <b>Aggiornamenti</b><div class="opt"><span>wasaping ${esc(upd.current || "")}</span>${upd.newer ? `<button class="primary" id="sUpdNow">Aggiorna a ${esc(upd.latest)}</button>` : ""}<label class="check" style="margin:0"><input type="checkbox" id="sUpdCheck"${upd.off ? "" : " checked"}> controlla le nuove versioni</label><button id="sUpdNowCheck">Controlla ora</button><span class="tag" id="sUpdInfo"></span></div>
@@ -455,6 +468,12 @@ async function settingsView() {
     $("sWebQR").hidden = !w.on; if (w.on) $("sWebQR").src = `api/qr?for=web&t=${Date.now()}`;
     return w;
   });
+  if ($("sOSCIn")) {
+    const oscSet = () => post("api/oscin", {port: $("sOSCIn").checked ? +$("sOSCPort").value : 0}).then(r => r.json()).then(o => { $("sOSCIn").checked = o.on; $("sOSCInfo").innerHTML = oscInfo(o); })
+      .catch(e => { toast("Non attivato: " + e.message); $("sOSCIn").checked = false; });
+    $("sOSCIn").onchange = oscSet;
+    $("sOSCPort").onchange = () => { if ($("sOSCIn").checked) oscSet(); };
+  }
   if ($("sWeb")) {
     $("sWeb").onchange = () => webSet({on: $("sWeb").checked, password: $("sWebPw").value}).catch(e => { toast("Non attivato: " + e.message); $("sWeb").checked = false; });
     $("sWebPwSave").onclick = () => { if (!$("sWebPw").value) { toast("Scrivi la password"); return; } webSet({on: $("sWeb").checked, password: $("sWebPw").value}).then(() => toast("Password salvata.")).catch(e => toast("Non salvata: " + e.message)); };

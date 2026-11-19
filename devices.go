@@ -49,6 +49,7 @@ type Network struct {
 	Snapshots []Snapshot         `json:"snapshots,omitempty"` // the network, one per session (latest 30)
 	RDM       []RDMSnapshot      `json:"rdm,omitempty"`       // RDM fixtures, latest searches
 	Notes     string             `json:"notes,omitempty"`     // the show's notes, set by the user
+	Routing   []RoutingSnap      `json:"routing,omitempty"`   // Dante / Videohub patch, latest sessions
 	FirstSeen time.Time          `json:"first_seen"`
 	LastSeen  time.Time          `json:"last_seen"`
 }
@@ -570,6 +571,7 @@ type Venue struct {
 	Universes []string      `json:"critical_universes,omitempty"`
 	RDM       []RDMSnapshot `json:"rdm,omitempty"`
 	Snapshots []Snapshot    `json:"snapshots,omitempty"`
+	Routing   []RoutingSnap `json:"routing,omitempty"`
 }
 
 type VenueDevice struct {
@@ -612,7 +614,7 @@ func (s *Store) ExportNetwork(id string) (Venue, bool) {
 		return Venue{}, false
 	}
 	v := Venue{Format: "wasaping-venue", Version: 2, ID: id, Name: n.Name, Auto: n.Auto, Subnet: n.Subnet, Notes: n.Notes, Plan: n.Plan,
-		Universes: n.Universes, Snapshots: n.Snapshots}
+		Universes: n.Universes, Snapshots: n.Snapshots, Routing: n.Routing}
 	if len(n.RDM) > 0 {
 		v.RDM = n.RDM[len(n.RDM)-1:]
 	}
@@ -695,6 +697,15 @@ func (s *Store) ImportVenueInto(v Venue, target string) (int, string, error) {
 		}
 	}
 	sort.Slice(n.RDM, func(i, j int) bool { return n.RDM[i].At.Before(n.RDM[j].At) })
+	for _, r := range v.Routing {
+		if !slices.ContainsFunc(n.Routing, func(x RoutingSnap) bool { return x.At.Equal(r.At) }) {
+			n.Routing = append(n.Routing, r)
+		}
+	}
+	sort.Slice(n.Routing, func(i, j int) bool { return n.Routing[i].At.Before(n.Routing[j].At) })
+	if len(n.Routing) > 10 {
+		n.Routing = n.Routing[len(n.Routing)-10:]
+	}
 	if len(n.RDM) > 10 {
 		n.RDM = n.RDM[len(n.RDM)-10:]
 	}

@@ -31,6 +31,8 @@ type MonDevice struct {
 	Method string    `json:"method,omitempty"`
 	Since  time.Time `json:"since,omitempty"` // when the current state began
 	RTTs   []int64   `json:"rtts,omitempty"`  // latest response times, -1 = no answer
+	Slow   bool      `json:"slow,omitempty"`  // over the threshold for 3 checks in a row
+	slowN  int
 }
 
 // MonEvent is a change of state: a device stops answering or comes back.
@@ -56,6 +58,10 @@ type MonState struct {
 	Checked   time.Time     `json:"checked,omitempty"`
 	Universes []MonUniverse `json:"universes,omitempty"`
 	PTP       []MonPTP      `json:"ptp,omitempty"`
+	SlowMs    int           `json:"slow_ms,omitempty"`     // threshold, 0 = off
+	Slow      int           `json:"slow,omitempty"`        // devices over it
+	MutedTill time.Time     `json:"muted_until,omitempty"` // no sound, notifications or alerts
+	ShowSince time.Time     `json:"show_since,omitempty"`  // "show started" marker, zero = no show running
 }
 
 type monitor struct {
@@ -69,7 +75,47 @@ type monitor struct {
 	nextID  int
 	checked time.Time
 	kick    chan struct{}
+	muted   time.Time
+	show    time.Time
+	showSet bool // show read back from the log
 }
+
+// muted reports whether alarms are silenced now (m.mu held or not needed).
+func (m *monitor) isMuted() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return time.Now().Before(m.muted)
+}
+
+// mute silences sound, notifications and alerts for d (0 = turn back on).
+func (m *monitor) mute(d time.Duration) {
+	m.mu.Lock()
+	m.muted = time.Now().Add(d)
+	m.addEventRaw(MonEvent{At: time.Now(), Name: "Monitor", Kind: "note", Text: map[bool]string{true: fmt.Sprintf(T("allarmi silenziati per %s", "alarms muted for %s"), shortDur(d.Seconds())), false: T("allarmi di nuovo attivi", "alarms back on")}[d > 0]})
+	m.mu.Unlock()
+}
+
+// markShow writes "show started" / "show ended" in the log: the end-of-show
+// report then covers exactly the show.
+func (m *monitor) markShow(start bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now()
+	if start {
+		m.show = now
+		m.addEventRaw(MonEvent{At: now, Name: "Show", Kind: "show", Text: showStartText})
+	} else if !m.show.IsZero() {
+		m.show = time.Time{}
+		m.addEventRaw(MonEvent{At: now, Name: "Show", Kind: "show", Text: showEndText})
+	}
+	m.showSet = true
+}
+
+// The markers in monitor-log.csv (always in Italian, like the other events).
+const (
+	showStartText = "inizio show"
+	showEndText   = "fine show"
+)
 
 var mon = &monitor{every: 5, devs: map[string]*MonDevice{}, kick: make(chan struct{}, 1)}
 
@@ -79,12 +125,18 @@ var onMonitorChange func(down int, names []string)
 func (m *monitor) state(maxEvents int) MonState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	st := MonState{On: m.on, Every: m.every, Checked: m.checked}
+	st := MonState{On: m.on, Every: m.every, Checked: m.checked, SlowMs: loadSettings().MonitorSlowMs, ShowSince: m.show}
+	if time.Now().Before(m.muted) {
+		st.MutedTill = m.muted
+	}
 	for _, k := range m.order {
 		d := *m.devs[k]
 		st.Devices = append(st.Devices, d)
 		if d.Known && !d.Alive {
 			st.Down++
+		}
+		if d.Slow {
+			st.Slow++
 		}
 	}
 	for _, id := range m.uniOrder {
@@ -131,6 +183,14 @@ func (m *monitor) loop(ctx context.Context) {
 		m.every = s.MonitorEvery
 	}
 	m.mu.Unlock()
+	// A show still running when wasaping was closed goes on.
+	if start, end, ok := lastShow(); ok && end.IsZero() && time.Since(start) < 24*time.Hour {
+		m.mu.Lock()
+		if !m.showSet {
+			m.show = start
+		}
+		m.mu.Unlock()
+	}
 	for {
 		m.mu.Lock()
 		on, every := m.on, m.every
@@ -174,6 +234,7 @@ func (m *monitor) check(ctx context.Context) {
 	}
 	now := time.Now()
 	var lost, back []string
+	slowMs := int64(loadSettings().MonitorSlowMs)
 	m.mu.Lock()
 	seen := map[string]bool{}
 	m.order = m.order[:0]
@@ -210,6 +271,21 @@ func (m *monitor) check(ctx context.Context) {
 		if r.Alive {
 			rtt = r.RTTms
 		}
+		// Slow: over the threshold three checks in a row (a cable or a
+		// switch port going bad often slows down before it drops).
+		if slowMs > 0 && r.Alive && r.RTTms > slowMs {
+			cur.slowN++
+		} else {
+			cur.slowN = 0
+		}
+		if slow := cur.slowN >= 3; slow != cur.Slow && (slow || cur.slowN == 0) {
+			cur.Slow = slow
+			if slow {
+				m.addEventRaw(MonEvent{At: now, Name: cur.Name, IP: cur.IP, Kind: "slow", Text: fmt.Sprintf("risponde lento (%d ms)", r.RTTms)})
+			} else if r.Alive {
+				m.addEventRaw(MonEvent{At: now, Name: cur.Name, IP: cur.IP, Kind: "slow", Text: "di nuovo veloce"})
+			}
+		}
 		cur.RTTs = append(cur.RTTs, rtt)
 		if len(cur.RTTs) > 60 {
 			cur.RTTs = cur.RTTs[len(cur.RTTs)-60:]
@@ -242,7 +318,11 @@ func (m *monitor) check(ctx context.Context) {
 			downNames = append(downNames, u.Name)
 		}
 	}
+	muted := now.Before(m.muted)
 	m.mu.Unlock()
+	if muted {
+		lost, back = nil, nil
+	}
 	if len(lost) > 0 {
 		notify(T("⚠️ wasaping: non risponde", "⚠️ wasaping: not responding"), strings.Join(lost, ", "))
 	}
@@ -267,6 +347,9 @@ func (m *monitor) addEventRaw(e MonEvent) {
 		m.events = m.events[len(m.events)-2000:]
 	}
 	go appendMonitorLog(e)
+	if time.Now().Before(m.muted) || e.Kind == "note" || e.Kind == "show" {
+		return // silenced, or not something to alert about
+	}
 	go sendAlert(e)
 }
 
@@ -312,6 +395,9 @@ func shortDur(s float64) string {
 	case d < time.Minute:
 		return fmt.Sprintf("%d s", int(d.Seconds()))
 	case d < time.Hour:
+		if int(d.Seconds())%60 == 0 {
+			return fmt.Sprintf("%d min", int(d.Minutes()))
+		}
 		return fmt.Sprintf("%d min %d s", int(d.Minutes()), int(d.Seconds())%60)
 	}
 	return fmt.Sprintf("%d h %d min", int(d.Hours()), int(d.Minutes())%60)
@@ -321,14 +407,28 @@ func shortDur(s float64) string {
 func handleMonitor(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var req struct {
-			On    bool `json:"on"`
-			Every int  `json:"every"`
+			On     bool    `json:"on"`
+			Every  int     `json:"every"`
+			Mute   *int    `json:"mute"`    // seconds, 0 = sound back on
+			Show   *string `json:"show"`    // "start" or "end"
+			SlowMs *int    `json:"slow_ms"` // threshold, 0 = off
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
 			http.Error(w, "richiesta non valida", http.StatusBadRequest)
 			return
 		}
-		mon.set(req.On, req.Every)
+		switch {
+		case req.Mute != nil:
+			mon.mute(time.Duration(min(max(*req.Mute, 0), 3600)) * time.Second)
+		case req.Show != nil:
+			mon.markShow(*req.Show == "start")
+		case req.SlowMs != nil:
+			s := loadSettings()
+			s.MonitorSlowMs = min(max(*req.SlowMs, 0), 5000)
+			saveSettings(s)
+		default:
+			mon.set(req.On, req.Every)
+		}
 	}
 	writeJSON(w, mon.state(300))
 }

@@ -27,6 +27,7 @@
     </select>
     <input id="custom" hidden placeholder="22,80,443 o 1-1024" spellcheck="false" title="Porte da controllare">
     <button id="scan" class="primary">Scansiona</button>
+    <button id="clearBtn" title="Toglie l'elenco dallo schermo. Nomi, ruoli, note e dispositivi conosciuti restano">Svuota</button>
     <button id="loopBtn" class="loop" aria-pressed="false" title="Rifà la scansione di continuo finché la finestra è aperta: l'elenco si aggiorna da solo e avvisa se arriva o sparisce qualcuno">↻ Continua</button>
   </div>
   <div class="group tools">
@@ -105,7 +106,12 @@
     <select id="mEvery" title="Ogni quanto controllare">
       <option value="3">ogni 3 s</option><option value="5" selected>ogni 5 s</option><option value="10">ogni 10 s</option><option value="30">ogni 30 s</option>
     </select>
+    <select id="mSlow" title="Avvisa se un dispositivo critico risponde più lento di così per tre controlli di fila">
+      <option value="0">nessun limite di risposta</option><option value="10">lento sopra 10 ms</option><option value="20">lento sopra 20 ms</option><option value="50">lento sopra 50 ms</option><option value="100">lento sopra 100 ms</option>
+    </select>
     <label class="check" style="margin:0"><input type="checkbox" id="mSound" checked> Allarme sonoro</label>
+    <button id="mMute" title="Niente suono, notifiche e allarmi per 5 minuti (per esempio mentre si cambia un cavo). Il registro continua">Silenzia 5 min</button>
+    <button id="mShow" title="Segna l'inizio e la fine dello show: il report di fine show parte da qui">Inizio show</button>
     <button id="mToggle" class="primary">Avvia</button>
   </header>
   <div id="mNet"></div>

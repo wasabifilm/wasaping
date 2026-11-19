@@ -59,7 +59,10 @@ td:first-child,td:nth-child(6){font-family:Menlo,Consolas,monospace}tr:nth-child
 }
 
 // ---- Show monitor: runs in the program; the page shows its state ----
-let monTimer = null, monLast = null, audioCtx = null, monSeenEvent = -1;
+let monTimer = null, monLast = null, audioCtx = null, monSeenEvent = -1, monMuted = null;
+$("mMute").onclick = () => { unlockSound(); post("api/monitor", {mute: monMuted ? 0 : 300}).then(monRefresh).catch(e => toast(e.message)); };
+$("mShow").onclick = () => { unlockSound(); const on = $("mShow").classList.contains("on"); post("api/monitor", {show: on ? "end" : "start"}).then(monRefresh).then(() => toast(on ? "Fine show segnata: il report è in Progetto." : "Inizio show segnato.")).catch(e => toast(e.message)); };
+$("mSlow").onchange = () => post("api/monitor", {slow_ms: +$("mSlow").value}).then(monRefresh).catch(e => toast(e.message));
 $("mEvery").onchange = () => post("api/monitor", {on: !!(monLast && monLast.on), every: +$("mEvery").value}).then(monRefresh);
 $("mToggle").onclick = () => post("api/monitor", {on: !(monLast && monLast.on), every: +$("mEvery").value}).then(monRefresh);
 $("mExport").onclick = () => {
@@ -99,6 +102,13 @@ async function monRefresh() {
   $("mEvery").value = String(st.every);
   $("mToggle").textContent = st.on ? "Ferma" : "Avvia";
   $("mToggle").classList.toggle("primary", !st.on);
+  $("mSlow").value = String(st.slow_ms || 0);
+  monMuted = st.muted_until && !st.muted_until.startsWith("0001") && new Date(st.muted_until) > new Date() ? new Date(st.muted_until) : null;
+  $("mMute").textContent = monMuted ? `Silenziato fino alle ${monMuted.toLocaleTimeString("it", {hour: "2-digit", minute: "2-digit"})} · riattiva` : "Silenzia 5 min";
+  $("mMute").classList.toggle("on", !!monMuted);
+  const showOn = st.show_since && !st.show_since.startsWith("0001");
+  $("mShow").textContent = showOn ? `Fine show (dalle ${new Date(st.show_since).toLocaleTimeString("it", {hour: "2-digit", minute: "2-digit"})})` : "Inizio show";
+  $("mShow").classList.toggle("on", !!showOn);
   // The network is in the bar below (moved here): repeat it only without one.
   const where = $("netbar").textContent.trim() ? "" : (st.network || "");
   $("mInfo").textContent = [where, st.on ? "attivo, anche a finestra chiusa" : "fermo"].filter(Boolean).join(" · ");
@@ -106,8 +116,8 @@ async function monRefresh() {
   const ev = st.events || [];
   $("mEvents").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.text ? "warn" : e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b class="nt">${esc(e.name)}</b> ${e.text ? `<span class="nt">${esc(e.text)}</span>` : e.up ? `di nuovo in linea dopo ${esc(fmtDur(e.down_for))}` : (e.kind === "universe" ? "non arriva" : "non risponde")}</li>`).join("") : '<li class="muted">Nessun evento.</li>';
   // Sound for drops that happened since the page last looked.
-  const fresh = ev.filter(e => e.id > monSeenEvent && !e.up);
-  if (monSeenEvent >= 0 && fresh.length) alarm(fresh.map(e => e.name), true);
+  const fresh = ev.filter(e => e.id > monSeenEvent && !e.up && !e.text);
+  if (monSeenEvent >= 0 && fresh.length && !monMuted) alarm(fresh.map(e => e.name), true);
   if (ev.length) monSeenEvent = Math.max(monSeenEvent, ev[ev.length - 1].id); else if (monSeenEvent < 0) monSeenEvent = 0;
   return st;
 }
@@ -128,12 +138,13 @@ function drawTiles(st) {
     return;
   }
   $("mState").className = "state " + (st.down ? "bad" : "ok");
-  $("mState").textContent = !st.on ? "FERMO" : st.down ? `${st.down} ${st.down === 1 ? "NON RISPONDE" : "NON RISPONDONO"}` : "TUTTO OK";
+  $("mState").className = "state " + (st.down ? "bad" : st.slow ? "slow" : "ok");
+  $("mState").textContent = !st.on ? "FERMO" : st.down ? `${st.down} ${st.down === 1 ? "NON RISPONDE" : "NON RISPONDONO"}` : st.slow ? `${st.slow} ${st.slow === 1 ? "LENTO" : "LENTI"}` : "TUTTO OK";
   $("tiles").innerHTML = devs.map(d => {
     const isDown = d.known && !d.alive;
-    const status = !d.known ? "controllo…" : d.alive ? (d.rtt_ms ? d.rtt_ms + " ms" : "ok") : "NON RISPONDE";
+    const status = !d.known ? "controllo…" : d.alive ? (d.rtt_ms ? d.rtt_ms + " ms" : "ok") + (d.slow ? " · lento" : "") : "NON RISPONDE";
     const since = d.known && d.since ? `da ${new Date(d.since).toLocaleTimeString("it")}` : "";
-    return `<div class="tile${isDown ? " down" : ""}"><div class="t nt">${kindIcon(d.kind)}${esc(d.name)}</div>
+    return `<div class="tile${isDown ? " down" : d.slow ? " slow" : ""}"><div class="t nt">${kindIcon(d.kind)}${esc(d.name)}</div>
       <div class="r nt">${esc([d.role, d.ip].filter(Boolean).join(" · "))}</div>
       <div class="s"><b>${esc(status)}</b><span class="muted">${esc(since)}</span></div>${spark(d.rtts)}</div>`;
   }).join("") + unis.map(u => {

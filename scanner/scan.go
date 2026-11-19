@@ -38,6 +38,7 @@ type Host struct {
 	UPnP        string     `json:"upnp,omitempty"`      // UPnP device type, e.g. MediaRenderer
 	WebTitle    string     `json:"web_title,omitempty"` // <title> of its web page
 	NDI         []string   `json:"ndi,omitempty"`       // NDI sources it publishes
+	IPv6        []string   `json:"ipv6,omitempty"`      // from the neighbour table, matched by MAC
 	Dante       *DanteInfo `json:"dante,omitempty"`
 	Kind        string     `json:"kind,omitempty"` // see GuessKind
 	Warnings    []string   `json:"warnings,omitempty"`
@@ -64,15 +65,34 @@ type Progress struct {
 	Total int `json:"total"`
 }
 
+// LargeScan is the size from which a scan goes faster and lighter: more
+// probes at once, shorter wait, fewer ports per probe, no system ping (one
+// process per address would take minutes on a /16). The ARP table still
+// finds the devices that answer nothing.
+const LargeScan = 4096
+
 func (o *Options) defaults() {
+	large := len(o.Targets) > LargeScan
 	if o.Timeout <= 0 {
 		o.Timeout = 800 * time.Millisecond
+		if large {
+			o.Timeout = 500 * time.Millisecond
+		}
 	}
 	if o.Workers <= 0 {
 		o.Workers = 256
+		if large {
+			o.Workers = 512
+		}
 	}
 	if len(o.ProbePorts) == 0 {
 		o.ProbePorts = DefaultProbePorts
+		if large {
+			o.ProbePorts = DefaultProbePorts[:6]
+		}
+	}
+	if large {
+		o.Ping = false
 	}
 }
 
@@ -99,6 +119,10 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			close(showReady)
 		}()
 	}
+
+	// IPv6 neighbours are woken up while the probes run.
+	v6Ready := make(chan struct{})
+	go func() { wakeV6(ctx, interfaceFor(opt.Targets, localNets)); close(v6Ready) }()
 
 	// Phase 1: liveness probes.
 	type hit struct {
@@ -155,6 +179,8 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 	// whose ports are all filtered. Any target with a MAC is alive, and so
 	// is anyone who spoke a show protocol.
 	arp := ARPTable(ctx)
+	<-v6Ready
+	v6 := NeighborsV6(ctx)
 	for ip := range arp {
 		if _, ok := alive[ip]; !ok && inTargets[ip] {
 			alive[ip] = hit{method: "arp"}
@@ -234,6 +260,9 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				host.MAC = s.artnet.MAC
 			}
 			host.Vendor = Vendor(host.MAC)
+			if host.MAC != "" {
+				host.IPv6 = v6[host.MAC]
+			}
 			if opt.ResolveDNS && !host.Self {
 				host.Hostname = reverseDNS(ctx, ip, 1500*time.Millisecond)
 			}

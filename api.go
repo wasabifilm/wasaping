@@ -92,6 +92,7 @@ func apiMux(quit func()) *http.ServeMux {
 	mux.HandleFunc("/api/prefs/export", handleSettingsExport)
 	mux.HandleFunc("/api/prefs/import", handleSettingsImport)
 	mux.HandleFunc("/api/qr", handleQR)
+	mux.HandleFunc("/api/oscin", handleOSCIn)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
 		lastPing.Store(time.Now().UnixNano())
 		w.WriteHeader(http.StatusNoContent)
@@ -112,7 +113,7 @@ func apiMux(quit func()) *http.ServeMux {
 var localOnly = map[string]bool{
 	"/api/save": true, "/api/helper": true, "/api/quit": true, "/api/notify": true,
 	"/api/device": true, "/api/forget-old": true, "/api/project": true, "/api/network": true, "/api/bg": true, "/api/update-oui": true, "/api/login": true, "/api/monitor": true, "/api/remote": true, "/api/plan": true, "/api/switchports": true, "/api/update": true, "/api/lang": true, "/api/universe": true, "/api/alerts": true, "/api/rdm": true, "/api/rdm/identify": true, "/api/rdm/set": true, "/api/preshow": true, "/api/diag": true, "/api/compare": true, "/api/update/install": true, "/api/webaccess": true,
-	"/api/prefs": true, "/api/prefs/reveal": true, "/api/prefs/export": true, "/api/prefs/import": true, "/api/qr": true,
+	"/api/prefs": true, "/api/prefs/reveal": true, "/api/prefs/export": true, "/api/prefs/import": true, "/api/qr": true, "/api/oscin": true,
 }
 
 func fromLoopback(r *http.Request) bool {

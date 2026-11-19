@@ -18,6 +18,7 @@ const TOOLS = [
   {id: "open", group: "project", label: "Apri progetto…", desc: "Riapre un progetto, anche di un locale dove questo computer non è mai stato.", fn: () => pickFile(".wasaping,.json", openProjectView)},
   {id: "cleanup", group: "project", label: "Pulisci i dispositivi vecchi", desc: "Toglie dall'elenco quelli spariti da tempo (i critici restano).", fn: () => cleanupView(), needs: "network"},
   {id: "copy", group: "project", label: "Copia elenco", desc: "I dispositivi mostrati (con il filtro), da incollare in un foglio di calcolo o in una chat.", fn: () => copyList(), needs: "scan"},
+  {id: "labels", group: "project", label: "Etichette con QR", desc: "Adesivi per gli apparecchi: nome, IP, ruolo e un QR che apre la loro pagina web.", fn: () => labelsView(), needs: "scan"},
   {id: "print", group: "project", label: "Stampa elenco IP", desc: "Per la crew e il rider, da stampare o salvare in PDF.", fn: () => printList(), needs: "scan"},
   {id: "csv", group: "project", label: "Esporta CSV", desc: "L'elenco in un foglio di calcolo.", fn: () => exportCSV(), needs: "scan"},
   {id: "json", group: "project", label: "Esporta JSON", desc: "L'elenco completo, per altri programmi.", fn: () => exportJSON(), needs: "scan"},

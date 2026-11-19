@@ -40,7 +40,7 @@ func main() {
 		if err := showsim.RunVideo(ctx, "0.0.0.0", showsim.DefaultVideoPorts); err != nil {
 			fmt.Fprintln(os.Stderr, "showsim: video:", err)
 		} else {
-			fmt.Println("showsim: Videohub 9990, HyperDeck 9993, ATEM 9910, vMix 8088 (in wasaping: Strumenti → Video)")
+			fmt.Println("showsim: Videohub 9990, HyperDeck 9993, ATEM 9910, vMix 8088 (in wasaping: Video in alto, con l'IP di questo computer)")
 		}
 	}
 	if *dante {
@@ -49,7 +49,7 @@ func main() {
 				fmt.Fprintln(os.Stderr, "showsim: Dante (porta 4440):", err)
 			}
 		}()
-		fmt.Println("showsim: dispositivo Dante", showsim.DanteName, "su UDP 4440 (in wasaping: Strumenti → Dante, IP di questo computer)")
+		fmt.Println("showsim: dispositivo Dante", showsim.DanteName, "su UDP 4440 (in wasaping: Dante in alto, con l'IP di questo computer)")
 	}
 	err := showsim.Run(ctx, showsim.Config{NodeIP: addr, NoPTP: *noPTP, Backup: *backup, Identify: func(uid [6]byte, on bool) {
 		fmt.Printf("RDM identifica %X: %v\n", uid, on)

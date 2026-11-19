@@ -37,6 +37,8 @@
   .tile .r { color: var(--muted); font-size: 13px; margin-top: 2px; }
   .tile .s { margin-top: 10px; font-size: 14px; font-weight: 700; color: var(--wasabi); }
   .tile.down .s { color: var(--warn); }
+  .tile.slow { border-color: #f2994a; } .tile.slow .s { color: #f2994a; }
+  li.note b { color: #f2994a; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
   ol { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   li { padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -128,14 +130,15 @@ async function tick() {
   const devs = m.devices || [];
   $("tiles").innerHTML = devs.length ? devs.map(x => {
     const down = x.known && !x.alive;
-    return `<div class="tile${down ? " down" : ""}"><div class="t">${esc(x.name)}</div><div class="r">${esc([x.role, x.ip].filter(Boolean).join(" · "))}</div>
+    return `<div class="tile${down ? " down" : x.slow ? " slow" : ""}"><div class="t">${esc(x.name)}</div><div class="r">${esc([x.role, x.ip].filter(Boolean).join(" · "))}</div>
       <div class="s">${!x.known ? L("controllo…") : x.alive ? (x.rtt_ms ? x.rtt_ms + " ms" : "ok") : L("NON RISPONDE")}</div></div>`;
   }).join("") : `<p class="muted" style="grid-column:1/-1;margin:0">${L("Nessun dispositivo critico. Segnali dal computer, nel pannello di dettaglio.")}</p>`;
   $("issues").innerHTML = ((d.scan && d.scan.issues) || []).map(i => `<div class="warn">⚠️ ${esc(i)}</div>`).join("");
   const ev = m.events || [];
-  $("events").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b>${esc(e.name)}</b> ${e.up ? L("di nuovo in linea dopo ") + dur(e.down_for) : L("non risponde")}</li>`).join("") : `<li class="muted">${L("Nessun evento.")}</li>`;
-  const fresh = ev.filter(e => e.id > seen && !e.up);
-  if (seen >= 0 && fresh.length) beep(3);
+  $("events").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.text ? "note" : e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b>${esc(e.name)}</b> ${e.text ? esc(e.text) : e.up ? L("di nuovo in linea dopo ") + dur(e.down_for) : L("non risponde")}</li>`).join("") : `<li class="muted">${L("Nessun evento.")}</li>`;
+  const fresh = ev.filter(e => e.id > seen && !e.up && !e.text);
+  const muted = m.muted_until && !m.muted_until.startsWith("0001") && new Date(m.muted_until) > new Date();
+  if (seen >= 0 && fresh.length && !muted) beep(3);
   seen = ev.length ? Math.max(seen, ev[ev.length - 1].id) : Math.max(seen, 0);
   $("upd").textContent = L("Aggiornato alle ") + new Date().toLocaleTimeString(EN ? "en-GB" : "it");
 }

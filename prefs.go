@@ -192,6 +192,21 @@ func handleSettingsImport(w http.ResponseWriter, r *http.Request) {
 // handleQR draws the address of the iPad page (for=remote) or of the full
 // web access (for=web) as a QR code to frame with the device.
 func handleQR(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost { // labels: {texts: [...]} -> {svgs: [...]}
+		var req struct {
+			Texts []string `json:"texts"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil || len(req.Texts) > 1000 {
+			http.Error(w, "richiesta non valida", http.StatusBadRequest)
+			return
+		}
+		out := make([]string, len(req.Texts))
+		for i, t := range req.Texts {
+			out[i], _ = qrSVG(t) // "" when too long
+		}
+		writeJSON(w, map[string]any{"svgs": out})
+		return
+	}
 	s := loadSettings()
 	var url string
 	switch r.URL.Query().Get("for") {

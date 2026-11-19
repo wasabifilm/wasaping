@@ -56,13 +56,16 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - il **routing in sola lettura** (Dante, in alto): a cosa è collegato ogni canale in ricezione, gli abbonamenti non risolti e la banda stimata. Il protocollo di Audinate non è pubblico: questa parte è sperimentale;
   - nel Monitor, la **secondaria** dei dispositivi critici e l'aggancio al clock.
 - **Video** (Video, in alto): stato di **ATEM** (programma e anteprima), **HyperDeck** (registrazione, spazio libero), **Videohub** (tabella di routing), **vMix** (in onda, registrazione, streaming), Resolume; proiettori PJLink, sorgenti NDI, clock PTPv2.
+- **Il patch di Dante e del Videohub resta nel progetto:** ogni volta che leggi il routing wasaping lo salva per il locale. La volta dopo, nella stessa sala, ti dice cosa è cambiato rispetto alla prova («3 collegamenti cambiati dal 12 nov»: prima, ora, scollegato). Viaggia anche nel file `.wasaping`.
 - **Velocità delle porte** degli switch (SNMP): avviso se un dispositivo Dante, NDI o video è su una porta a 100 Mbit.
 - **Report di fine show:** dal registro del Monitor, quante volte è caduto ogni dispositivo, per quanto tempo in tutto e il buco più lungo, più la cronologia e il **grafico dei tempi di risposta di tutta la serata**. Si stampa o si salva in PDF.
+  Se lo show è stato segnato (Monitor o OSC), il report copre proprio quello: dall'inizio alla fine.
 - **Confronta con l'ultima volta:** nello stesso locale, chi c'è di nuovo, chi manca, chi ha cambiato IP o nome rispetto alla volta precedente.
 - **Mappa della rete:** dagli switch gestiti (SNMP) e da LLDP, quali switch sono collegati tra loro e su quale porta, e cosa c'è su ogni porta.
 - **Box su Raspberry Pi:** `wasaping box` trasforma un Raspberry Pi in un monitor sempre acceso sulla rete show, che guardi dall'iPad. Vedi la [guida](docs/raspberry.md).
 - **RDM via Art-Net:** chiede ai nodi quali apparecchi hanno collegati e a ognuno produttore, modello, etichetta, indirizzo DMX, canali e modalità. Segnala gli **indirizzi sovrapposti** e cosa è cambiato rispetto alla ricerca precedente. Con **Identifica** fai lampeggiare un apparecchio per trovarlo sul traliccio. Con **Modifica** cambi **indirizzo DMX, modalità ed etichetta**: wasaping chiede conferma due volte, avvisa se il nuovo indirizzo si sovrappone, rilegge l'apparecchio per verificare e annota ogni modifica in `rdm-changes.csv`.
 - **Monitor:** segni i dispositivi **critici** (console, switch principale, stagebox, media server…). wasaping li controlla ogni 3–30 secondi su una schermata a riquadri verde/rosso, e suona e avvisa appena uno smette di rispondere. Continua anche a finestra chiusa. Controlla anche gli **universi critici** (se smettono di arrivare o se compare una seconda sorgente) e il **master del clock PTP** (se cambia o sparisce). Ogni dispositivo ha un piccolo **grafico dei tempi di risposta**.
+- **Monitor, in più:** una **soglia di risposta** (per esempio «lento sopra 20 ms»: avvisa se un critico rallenta per tre controlli di fila, perché spesso un cavo o una porta che si rovinano rallentano prima di cadere), **Silenzia 5 min** (niente suono, notifiche e allarmi mentre si interviene; il registro continua) e **Inizio show / Fine show**, che segnano lo show nel registro.
 - **Allarmi verso altri programmi:** a ogni evento del Monitor wasaping manda un messaggio **OSC** (a QLab, a una console, a un media server: `/wasaping/down`, `/wasaping/up`) e/o chiama un **indirizzo web** con i dettagli in JSON.
 - **Notifiche sul telefono:** con **ntfy** (il più semplice: un'app e un nome di argomento), **Telegram** (un bot) o **Slack**.
 - **Registro degli eventi:** ogni caduta viene annotata con ora e durata ("Rio3224-Palco: non risponde 21:43:10, di nuovo in linea dopo 12 s"). Si esporta in CSV a fine serata, e tutto finisce anche in `monitor-log.csv`.
@@ -108,19 +111,30 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Tasto destro su un dispositivo:** apri la pagina web, copia IP, MAC o nome, rinomina, segna come critico, controlla il collegamento.
 - **Filtro con più parole:** devono comparire tutte, per esempio `dante critico` o `artnet 10.0.0`. Riconosce anche `critico`, `nuovo`, `avviso` e `non risponde`. Accanto c'è quanti dispositivi restano («5 di 32»); **Esc** lo svuota (e chiude le finestre aperte).
 - **Copia elenco** (Progetto): i dispositivi mostrati, come tabella da incollare in un foglio di calcolo o in una chat.
+- **Etichette con QR** (Progetto): adesivi per switch, nodi e stagebox con nome, IP, ruolo e un codice QR che apre la pagina web dell'apparecchio. Piccole (A4, 3 × 8) o grandi (2 × 5); per i critici, per quelli con un nome o per quelli mostrati.
+- **Svuota**, accanto a Scansiona: toglie l'elenco dallo schermo; nomi, note e archivio restano.
 - **Wake-on-LAN**, controllo di tutte le porte 1–1024, avvisi sulle porte rischiose (Telnet, FTP sul router…).
 - Scorciatoie **⌘R** scansiona, **⌘F** o **/** cerca, **↑ ↓** passano da un dispositivo all'altro col pannello aperto, **⇧⌘M** Monitor (Ctrl su Windows e Linux). L'ordine delle colonne resta quello scelto. Tema automatico, chiaro o scuro.
 - **Italiano e inglese:** la lingua segue quella del sistema e si cambia col pulsante in alto. La riga di comando segue `LANG`.
 - **Avviso di nuova versione:** una volta al giorno chiede a GitHub l'ultima versione, senza inviare nessun dato tuo o della rete. Su Mac si **aggiorna dall'app**: scarica, controlla il file con `SHA256SUMS` e la firma, sostituisce l'app e la riavvia. Si spegne in Impostazioni.
 - **Tutto in alto:** **Dispositivi · Pre-show · Monitor · DMX · RDM · Dante · Video · Rete · Progetto · ⚙ Impostazioni**. Ogni strumento è una pagina sotto l'intestazione, come il Monitor, con la riga della rete (nome, router, avvisi) in cima. Il pulsante verde dice dove sei; **Esc** o «Dispositivi» riportano all'elenco. Dal Monitor apri DMX o Dante e, chiudendoli, torni al Monitor. **⌘1…⌘9** (Ctrl su Windows e Linux) aprono le pagine nello stesso ordine. La riga della rete sta accanto allo stato, sopra l'elenco; con più di due avvisi di rete se ne vedono due e gli altri con un clic.
   - **Rete:** Piano IP, IP liberi, Mappa della rete, Confronta con l'ultima volta.
-  - **Progetto:** Report di fine show, Salva e Apri progetto, Pulisci, Copia elenco, Stampa, CSV, JSON, Diagnostica.
+  - **Progetto:** Report di fine show, Salva e Apri progetto, Pulisci, Copia elenco, Etichette con QR, Stampa, CSV, JSON, Diagnostica.
 - **Menu del Mac:** i menu **Show**, **Rete** e **Progetto** in alto, con le scorciatoie (⇧⌘P pre-show, ⇧⌘M monitor, ⇧⌘D DMX, ⇧⌘I piano IP, ⌘S/⌘O progetto, ⌘, impostazioni).
 - **Impostazioni** (⚙ in alto, con un indice in cima), tutte salvate da sole:
   - **Generali:** lingua (cambiandola resti dove sei, con la scansione) e tema.
   - **Scansione:** porte da controllare di solito, pausa della scansione continua, ripetizione in background, community SNMP.
   - **Allarmi:** volume dell'allarme con «Prova il suono»; OSC, webhook, ntfy, Telegram (token nascosto), Slack; «Manda una prova».
-  - **Rete e accesso:** accesso completo dalla rete con password e **codice QR** da inquadrare.
+  - **Rete e accesso:** accesso completo dalla rete con password e **codice QR** da inquadrare; **comandi OSC in ingresso** (UDP, porta 53001 di solito), spenti finché non li accendi:
+
+    | Comando | Cosa fa |
+    |---|---|
+    | `/wasaping/monitor/start`, `/wasaping/monitor/stop` | avvia o ferma il Monitor |
+    | `/wasaping/show/start`, `/wasaping/show/end` | segna inizio e fine dello show (il primo avvia anche il Monitor) |
+    | `/wasaping/mute [secondi]`, `/wasaping/unmute` | silenzia gli allarmi (5 minuti se non dici quanto) |
+    | `/wasaping/scan`, `/wasaping/preshow` | fa una scansione o il pre-show (il risultato va nel registro) |
+
+    Da QLab (cue Network → OSC), da una console luci o da Companion / Stream Deck. Nessun comando cambia gli apparecchi o le impostazioni.
   - **Sistema:** aggiornamenti, apertura al login, aiuto per i MAC, **dati di wasaping** (cartella e file, «Mostra nella cartella») ed **Esporta / Importa** le impostazioni per un altro computer (senza PIN e password).
 - **iPad e telefono:** nel Monitor, «Accesso da iPad o telefono» mostra indirizzo, PIN e un **codice QR** da inquadrare con la fotocamera.
 - Esporta in **CSV**, **JSON** o elenco stampabile.
@@ -138,6 +152,7 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 wasaping                     # scansiona la tua rete dal terminale
 wasaping 192.168.1.0/24      # una rete precisa
 wasaping 10.0.0.1-50 -p none # un intervallo, senza controllare le porte
+wasaping 10.0.0.0/16         # una rete grande, fino a 65 536 indirizzi (sonde più leggere, circa un minuto)
 wasaping -o csv > rete.csv   # esporta in CSV (oppure -o json)
 wasaping app                 # apre la finestra
 wasaping web                 # apre l'interfaccia nel browser (Ctrl+C per uscire)
@@ -239,7 +254,8 @@ scripts/             build dell'app macOS, pacchetti .deb, icone, database produ
 
 - [ ] Firma e notarizzazione Apple (serve un account Apple Developer): toglie l'avviso di Gatekeeper e restituisce i MAC senza aiuto
 - [ ] Finestra nativa e icona vicino all'orologio anche su Windows (WebView2), da provare su un PC
-- [ ] IPv6
+- [x] IPv6: indirizzi dei vicini nel pannello del dispositivo (Linux, Windows; su macOS solo con l'app firmata, come i MAC)
+- [ ] Scansione IPv6 vera e propria (oggi wasaping legge i vicini, non sonda la rete IPv6)
 
 ## Licenza
 

@@ -8,7 +8,7 @@ function renderSoon() { if (!renderTimer) renderTimer = setTimeout(render, 150);
 // What the filter looks into: the fields, plus the words of the badges
 // ("critico", "nuovo", "avviso", "non risponde") in both languages.
 function haystack(h, isGone) {
-  return [h.ip, h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "),
+  return [h.ip, (h.ipv6 || []).join(" "), h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "),
     (KIND[h.kind] || KIND[""])[0], tr((KIND[h.kind] || KIND[""])[0]), (h.ports || []).join(" "),
     h.critical ? "critico critical" : "", h.new ? "nuovo new" : "", h.self ? "tu you" : "",
     (h.warnings || []).length ? "avviso avvisi warning " + h.warnings.join(" ") : "", isGone ? "non risponde offline spento" : ""].join(" ").toLowerCase();
@@ -209,6 +209,7 @@ function openDetail(key) {
   const rows = [
     ["IP", `<span class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</span>`],
     ["MAC", h.mac ? `<span class="mono" data-copy="${esc(h.mac)}">${esc(h.mac)}</span>` : "—"],
+    ...((h.ipv6 || []).length ? [["IPv6", h.ipv6.map(a => `<span class="mono" data-copy="${esc(a)}" style="display:block;font-size:12px">${esc(a)}</span>`).join("")]] : []),
     ["Produttore", esc(h.vendor) || "—"],
     ...(h.model ? [["Modello", esc(h.model)]] : []),
     ...(h.friendly ? [["Nome del dispositivo", esc(h.friendly)]] : []),

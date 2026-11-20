@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -36,8 +37,25 @@ func TestOSCInParse(t *testing.T) {
 	}
 }
 
+// logTempDir is a temporary config folder for tests that write the monitor
+// log: the log is appended from a goroutine, and on Windows a folder with an
+// open file cannot be removed, so wait for the writes before cleaning up.
+func logTempDir(t *testing.T) string {
+	dir, err := os.MkdirTemp("", "wasaping-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		time.Sleep(200 * time.Millisecond)
+		logMu.Lock()
+		logMu.Unlock()
+		os.RemoveAll(dir)
+	})
+	return dir
+}
+
 func TestOSCInListener(t *testing.T) {
-	dir := t.TempDir()
+	dir := logTempDir(t)
 	t.Setenv("HOME", dir)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("AppData", dir)
@@ -92,7 +110,7 @@ func TestRoutingDiff(t *testing.T) {
 }
 
 func TestShowMarkersReport(t *testing.T) {
-	dir := t.TempDir()
+	dir := logTempDir(t)
 	t.Setenv("HOME", dir)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("AppData", dir)

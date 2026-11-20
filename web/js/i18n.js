@@ -477,3 +477,35 @@ PAT.push(
 );
 PAT.push([/^Attraverso (.+): arrivano IP, porte, ping e nomi DNS o SMB; MAC, produttori, Bonjour e protocolli show in broadcast \(Art-Net, Dante\) no\.$/,
   "Through $1: IP, ports, ping and DNS or SMB names arrive; MACs, makers, Bonjour and broadcast show protocols (Art-Net, Dante) do not."]);
+// Departments, problem history, alarm sound (0.9).
+for (const [k, v] of Object.entries({
+  "Reparto": "Department", "Luci": "Lights", "Altro": "Other",
+  "Nel Monitor i dispositivi critici sono divisi per reparto (luci, audio, video, rete), ognuno con il suo stato e il suo «Silenzia»": "In the Monitor the critical devices are split by department (lights, audio, video, network), each with its own state and \"Mute\"",
+  "Niente suono, notifiche e allarmi da questo reparto per 5 minuti": "No sound, notifications or alerts from this department for 5 minutes",
+  "Apri il dispositivo e il suo storico": "Open the device and its history",
+  "Storico dei problemi": "Problem history", "Mai caduto da quando il Monitor lo segue.": "Never dropped since the Monitor has been watching it.",
+  "Ancora niente: il Monitor lo tiene d'occhio da adesso e qui comparirà quando è caduto o è stato lento.": "Nothing yet: the Monitor watches it from now on, and drops and slow periods will show here.",
+  "negli ultimi 7 giorni": "in the last 7 days", "1 caduta": "1 drop", "non rispondeva": "not responding", "lento": "slow",
+  "· ancora giù": "· still down", "· fine non registrata": "· end not recorded", "14 giorni fa": "14 days ago", "oggi": "today",
+  "Ultimi 14 giorni: rosso = cadute, arancione = lento": "Last 14 days: red = drops, orange = slow",
+  "1 volta lento in 7 giorni": "slow once in 7 days", "bip": "beep", "mucca 🐄": "cow 🐄",
+})) EN.set(k, v);
+PAT.push(
+  [/^(\d+) cadute$/, "$1 drops"], [/^\((\d+) nelle ultime 24 ore\)$/, "($1 in the last 24 hours)"], [/^· giù in tutto (.+)$/, "· down $1 in all"],
+  [/^Nessuna caduta negli ultimi 7 giorni · l'ultima: (.+)$/, "No drops in the last 7 days · the latest: $1"],
+  [/^la più lunga (.+) \((.+)\)$/, "the longest $1 ($2)"], [/^(\d+) volte lento in 7 giorni$/, "slow $1 times in 7 days"],
+  [/^risposta nelle ultime 24 ore: media ([\d.,]+) ms, massima (\d+) ms(?:, ([\d.,]+)% senza risposta)?$/, (m, a, b, c) => `response in the last 24 hours: average ${a} ms, max ${b} ms` + (c ? `, ${c}% unanswered` : "")],
+  [/^per (\d.*)$/, "for $1"], [/^dal tipo \((.+)\)$/, (m, g) => `from the type (${EN.get(g) || g})`], [/^✓ Reparto: (.+)\.$/, (m, g) => `✓ Department: ${EN.get(g) || g}.`],
+  [/^(\d+) non rispond(?:e|ono)$/, "$1 not responding"], [/^(\d+) ok$/, "$1 ok"], [/^(\d+) giù$/, "$1 down"], [/^(\d+) lento$/, "$1 slow"],
+  [/^silenziato fino alle (.+) · riattiva$/, "muted until $1 · turn back on"],
+);
+// New version banner (0.9).
+for (const [k, v] of Object.entries({
+  "Aggiorna ora": "Update now", "Novità": "What's new", "Novità:": "New:", "Più tardi": "Later", "non controllare più": "don't check again",
+  "Lo ricorda domani": "Reminds you tomorrow", "Le note della versione su GitHub": "The release notes on GitHub",
+  "Si riaccende da ⚙ Impostazioni → Sistema": "Turn it back on in ⚙ Settings → System",
+  "Scarica, controlla e installa la nuova versione, poi riapre wasaping": "Downloads, checks and installs the new version, then reopens wasaping",
+  "Apre la pagina della versione su GitHub": "Opens the release page on GitHub",
+  "Te lo ricordo domani. Intanto è in ⚙ Impostazioni → Sistema.": "I'll remind you tomorrow. Meanwhile it is in ⚙ Settings → System.",
+})) EN.set(k, v);
+PAT.push([/^È uscita$/, "Out now:"], [/^\(hai la (.+)\)$/, "(you have $1)"], [/^Impostazioni · è uscita wasaping (.+)$/, "Settings · wasaping $1 is out"]);

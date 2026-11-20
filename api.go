@@ -81,6 +81,7 @@ func apiMux(quit func()) *http.ServeMux {
 	mux.HandleFunc("/api/webaccess", handleWebAccess)
 	mux.HandleFunc("/api/preshow", handlePreshow)
 	mux.HandleFunc("/api/showreport", handleShowReport)
+	mux.HandleFunc("/api/history", handleHistory)
 	mux.HandleFunc("/api/diag", handleDiag)
 	mux.HandleFunc("/api/compare", handleCompare)
 	mux.HandleFunc("/api/universe", handleUniverse)

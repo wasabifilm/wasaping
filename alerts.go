@@ -97,6 +97,9 @@ func alertText(e MonEvent, netName string) (title, body string) {
 		title = "🔴 " + T("Non risponde: ", "Not responding: ") + e.Name
 		body = who + T(" non risponde", " is not responding")
 	}
+	if e.Group != "" {
+		title = strings.Replace(title, " ", " "+groupName(e.Group)+" · ", 1) // "🔴 Audio · Non risponde: …"
+	}
 	if netName != "" {
 		body += " · " + netName
 	}
@@ -131,7 +134,7 @@ func alertTo(a alertCfg, e MonEvent) []string {
 		if err != nil {
 			res = append(res, "OSC: "+err.Error())
 		} else {
-			_, err = c.Write(oscMessage(base+"/"+eventWord(e), e.Name, e.IP, firstNonEmpty(e.Text, ""), int(e.DownFor)))
+			_, err = c.Write(oscMessage(base+"/"+eventWord(e), e.Name, e.IP, firstNonEmpty(e.Text, ""), int(e.DownFor), groupNameIT(e.Group)))
 			c.Close()
 			if err != nil {
 				res = append(res, "OSC: "+err.Error())
@@ -144,6 +147,7 @@ func alertTo(a alertCfg, e MonEvent) []string {
 		body, _ := json.Marshal(map[string]any{
 			"event": eventWord(e), "name": e.Name, "ip": e.IP, "text": e.Text, "kind": firstNonEmpty(e.Kind, "device"),
 			"down_for_s": int(e.DownFor), "at": e.At.Format(time.RFC3339), "network": netName, "source": "wasaping " + version,
+			"group": e.Group, "group_name": groupNameIT(e.Group),
 		})
 		resp, err := alertClient.Post(a.Webhook, "application/json", bytes.NewReader(body))
 		res = append(res, httpResult("web", resp, err))

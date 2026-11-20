@@ -69,6 +69,7 @@ func checkUpdates(ctx context.Context, force bool) {
 	var rel struct {
 		Tag    string `json:"tag_name"`
 		URL    string `json:"html_url"`
+		Body   string `json:"body"`
 		Assets []struct {
 			Name string `json:"name"`
 			URL  string `json:"browser_download_url"`
@@ -79,6 +80,7 @@ func checkUpdates(ctx context.Context, force bool) {
 	}
 	s = loadSettings()
 	s.UpdateChecked, s.LatestVersion, s.LatestURL = time.Now(), rel.Tag, rel.URL
+	s.LatestNews = releaseHighlights(rel.Body)
 	s.LatestMacZip, s.LatestSums = "", ""
 	for _, a := range rel.Assets {
 		switch a.Name {
@@ -89,6 +91,42 @@ func checkUpdates(ctx context.Context, force bool) {
 		}
 	}
 	saveSettings(s)
+}
+
+// releaseHighlights picks the titles of the news from the release notes:
+// the bold start of each top-level item of "## Novità" ("**Reti via VPN o
+// router:** …" → "Reti via VPN o router"), at most 6.
+func releaseHighlights(body string) []string {
+	var out []string
+	in := false
+	for _, l := range strings.Split(strings.ReplaceAll(body, "\r", ""), "\n") {
+		if strings.HasPrefix(l, "## ") {
+			in = strings.Contains(strings.ToLower(l), "novità") || strings.Contains(strings.ToLower(l), "new")
+			continue
+		}
+		if !in || !strings.HasPrefix(l, "- ") {
+			continue
+		}
+		t := strings.TrimPrefix(l, "- ")
+		if strings.HasPrefix(t, "**") {
+			if end := strings.Index(t[2:], "**"); end > 0 {
+				t = t[2 : 2+end]
+			}
+		} else if i := strings.IndexAny(t, ":."); i > 0 {
+			t = t[:i]
+		}
+		t = strings.TrimSpace(strings.Trim(strings.NewReplacer("`", "", "*", "").Replace(t), ":"))
+		if r := []rune(t); len(r) > 60 {
+			t = string(r[:59]) + "…"
+		}
+		if t != "" {
+			out = append(out, t)
+		}
+		if len(out) == 6 {
+			break
+		}
+	}
+	return out
 }
 
 func updateLoop(ctx context.Context) {
@@ -125,7 +163,7 @@ func handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	s := loadSettings()
 	writeJSON(w, map[string]any{
-		"current": version, "latest": s.LatestVersion, "checked": s.UpdateChecked, "url": s.LatestURL, "off": s.NoUpdateCheck,
+		"current": version, "latest": s.LatestVersion, "checked": s.UpdateChecked, "url": s.LatestURL, "off": s.NoUpdateCheck, "news": s.LatestNews,
 		"newer":       !s.NoUpdateCheck && newerVersion(s.LatestVersion, version),
 		"can_install": canSelfUpdate() && s.LatestMacZip != "" && s.LatestSums != "",
 	})

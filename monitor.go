@@ -32,6 +32,7 @@ type MonDevice struct {
 	Since  time.Time `json:"since,omitempty"` // when the current state began
 	RTTs   []int64   `json:"rtts,omitempty"`  // latest response times, -1 = no answer
 	Slow   bool      `json:"slow,omitempty"`  // over the threshold for 3 checks in a row
+	Group  string    `json:"group"`           // department: lights, audio, video, network, other
 	slowN  int
 }
 
@@ -45,6 +46,8 @@ type MonEvent struct {
 	DownFor float64   `json:"down_for,omitempty"` // seconds, on "up" events
 	Kind    string    `json:"kind,omitempty"`     // "", "universe", "ptp"
 	Text    string    `json:"text,omitempty"`     // for warnings that are not up/down
+	Group   string    `json:"group,omitempty"`    // department of the device or universe
+	Muted   bool      `json:"muted,omitempty"`    // happened while silenced: no sound
 }
 
 // MonState is what the page and the remote view read.
@@ -63,6 +66,18 @@ type MonState struct {
 	Slow      int           `json:"slow,omitempty"`        // devices over it
 	MutedTill time.Time     `json:"muted_until,omitempty"` // no sound, notifications or alerts
 	ShowSince time.Time     `json:"show_since,omitempty"`  // "show started" marker, zero = no show running
+	Groups    []MonGroup    `json:"groups,omitempty"`      // departments with something to watch
+	Sound     string        `json:"sound,omitempty"`       // alarm sound: "beep" or "moo"
+}
+
+// MonGroup is a department in the Monitor: how many devices, how many down.
+type MonGroup struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Total     int       `json:"total"`
+	Down      int       `json:"down"`
+	Slow      int       `json:"slow,omitempty"`
+	MutedTill time.Time `json:"muted_until,omitempty"`
 }
 
 type monitor struct {
@@ -77,6 +92,7 @@ type monitor struct {
 	checked time.Time
 	kick    chan struct{}
 	muted   time.Time
+	gMuted  map[string]time.Time // departments silenced on their own
 	show    time.Time
 	showSet bool // show read back from the log
 }
@@ -94,6 +110,50 @@ func (m *monitor) mute(d time.Duration) {
 	m.muted = time.Now().Add(d)
 	m.addEventRaw(MonEvent{At: time.Now(), Name: "Monitor", Kind: "note", Text: map[bool]string{true: fmt.Sprintf(T("allarmi silenziati per %s", "alarms muted for %s"), shortDur(d.Seconds())), false: T("allarmi di nuovo attivi", "alarms back on")}[d > 0]})
 	m.mu.Unlock()
+}
+
+// muteGroup silences one department for d (0 = turn back on).
+func (m *monitor) muteGroup(g string, d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.gMuted == nil {
+		m.gMuted = map[string]time.Time{}
+	}
+	if d > 0 {
+		m.gMuted[g] = time.Now().Add(d)
+	} else {
+		delete(m.gMuted, g)
+	}
+	text := fmt.Sprintf(T("%s: allarmi silenziati per %s", "%s: alarms muted for %s"), groupName(g), shortDur(d.Seconds()))
+	if d <= 0 {
+		text = fmt.Sprintf(T("%s: allarmi di nuovo attivi", "%s: alarms back on"), groupName(g))
+	}
+	m.addEventRaw(MonEvent{At: time.Now(), Name: "Monitor", Kind: "note", Group: g, Text: text})
+}
+
+// silencedLocked reports whether alarms of a department are off now:
+// everything muted, or that department (m.mu held).
+func (m *monitor) silencedLocked(g string, now time.Time) bool {
+	return now.Before(m.muted) || (g != "" && now.Before(m.gMuted[g]))
+}
+
+// eventGroupLocked finds the department of an event (m.mu held).
+func (m *monitor) eventGroupLocked(e MonEvent) string {
+	switch e.Kind {
+	case "universe":
+		return "lights"
+	case "note", "show", "timecode":
+		return ""
+	}
+	for _, d := range m.devs {
+		if e.IP != "" && d.IP == e.IP {
+			return d.Group
+		}
+	}
+	if e.Kind == "ptp" {
+		return "audio" // the clock of Dante and AES67
+	}
+	return ""
 }
 
 // markShow writes "show started" / "show ended" in the log: the end-of-show
@@ -147,6 +207,40 @@ func (m *monitor) state(maxEvents int) MonState {
 			st.Down++
 		}
 	}
+	now := time.Now()
+	byG := map[string]*MonGroup{}
+	group := func(id string) *MonGroup {
+		if byG[id] == nil {
+			byG[id] = &MonGroup{ID: id, Name: groupName(id)}
+			if t := m.gMuted[id]; now.Before(t) {
+				byG[id].MutedTill = t
+			}
+		}
+		return byG[id]
+	}
+	for _, d := range st.Devices {
+		g := group(d.Group)
+		g.Total++
+		if d.Known && !d.Alive {
+			g.Down++
+		}
+		if d.Slow {
+			g.Slow++
+		}
+	}
+	for _, u := range st.Universes {
+		g := group("lights")
+		g.Total++
+		if u.Known && !u.Alive {
+			g.Down++
+		}
+	}
+	for _, id := range groupIDs {
+		if g := byG[id]; g != nil {
+			st.Groups = append(st.Groups, *g)
+		}
+	}
+	st.Sound = firstNonEmpty(loadSettings().AlarmSound, "beep")
 	st.PTP = m.ptpStateLocked()
 	st.Timecode = m.timecodeStateLocked()
 	ev := m.events
@@ -248,24 +342,33 @@ func (m *monitor) check(ctx context.Context) {
 			cur = &MonDevice{Key: d.Key}
 			m.devs[d.Key] = cur
 		}
-		cur.Name, cur.Role, cur.IP, cur.Kind = firstNonEmpty(d.Name, d.Friendly, d.Hostname, d.IP), d.Role, d.IP, d.Kind
+		cur.Name, cur.Role, cur.IP, cur.Kind = firstNonEmpty(d.Name, d.Friendly, d.Hostname, d.IP), d.Role, d.IP, firstNonEmpty(d.KindManual, d.Kind)
+		cur.Group = deviceGroup(d.Device)
+		quiet := m.silencedLocked(cur.Group, now)
+		who := cur.Name + " (" + groupName(cur.Group) + ")"
 		r := byIP[d.IP]
 		switch {
 		case !cur.Known:
 			cur.Known, cur.Alive, cur.Since = true, r.Alive, now
 			if !r.Alive {
 				m.addEvent(now, cur, false, 0)
-				lost = append(lost, cur.Name)
+				if !quiet {
+					lost = append(lost, who)
+				}
 			}
 		case cur.Alive != r.Alive:
 			down := now.Sub(cur.Since).Seconds()
 			cur.Alive, cur.Since = r.Alive, now
 			if r.Alive {
 				m.addEvent(now, cur, true, down)
-				back = append(back, fmt.Sprintf(T("%s (dopo %s)", "%s (after %s)"), cur.Name, shortDur(down)))
+				if !quiet {
+					back = append(back, fmt.Sprintf(T("%s (dopo %s)", "%s (after %s)"), who, shortDur(down)))
+				}
 			} else {
 				m.addEvent(now, cur, false, 0)
-				lost = append(lost, cur.Name)
+				if !quiet {
+					lost = append(lost, who)
+				}
 			}
 		}
 		cur.RTTms, cur.Method = r.RTTms, r.Method
@@ -308,7 +411,9 @@ func (m *monitor) check(ctx context.Context) {
 	go appendRTTLog(samples)
 	m.checkClockLocked(now)
 	lostU, backU := m.checkShowLocked(now)
-	lost, back = append(lost, lostU...), append(back, backU...)
+	if !m.silencedLocked("lights", now) {
+		lost, back = append(lost, lostU...), append(back, backU...)
+	}
 	var downNames []string
 	for _, k := range m.order {
 		if d := m.devs[k]; d.Known && !d.Alive {
@@ -338,18 +443,22 @@ func (m *monitor) check(ctx context.Context) {
 
 // addEvent records a change and appends it to the log file (m.mu held).
 func (m *monitor) addEvent(at time.Time, d *MonDevice, up bool, downFor float64) {
-	m.addEventRaw(MonEvent{At: at, Name: d.Name, IP: d.IP, Up: up, DownFor: downFor})
+	m.addEventRaw(MonEvent{At: at, Name: d.Name, IP: d.IP, Up: up, DownFor: downFor, Group: d.Group})
 }
 
 func (m *monitor) addEventRaw(e MonEvent) {
 	m.nextID++
 	e.ID = m.nextID
+	if e.Group == "" {
+		e.Group = m.eventGroupLocked(e)
+	}
+	e.Muted = m.silencedLocked(e.Group, time.Now())
 	m.events = append(m.events, e)
 	if len(m.events) > 2000 {
 		m.events = m.events[len(m.events)-2000:]
 	}
 	go appendMonitorLog(e)
-	if time.Now().Before(m.muted) || e.Kind == "note" || e.Kind == "show" || e.Kind == "timecode" {
+	if e.Muted || e.Kind == "note" || e.Kind == "show" || e.Kind == "timecode" {
 		return // silenced, or not something to alert about
 	}
 	go sendAlert(e)
@@ -412,6 +521,7 @@ func handleMonitor(w http.ResponseWriter, r *http.Request) {
 			On     bool    `json:"on"`
 			Every  int     `json:"every"`
 			Mute   *int    `json:"mute"`    // seconds, 0 = sound back on
+			Group  string  `json:"group"`   // with mute: only this department
 			Show   *string `json:"show"`    // "start" or "end"
 			SlowMs *int    `json:"slow_ms"` // threshold, 0 = off
 		}
@@ -420,6 +530,12 @@ func handleMonitor(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
+		case req.Mute != nil && req.Group != "":
+			if !validGroup(req.Group) {
+				http.Error(w, "reparto sconosciuto", http.StatusBadRequest)
+				return
+			}
+			mon.muteGroup(req.Group, time.Duration(min(max(*req.Mute, 0), 3600))*time.Second)
 		case req.Mute != nil:
 			mon.mute(time.Duration(min(max(*req.Mute, 0), 3600)) * time.Second)
 		case req.Show != nil:

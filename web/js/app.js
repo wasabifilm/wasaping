@@ -35,6 +35,10 @@ const KIND = {
   iot:      ["Domotica / IoT",'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>'],
   "":       ["Dispositivo",   '<circle cx="12" cy="12" r="4"/>'],
 };
+// Departments of the Monitor (groups.go has the same table).
+const DEPTS = {lights: "Luci", audio: "Audio", video: "Video", network: "Rete", other: "Altro"};
+const KIND_GROUP = {lightdesk: "lights", lighting: "lights", audio: "audio", speaker: "audio", video: "video", projector: "video", camera: "video", tv: "video", router: "network", switch: "network"};
+const groupOf = h => h.group || KIND_GROUP[h.kind] || "other";
 const SERVICES = {"netaudio-arc":"Dante", "netaudio-cmc":"Dante", "netaudio-dbc":"Dante", "netaudio-chan":"Dante", ndi:"NDI", blackmagic:"Blackmagic", videohub:"Videohub", qlab:"QLab", osc:"OSC", workstation:"", airplay:"AirPlay", raop:"AirPlay audio", ipp:"Stampa", ipps:"Stampa", printer:"Stampa", "pdl-datastream":"Stampa", scanner:"Scanner", uscan:"Scanner", smb:"Condivisione file", afpovertcp:"Condivisione file (AFP)", ssh:"SSH", "sftp-ssh":"SFTP", rfb:"Condivisione schermo", googlecast:"Chromecast", http:"Pagina web", https:"Pagina web", hap:"HomeKit", homekit:"HomeKit", matter:"Matter", matterc:"Matter", "companion-link":"Dispositivo Apple", "spotify-connect":"Spotify", sonos:"Sonos", "device-info":"", "sleep-proxy":"Sleep proxy", "apple-mobdev2":"Sincronizzazione Apple"};
 
 let hosts = [], gone = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser", showGone = true;
@@ -42,7 +46,7 @@ try { showGone = localStorage.getItem("wasaping.showGone") !== "0"; } catch {}
 let repeatTimer = null, selected = null, autoRun = false, network = null, issues = [], snmpCommunity = "public", swPorts = {};
 let networks = [], activeNet = ""; // several networks: "" = all tabs
 // Preferences kept by the program (Settings → Scansione, Allarmi).
-let prefs = {default_ports: "common", loop_pause: 10, alarm_volume: 60, snmp_community: "public"};
+let prefs = {default_ports: "common", loop_pause: 10, alarm_volume: 60, alarm_sound: "beep", snmp_community: "public"};
 // The port menu of the bar starts from the saved choice.
 function applyDefaultPorts() {
   const p = prefs.default_ports || "common", custom = !["common", "none"].includes(p);
@@ -368,18 +372,31 @@ function showNetwork() {
   if (m) m.onclick = () => { showNetwork.all = true; showNetwork(); };
 }
 
-// New version on GitHub (the program checks once a day).
+// New version on GitHub (the program checks every 3 hours): a banner on
+// the home page with what is new, until "Later" (one day) or the update.
+let updLast = null;
 async function checkUpdate() {
   try {
-    const u = await fetch("api/update").then(r => r.json());
-    if (!u.newer) { $("updBar").style.display = "none"; return; }
-    $("updText").innerHTML = `È uscita <b>wasaping ${esc(u.latest)}</b> (hai la ${esc(u.current)}).`;
-    $("updGet").href = u.url;
-    $("updGet").onclick = e => { if (u.can_install) { e.preventDefault(); installUpdate(); } };
+    const u = updLast = await fetch("api/update").then(r => r.json());
+    $("setBtn").classList.toggle("dot", !!u.newer);
+    $("setBtn").title = u.newer ? `Impostazioni · è uscita wasaping ${u.latest}` : "Impostazioni";
+    let later = null;
+    try { later = JSON.parse(localStorage.getItem("wasaping.updLater") || "null"); } catch {}
+    if (!u.newer || (later && later.v === u.latest && Date.now() < later.until)) { $("updBar").style.display = "none"; return; }
+    $("updText").innerHTML = `È uscita <b>wasaping ${esc(String(u.latest).replace(/^v/, ""))}</b> <span class="muted">(hai la ${esc(String(u.current).replace(/^v/, ""))})</span>`;
+    $("updNews").innerHTML = (u.news || []).length ? `<span>Novità:</span> <span class="nt">${(u.news || []).map(esc).join(" · ")}</span>` : "";
+    $("updNow").textContent = u.can_install ? "Aggiorna ora" : "Scarica";
+    $("updNow").title = u.can_install ? "Scarica, controlla e installa la nuova versione, poi riapre wasaping" : "Apre la pagina della versione su GitHub";
     $("updBar").style.display = "flex";
   } catch {}
 }
-$("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updBar").style.display = "none"; toast("Non controllerò più le nuove versioni."); });
+$("updNow").onclick = () => { if (!updLast) return; if (updLast.can_install) installUpdate(); else openURL(updLast.url); };
+$("updNotes").onclick = () => { if (updLast && updLast.url) openURL(updLast.url); };
+$("updLater").onclick = () => {
+  try { localStorage.setItem("wasaping.updLater", JSON.stringify({v: updLast && updLast.latest, until: Date.now() + 86400000})); } catch {}
+  $("updBar").style.display = "none"; toast("Te lo ricordo domani. Intanto è in ⚙ Impostazioni → Sistema.");
+};
+$("updOff").onclick = () => post("api/update", {off: true}).then(() => { $("updBar").style.display = "none"; $("setBtn").classList.remove("dot"); toast("Non controllerò più le nuove versioni."); });
 
 // ---- Settings: language, theme, repeat, alarms, remote, updates… ----
 $("setBtn").onclick = () => runTool("settings");
@@ -411,7 +428,7 @@ async function settingsView() {
 
     <h4 id="sAl">Allarmi</h4>
     <p class="muted sethint">Quando un dispositivo o un universo critico cade o torna, wasaping avvisa dove scegli qui. Si salva da solo.</p>
-    <b>Allarme sonoro</b><div class="opt"><input type="range" id="sVol" min="10" max="100" step="10" value="${prefs.alarm_volume}" style="width:180px"><span id="sVolN" class="tag">${prefs.alarm_volume}%</span><button id="sVolTest">Prova il suono</button><span class="tag">Acceso o spento si sceglie nel Monitor.</span></div>
+    <b>Allarme sonoro</b><div class="opt"><input type="range" id="sVol" min="10" max="100" step="10" value="${prefs.alarm_volume}" style="width:180px"><span id="sVolN" class="tag">${prefs.alarm_volume}%</span>${sel("sSound", [["beep", "bip"], ["moo", "mucca 🐄"]], prefs.alarm_sound || "beep")}<button id="sVolTest">Prova il suono</button><span class="tag">Acceso o spento si sceglie nel Monitor.</span></div>
     <b>Altri programmi</b><div class="opt">
       <input id="sOSC" class="al" placeholder="OSC: 192.168.1.20:53000" value="${esc(alerts.osc || "")}" style="width:220px" spellcheck="false">
       <input id="sOSCAddr" class="al" placeholder="/wasaping" value="${esc(alerts.osc_address || "")}" style="width:140px" spellcheck="false">
@@ -465,6 +482,7 @@ async function settingsView() {
   $("sVol").oninput = () => { $("sVolN").textContent = $("sVol").value + "%"; };
   $("sVol").onchange = () => savePrefs({alarm_volume: +$("sVol").value}).then(() => playAlarm()).catch(e => toast("Non salvato: " + e.message));
   $("sVolTest").onclick = () => { unlockSound(); playAlarm(); };
+  $("sSound").onchange = () => { unlockSound(); savePrefs({alarm_sound: $("sSound").value}).then(() => playAlarm()).catch(e => toast("Non salvato: " + e.message)); };
   // Alarms save themselves when a field is left.
   const alertForm = () => ({osc: $("sOSC").value.trim(), osc_address: $("sOSCAddr").value.trim(), webhook: $("sHook").value.trim(), ntfy: $("sNtfy").value.trim(), slack: $("sSlack").value.trim(),
     telegram: $("sTGToken").value.trim() || $("sTGChat").value.trim() ? $("sTGToken").value.trim() + "|" + $("sTGChat").value.trim() : ""});

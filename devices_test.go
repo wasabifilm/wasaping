@@ -278,6 +278,7 @@ func TestProjectRoundTrip(t *testing.T) {
 	ss.Finish(targets)
 	a.Label("", "aa:bb:cc:00:00:02", "Rio3224 Palco", "Stagebox", "cavo blu", true)
 	a.SetKind("", "aa:bb:cc:00:00:02", scanner.KindAudio)
+	a.SetGroup("", "aa:bb:cc:00:00:02", "video")
 	a.SetUniverseCritical("sacn:1", true)
 	a.SetNotes("", "Soundcheck alle 17")
 	a.AddRDM([]scanner.Fixture{{UID: "5052:00000001", Universe: 0, Address: 1, Footprint: 39}})
@@ -302,7 +303,7 @@ func TestProjectRoundTrip(t *testing.T) {
 	}
 	nw := other.Networks[id]
 	d := nw.Devices["aa:bb:cc:00:00:02"]
-	if d == nil || d.Name != "Rio3224 Palco" || !d.Critical || d.KindManual != scanner.KindAudio || nw.Notes != "Soundcheck alle 17" ||
+	if d == nil || d.Name != "Rio3224 Palco" || !d.Critical || d.KindManual != scanner.KindAudio || d.Group != "video" || nw.Notes != "Soundcheck alle 17" ||
 		len(nw.Universes) != 1 || len(nw.RDM) != 1 {
 		t.Errorf("imported %+v %+v", nw, d)
 	}

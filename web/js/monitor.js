@@ -114,9 +114,10 @@ async function monRefresh() {
   $("mInfo").textContent = [where, st.on ? "attivo, anche a finestra chiusa" : "fermo"].filter(Boolean).join(" · ");
   drawTiles(st);
   const ev = st.events || [];
-  $("mEvents").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.text ? "warn" : e.up ? "up" : "down"}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span><b class="nt">${esc(e.name)}</b> ${e.text ? `<span class="nt">${esc(e.text)}</span>` : e.up ? `di nuovo in linea dopo ${esc(fmtDur(e.down_for))}` : (e.kind === "universe" ? "non arriva" : "non risponde")}</li>`).join("") : '<li class="muted">Nessun evento.</li>';
+  const multi = (st.groups || []).length > 1;
+  $("mEvents").innerHTML = ev.length ? [...ev].reverse().map(e => `<li class="${e.text ? "warn" : e.up ? "up" : "down"}${e.muted ? " muted-ev" : ""}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span>${multi && e.group ? `<span class="gtag">${esc(DEPTS[e.group] || e.group)}</span>` : ""}<b class="nt">${esc(e.name)}</b> ${e.text ? `<span class="nt">${esc(e.text)}</span>` : e.up ? `di nuovo in linea dopo ${esc(fmtDur(e.down_for))}` : (e.kind === "universe" ? "non arriva" : "non risponde")}</li>`).join("") : '<li class="muted">Nessun evento.</li>';
   // Sound for drops that happened since the page last looked.
-  const fresh = ev.filter(e => e.id > monSeenEvent && !e.up && !e.text);
+  const fresh = ev.filter(e => e.id > monSeenEvent && !e.up && !e.text && !e.muted);
   if (monSeenEvent >= 0 && fresh.length && !monMuted) alarm(fresh.map(e => e.name), true);
   if (ev.length) monSeenEvent = Math.max(monSeenEvent, ev[ev.length - 1].id); else if (monSeenEvent < 0) monSeenEvent = 0;
   return st;
@@ -141,21 +142,55 @@ function drawTiles(st) {
   $("mState").className = "state " + (st.down ? "bad" : "ok");
   $("mState").className = "state " + (st.down ? "bad" : st.slow ? "slow" : "ok");
   $("mState").textContent = !st.on ? "FERMO" : st.down ? `${st.down} ${st.down === 1 ? "NON RISPONDE" : "NON RISPONDONO"}` : st.slow ? `${st.slow} ${st.slow === 1 ? "LENTO" : "LENTI"}` : "TUTTO OK";
-  $("tiles").innerHTML = devs.map(d => {
+  drawGroups(st);
+  const tile = d => {
     const isDown = d.known && !d.alive;
     const status = !d.known ? "controllo…" : d.alive ? (d.rtt_ms ? d.rtt_ms + " ms" : "ok") + (d.slow ? " · lento" : "") : "NON RISPONDE";
     const since = d.known && d.since ? `da ${new Date(d.since).toLocaleTimeString("it")}` : "";
-    return `<div class="tile${isDown ? " down" : d.slow ? " slow" : ""}"><div class="t nt">${kindIcon(d.kind)}${esc(d.name)}</div>
+    const key = d.key.split("#")[0];
+    return `<div class="tile${isDown ? " down" : d.slow ? " slow" : ""}"${findHost(key) ? ` data-key="${esc(key)}" title="Apri il dispositivo e il suo storico"` : ""}><div class="t nt">${kindIcon(d.kind)}${esc(d.name)}</div>
       <div class="r nt">${esc([d.role, d.ip].filter(Boolean).join(" · "))}</div>
       <div class="s"><b>${esc(status)}</b><span class="muted">${esc(since)}</span></div>${spark(d.rtts)}</div>`;
-  }).join("") + unis.map(u => {
+  };
+  const uniTile = u => {
     const isDown = u.known && !u.alive;
     const status = !u.known ? "controllo…" : u.alive ? `${Math.round(u.fps)} frame/s` : "NON ARRIVA";
     return `<div class="tile${isDown ? " down" : ""}"><div class="t">${kindIcon("lighting")}${esc(u.name)}</div>
       <div class="r nt">${esc((u.sources || []).join(", "))}</div>
       <div class="s"><b>${esc(status)}</b><span class="muted">${u.known && u.since ? esc((LANG === "en" ? "since " : "da ") + new Date(u.since).toLocaleTimeString("it")) : ""}</span></div></div>`;
+  };
+  const groups = st.groups || [];
+  if (groups.length < 2) { $("tiles").innerHTML = devs.map(tile).join("") + unis.map(uniTile).join(""); return; }
+  // One section per department, in the order of the program.
+  $("tiles").innerHTML = groups.map(g => {
+    const muted = g.muted_until && !g.muted_until.startsWith("0001") ? new Date(g.muted_until) : null;
+    const head = `<div class="mgroup" id="mg-${esc(g.id)}"><b>${esc(DEPTS[g.id] || g.name)}</b>${g.down ? `<span class="bad">${g.down} ${g.down === 1 ? "non risponde" : "non rispondono"}</span>` : `<span>${g.total} ok</span>`}
+      <button data-gmute="${esc(g.id)}" class="${muted ? "on" : ""}" title="Niente suono, notifiche e allarmi da questo reparto per 5 minuti">${muted ? `silenziato fino alle ${muted.toLocaleTimeString("it", {hour: "2-digit", minute: "2-digit"})} · riattiva` : "Silenzia 5 min"}</button></div>`;
+    return head + devs.filter(d => (d.group || "other") === g.id).map(tile).join("") + (g.id === "lights" ? unis.map(uniTile).join("") : "");
   }).join("");
 }
+// The departments at a glance, above the tiles: a click goes to the section.
+function drawGroups(st) {
+  const groups = st.groups || [];
+  $("mGroups").innerHTML = groups.length < 2 ? "" : groups.map(g => {
+    const muted = g.muted_until && !g.muted_until.startsWith("0001");
+    return `<span class="gchip${g.down ? " bad" : g.slow ? " slow" : ""}${muted ? " muted" : ""}" data-goto="${esc(g.id)}">${esc(DEPTS[g.id] || g.name)}<b>${g.down ? `${g.down} giù` : g.slow ? `${g.slow} lento` : "✓"}</b>${muted ? " 🔕" : ""}</span>`;
+  }).join("");
+}
+$("mGroups").onclick = e => {
+  const c = e.target.closest("[data-goto]");
+  if (c) $("mg-" + c.dataset.goto)?.scrollIntoView({block: "start"});
+};
+$("tiles").onclick = e => {
+  const b = e.target.closest("[data-gmute]");
+  if (b) {
+    unlockSound();
+    post("api/monitor", {mute: b.classList.contains("on") ? 0 : 300, group: b.dataset.gmute}).then(monRefresh).catch(err => toast(err.message));
+    return;
+  }
+  const t = e.target.closest(".tile[data-key]");
+  if (t) openDetail(t.dataset.key);
+};
 function showRemoteHint(r) {
   $("rOn").checked = !!(r && r.on);
   $("mRemote").innerHTML = r && r.on
@@ -178,10 +213,11 @@ function alarm(names, quiet) {
 function unlockSound() {
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
 }
-// Three beeps, at the volume of Settings → Allarmi.
+// The alarm, at the volume of Settings → Allarmi: three beeps, or a cow.
 function playAlarm() {
   if (!audioCtx) return;
   const vol = 0.25 * (prefs.alarm_volume || 60) / 100;
+  if ((monLast && monLast.sound || prefs.alarm_sound) === "moo") { moo(audioCtx, vol); return; }
   try {
     const t = audioCtx.currentTime;
     for (let i = 0; i < 3; i++) {
@@ -204,3 +240,24 @@ $("ouiBtn").onclick = async () => {
     $("status").textContent = "Download non riuscito: " + await r.text();
   }
 };
+
+// moo synthesises a cow (no sound files): a low sawtooth sliding down,
+// through a "mouth" filter that opens and closes, with a little vibrato.
+// m.html has a copy.
+function moo(ctx, vol) {
+  try {
+    const t = ctx.currentTime, len = 1.6;
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    const lfo = ctx.createOscillator(), lfoG = ctx.createGain();
+    o.type = o2.type = "sawtooth";
+    o.frequency.setValueAtTime(150, t); o.frequency.linearRampToValueAtTime(175, t + 0.35); o.frequency.exponentialRampToValueAtTime(105, t + len);
+    o2.frequency.setValueAtTime(151.5, t); o2.frequency.linearRampToValueAtTime(176.5, t + 0.35); o2.frequency.exponentialRampToValueAtTime(106, t + len);
+    lfo.frequency.value = 5.5; lfoG.gain.value = 3; lfo.connect(lfoG); lfoG.connect(o.frequency); lfoG.connect(o2.frequency);
+    f.type = "lowpass"; f.Q.value = 6;
+    f.frequency.setValueAtTime(300, t); f.frequency.linearRampToValueAtTime(900, t + 0.45); f.frequency.linearRampToValueAtTime(450, t + len);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol * 2.2, t + 0.18);
+    g.gain.setValueAtTime(vol * 2.2, t + len - 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(f); o2.connect(f); f.connect(g).connect(ctx.destination);
+    for (const x of [o, o2, lfo]) { x.start(t); x.stop(t + len + 0.05); }
+  } catch {}
+}

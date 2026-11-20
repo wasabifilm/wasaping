@@ -45,8 +45,11 @@
   <span>Scarica il database dei produttori (IEEE) per vedere chi ha fatto ogni dispositivo.</span>
   <button id="ouiBtn">Scarica</button>
 </div>
-<div class="notice" id="updBar">
-  <span id="updText"></span><a id="updGet" target="_blank" rel="noopener"><button class="primary">Scarica</button></a><button id="updOff">Non controllare più</button>
+<div class="notice upd" id="updBar">
+  <span class="updIcon" aria-hidden="true">⬆</span>
+  <div class="updMain"><div id="updText"></div><div class="updNews" id="updNews"></div></div>
+  <span class="updBtns"><button class="primary" id="updNow">Aggiorna ora</button><button id="updNotes" title="Le note della versione su GitHub">Novità</button><button id="updLater" title="Lo ricorda domani">Più tardi</button></span>
+  <a id="updOff" title="Si riaccende da ⚙ Impostazioni → Sistema">non controllare più</a>
 </div>
 <div class="notice info" id="machidden">
   <span><b>macOS nasconde gli indirizzi MAC</b> ai programmi non firmati da uno sviluppatore Apple registrato, quindi MAC e produttori restano vuoti.
@@ -79,9 +82,12 @@
   <label for="dKind">Tipo</label>
   <select id="dKind" title="Se wasaping l'ha riconosciuto male, correggilo: la correzione resta e finisce nella diagnostica"></select>
   <div class="sub" id="dKindAuto"></div>
+  <label for="dGroup">Reparto</label>
+  <select id="dGroup" title="Nel Monitor i dispositivi critici sono divisi per reparto (luci, audio, video, rete), ognuno con il suo stato e il suo «Silenzia»"></select>
   <div class="actions"><button class="primary" id="dSave">Salva</button></div>
   <ul class="warnlist" id="dWarn"></ul>
   <dl id="dInfo"></dl>
+  <div id="dHist" hidden></div>
   <div class="actions">
     <button id="dWol" title="Accende il dispositivo, se la sua scheda di rete lo supporta">Sveglia (Wake-on-LAN)</button>
     <button id="dForget" class="danger" title="Toglie il dispositivo dall'elenco dei conosciuti">Dimentica</button>
@@ -126,7 +132,7 @@
   </header>
   <div id="mNet"></div>
   <div class="mbody">
-    <div class="mmain"><div class="tag" id="mPTP"></div><div id="tiles"></div></div>
+    <div class="mmain"><div class="mgroups" id="mGroups"></div><div class="tag" id="mPTP"></div><div id="tiles"></div></div>
     <aside class="mlog">
       <div class="mlog-h"><b>Registro</b><span class="spacer"></span><button id="mExport" title="Salva il registro in CSV">Esporta</button></div>
       <ol id="mEvents"></ol>

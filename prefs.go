@@ -22,6 +22,7 @@ type prefsView struct {
 	DefaultPorts  string       `json:"default_ports"`
 	LoopPause     int          `json:"loop_pause"`
 	AlarmVolume   int          `json:"alarm_volume"`
+	AlarmSound    string       `json:"alarm_sound"`
 	SavedRanges   []SavedRange `json:"saved_ranges"`
 	TextSize      int          `json:"text_size"`
 	Colorblind    bool         `json:"colorblind"`
@@ -37,7 +38,7 @@ type dataFile struct {
 
 func prefsOf(s settings) prefsView {
 	v := prefsView{SNMPCommunity: firstNonEmpty(s.SNMPCommunity, "public"), DefaultPorts: firstNonEmpty(s.DefaultPorts, "common"),
-		LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, DataDir: dataDir(),
+		LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, AlarmSound: firstNonEmpty(s.AlarmSound, "beep"), DataDir: dataDir(),
 		SavedRanges: s.SavedRanges, TextSize: firstPositive(s.TextSize, 100), Colorblind: s.Colorblind, PublicIP: s.PublicIP}
 	if v.SavedRanges == nil {
 		v.SavedRanges = []SavedRange{}
@@ -77,6 +78,7 @@ func handlePrefs(w http.ResponseWriter, r *http.Request) {
 			DefaultPorts  *string       `json:"default_ports"`
 			LoopPause     *int          `json:"loop_pause"`
 			AlarmVolume   *int          `json:"alarm_volume"`
+			AlarmSound    *string       `json:"alarm_sound"`
 			SavedRanges   *[]SavedRange `json:"saved_ranges"`
 			TextSize      *int          `json:"text_size"`
 			Colorblind    *bool         `json:"colorblind"`
@@ -112,6 +114,13 @@ func handlePrefs(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.AlarmVolume != nil {
 			s.AlarmVolume = min(max(*req.AlarmVolume, 10), 100)
+		}
+		if req.AlarmSound != nil {
+			if !validSound(*req.AlarmSound) {
+				http.Error(w, "suono sconosciuto", http.StatusBadRequest)
+				return
+			}
+			s.AlarmSound = *req.AlarmSound
 		}
 		if req.SavedRanges != nil {
 			sr, err := cleanRanges(*req.SavedRanges)
@@ -174,6 +183,7 @@ type settingsFile struct {
 	DefaultPorts  string       `json:"default_ports,omitempty"`
 	LoopPause     int          `json:"loop_pause,omitempty"`
 	AlarmVolume   int          `json:"alarm_volume,omitempty"`
+	AlarmSound    string       `json:"alarm_sound,omitempty"`
 	SavedRanges   []SavedRange `json:"saved_ranges,omitempty"`
 	TextSize      int          `json:"text_size,omitempty"`
 	Colorblind    bool         `json:"colorblind,omitempty"`
@@ -185,7 +195,7 @@ func handleSettingsExport(w http.ResponseWriter, r *http.Request) {
 	s := loadSettings()
 	writeJSON(w, settingsFile{Format: "wasaping-settings", Version: 1, Exported: time.Now().Format(time.RFC3339),
 		Repeat: s.Repeat, MonitorEvery: s.MonitorEvery, SNMPCommunity: s.SNMPCommunity, NoUpdateCheck: s.NoUpdateCheck,
-		DefaultPorts: s.DefaultPorts, LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, alertCfg: alertsOf(s),
+		DefaultPorts: s.DefaultPorts, LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, AlarmSound: s.AlarmSound, alertCfg: alertsOf(s),
 		SavedRanges: s.SavedRanges, TextSize: s.TextSize, Colorblind: s.Colorblind, PublicIP: s.PublicIP})
 }
 
@@ -221,6 +231,9 @@ func handleSettingsImport(w http.ResponseWriter, r *http.Request) {
 	}
 	if f.AlarmVolume == 0 || (f.AlarmVolume >= 10 && f.AlarmVolume <= 100) {
 		s.AlarmVolume = f.AlarmVolume
+	}
+	if f.AlarmSound == "" || validSound(f.AlarmSound) {
+		s.AlarmSound = f.AlarmSound
 	}
 	s.AlertOSC, s.AlertOSCAddr, s.AlertWebhook, s.Telegram, s.Ntfy, s.Slack = a.OSC, a.OSCAddr, a.Webhook, a.Telegram, a.Ntfy, a.Slack
 	if sr, err := cleanRanges(f.SavedRanges); err == nil {
@@ -311,3 +324,6 @@ func cleanRanges(in []SavedRange) ([]SavedRange, error) {
 	}
 	return out, nil
 }
+
+// validSound: the alarm sounds the page can play.
+func validSound(s string) bool { return s == "beep" || s == "moo" }

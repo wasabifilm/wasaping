@@ -295,6 +295,10 @@ function openDetail(key) {
       Object.entries(KIND).filter(([k]) => k).map(([k, v]) => `<option value="${k}">${esc(v[0])}</option>`).join("");
     $("dKind").value = h.auto_kind ? h.kind : "";
     $("dKindAuto").textContent = h.auto_kind ? `wasaping pensava: ${(KIND[h.auto_kind] || KIND[""])[0]}` : "";
+    $("dGroup").innerHTML = `<option value="">dal tipo (${esc(DEPTS[KIND_GROUP[h.kind] || "other"])})</option>` +
+      Object.entries(DEPTS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    $("dGroup").value = h.group || "";
+    loadHistory(h);
     translateTree($("detail"));
   }
   if (changed) { $("dName").value = h.name || ""; $("dRole").value = h.role || ""; $("dNote").value = h.note || ""; $("dCrit").checked = !!h.critical; $("dMsg").textContent = ""; }
@@ -490,6 +494,61 @@ $("dForget").onclick = async () => {
     closeDetail();
   } catch (e) { $("dMsg").textContent = "Errore: " + e.message; }
 };
+
+// The department in the Monitor ("" = from the type).
+$("dGroup").onchange = async () => {
+  const h = findHost(selected); if (!h) return;
+  const group = $("dGroup").value;
+  try {
+    await post("api/device", {key: h.key, net: h.net || "", group});
+    h.group = group;
+    $("dMsg").textContent = `✓ Reparto: ${DEPTS[groupOf(h)]}.`;
+  } catch (e) { $("dMsg").textContent = "Non salvato: " + e.message; }
+};
+
+// What the Monitor saw of this device: drops, slow periods, the last 14 days.
+let histFor = "";
+const num1 = x => x.toLocaleString(LANG === "en" ? "en-GB" : "it", {maximumFractionDigits: 1});
+async function loadHistory(h) {
+  const box = $("dHist"), key = h.key;
+  histFor = key;
+  box.hidden = true;
+  let d;
+  try { d = await fetch(`api/history?ip=${encodeURIComponent(h.ip)}&net=${encodeURIComponent(h.net || "")}`).then(r => r.ok ? r.json() : null); } catch { return; }
+  if (!d || histFor !== key) return;
+  const watched = d.since && !d.since.startsWith("0001");
+  if (!watched && !d.rtt) {
+    if (!h.critical) return;
+    box.innerHTML = '<h3>Storico dei problemi</h3><div class="sum muted">Ancora niente: il Monitor lo tiene d\'occhio da adesso e qui comparirà quando è caduto o è stato lento.</div>';
+    box.hidden = false; translateTree(box); return;
+  }
+  const t = s => new Date(s).toLocaleString(LANG === "en" ? "en-GB" : "it", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+  const sum = d.drops_7d
+    ? `<b>${d.drops_7d === 1 ? "1 caduta" : d.drops_7d + " cadute"}</b><span> negli ultimi 7 giorni</span><span>${d.drops_24h ? ` (${d.drops_24h} nelle ultime 24 ore)` : ""}</span><span> · giù in tutto ${esc(fmtDur(d.down_7d_s))}</span>`
+    : d.drops ? `Nessuna caduta negli ultimi 7 giorni · l'ultima: ${esc(t(d.last_drop))}` : "Mai caduto da quando il Monitor lo segue.";
+  const more = [
+    d.longest_s > 0 ? `la più lunga ${esc(fmtDur(d.longest_s))} (${esc(t(d.longest_at))})` : "",
+    d.slow_7d ? `${d.slow_7d === 1 ? "1 volta lento" : d.slow_7d + " volte lento"} in 7 giorni` : "",
+    d.rtt && d.rtt.points.length ? `risposta nelle ultime 24 ore: media ${num1(d.rtt.avg)} ms, massima ${d.rtt.max} ms${d.rtt.loss ? `, ${num1(d.rtt.loss)}% senza risposta` : ""}` : "",
+  ].filter(Boolean);
+  const maxD = Math.max(1, ...d.days.map(x => x.drops));
+  const days = d.days.map(x => {
+    const tip = `${new Date(x.day + "T12:00").toLocaleDateString(LANG === "en" ? "en-GB" : "it", {weekday: "short", day: "numeric", month: "short"})}: ` + (LANG === "en"
+      ? `${x.drops} ${x.drops === 1 ? "drop" : "drops"}${x.down_s ? ", down " + fmtDur(x.down_s) : ""}${x.slow ? `, slow ${x.slow}×` : ""}`
+      : `${x.drops} ${x.drops === 1 ? "caduta" : "cadute"}${x.down_s ? ", giù " + fmtDur(x.down_s) : ""}${x.slow ? `, lento ${x.slow} volte` : ""}`);
+    return `<i class="${x.drops ? "d" : x.slow ? "s" : ""}" style="${x.drops ? `height:${10 + 24 * x.drops / maxD}px` : ""}" title="${esc(tip)}"></i>`;
+  }).join("");
+  const items = d.recent.map(x => `<li class="${x.kind}"><span class="t">${esc(t(x.at))}</span>` + (
+    x.kind === "down" ? `<b>non rispondeva</b> <span>${x.open ? (!hosts.includes(h) ? "· ancora giù" : "· fine non registrata") : "per " + esc(fmtDur(x.secs))}</span>`
+    : x.kind === "slow" ? `<b>lento</b>${x.text ? ` <span class="nt">(${esc(x.text)})</span>` : ""}${x.open ? "" : `<span> per ${esc(fmtDur(x.secs))}</span>`}`
+    : `<span class="nt">${esc(x.text)}</span>`) + "</li>").join("");
+  box.innerHTML = `<h3>Storico dei problemi</h3><div class="sum">${sum}${more.length ? "<br>" + more.map(x => `<span>${x}</span>`).join(" · ") : ""}</div>
+    <div class="days" title="Ultimi 14 giorni: rosso = cadute, arancione = lento">${days}</div><div class="dlab"><span>14 giorni fa</span><span>oggi</span></div>
+    ${d.rtt && d.rtt.points.length > 1 ? spark(d.rtt.points.map(p => p[1])) : ""}
+    ${items ? `<ul>${items}</ul>` : ""}`;
+  box.hidden = false;
+  translateTree(box);
+}
 
 // Correct the type wasaping guessed: saved, and included in the diagnostics.
 $("dKind").onchange = async () => {

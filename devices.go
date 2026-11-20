@@ -31,6 +31,7 @@ type Device struct {
 	Vendor     string      `json:"vendor,omitempty"`
 	Kind       string      `json:"kind,omitempty"`
 	KindManual string      `json:"kind_manual,omitempty"` // type chosen by the user
+	Group      string      `json:"group,omitempty"`       // department chosen by the user ("" = from the type)
 	Ports      []int       `json:"ports,omitempty"`
 	FirstSeen  time.Time   `json:"first_seen"`
 	LastSeen   time.Time   `json:"last_seen"`
@@ -69,6 +70,7 @@ type HostView struct {
 	FirstSeen time.Time `json:"first_seen,omitempty"`
 	History   string    `json:"history,omitempty"`   // latest scans, oldest first: 1 = seen, 0 = not
 	AutoKind  string    `json:"auto_kind,omitempty"` // what wasaping guessed, when the user corrected it
+	Group     string    `json:"group,omitempty"`     // department chosen by the user
 }
 
 // GoneView is a known device that did not answer this scan.
@@ -312,7 +314,7 @@ func (ss *Session) View(h scanner.Host) HostView {
 	if d.KindManual != "" && d.KindManual != h.Kind {
 		auto, h.Kind = h.Kind, d.KindManual
 	}
-	return HostView{AutoKind: auto, Host: h, Key: key, Net: ss.id, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
+	return HostView{AutoKind: auto, Host: h, Key: key, Net: ss.id, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical, Group: d.Group,
 		New: !known && !ss.first, FirstSeen: d.FirstSeen, History: hist}
 }
 
@@ -508,6 +510,19 @@ func (s *Store) SetKind(id, key, kind string) bool {
 	return true
 }
 
+// SetGroup puts a device in a department ("" = the one of its type).
+func (s *Store) SetGroup(id, key, group string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.netLocked(id)
+	if n == nil || n.Devices[key] == nil {
+		return false
+	}
+	n.Devices[key].Group = group
+	s.saveLocked()
+	return true
+}
+
 // Forget removes a device from a network's known ones ("" = current).
 func (s *Store) Forget(id, key string) {
 	s.mu.Lock()
@@ -602,6 +617,7 @@ type VenueDevice struct {
 	IP         string    `json:"ip"`
 	Kind       string    `json:"kind,omitempty"`
 	KindManual string    `json:"kind_manual,omitempty"`
+	Group      string    `json:"group,omitempty"`
 	Model      string    `json:"model,omitempty"`
 	Friendly   string    `json:"friendly,omitempty"`
 	Hostname   string    `json:"hostname,omitempty"`
@@ -638,7 +654,7 @@ func (s *Store) ExportNetwork(id string) (Venue, bool) {
 	}
 	for k, d := range n.Devices {
 		v.Devices = append(v.Devices, VenueDevice{Key: k, Name: d.Name, Role: d.Role, Note: d.Note, Critical: d.Critical,
-			MAC: d.MAC, IP: d.IP, Kind: d.Kind, KindManual: d.KindManual, Model: d.Model, Friendly: d.Friendly, Hostname: d.Hostname, LastSeen: d.LastSeen})
+			MAC: d.MAC, IP: d.IP, Kind: d.Kind, KindManual: d.KindManual, Group: d.Group, Model: d.Model, Friendly: d.Friendly, Hostname: d.Hostname, LastSeen: d.LastSeen})
 	}
 	sort.Slice(v.Devices, func(i, j int) bool { return ipLess(v.Devices[i].IP, v.Devices[j].IP) })
 	return v, true
@@ -691,6 +707,9 @@ func (s *Store) ImportVenueInto(v Venue, target string) (int, string, error) {
 		}
 		if vd.KindManual != "" && validKind(vd.KindManual) {
 			d.KindManual, d.Kind = vd.KindManual, vd.KindManual
+		}
+		if vd.Group != "" && validGroup(vd.Group) {
+			d.Group = vd.Group
 		}
 		d.Critical = d.Critical || vd.Critical
 		count++

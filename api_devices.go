@@ -29,7 +29,8 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 		Note     string  `json:"note"`
 		Critical bool    `json:"critical"`
 		Forget   bool    `json:"forget"`
-		Kind     *string `json:"kind"` // set only to correct the type ("" = automatic)
+		Kind     *string `json:"kind"`  // set only to correct the type ("" = automatic)
+		Group    *string `json:"group"` // set only to change the department ("" = from the type)
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || req.Key == "" {
 		http.Error(w, "richiesta non valida", http.StatusBadRequest)
@@ -37,6 +38,18 @@ func handleDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Name) > 200 || len(req.Role) > 200 || len(req.Note) > 2000 {
 		http.Error(w, "testo troppo lungo", http.StatusBadRequest)
+		return
+	}
+	if req.Group != nil {
+		if *req.Group != "" && !validGroup(*req.Group) {
+			http.Error(w, "reparto sconosciuto", http.StatusBadRequest)
+			return
+		}
+		if !devices().SetGroup(req.Net, req.Key, *req.Group) {
+			http.Error(w, "dispositivo sconosciuto", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if req.Kind != nil {

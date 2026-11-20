@@ -99,6 +99,7 @@ type settings struct {
 	UpdateChecked   time.Time    `json:"update_checked,omitempty"`
 	LatestVersion   string       `json:"latest_version,omitempty"`
 	LatestURL       string       `json:"latest_url,omitempty"`
+	LatestNews      []string     `json:"latest_news,omitempty"` // highlights of the latest release
 	Lang            string       `json:"lang,omitempty"`
 	AlertOSC        string       `json:"alert_osc,omitempty"`
 	AlertOSCAddr    string       `json:"alert_osc_address,omitempty"`
@@ -115,6 +116,7 @@ type settings struct {
 	DefaultPorts    string       `json:"default_ports,omitempty"`   // "common", "none" or a list
 	LoopPause       int          `json:"loop_pause,omitempty"`      // seconds between continuous scans
 	AlarmVolume     int          `json:"alarm_volume,omitempty"`    // 10–100, 0 = default
+	AlarmSound      string       `json:"alarm_sound,omitempty"`     // "beep" (default) or "moo"
 	MonitorSlowMs   int          `json:"monitor_slow_ms,omitempty"` // a critical device answering slower is flagged
 	OSCInPort       int          `json:"osc_in_port,omitempty"`     // commands from QLab, consoles…: 0 = off
 	SavedRanges     []SavedRange `json:"saved_ranges,omitempty"`    // named scan targets

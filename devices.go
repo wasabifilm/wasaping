@@ -181,6 +181,11 @@ func networkID(ctx context.Context, targets []net.IP) (id, auto, subnetOut strin
 			return "gw:" + gw + "@" + subnet, "Rete " + subnet + ", router " + gw, subnet
 		}
 	}
+	if len(targets) > 0 {
+		if via := scanner.InRouted(targets[0].String(), scanner.RoutedNetworks()); via != "" {
+			return "net:" + subnet, "Rete " + subnet + " via " + via, subnet
+		}
+	}
 	return "net:" + subnet, "Rete " + subnet + " senza router", subnet
 }
 

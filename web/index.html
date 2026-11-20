@@ -19,7 +19,9 @@
 <div class="bar">
   <div class="group">
     <select id="iface" title="Interfaccia di rete"></select>
-    <input id="target" placeholder="192.168.1.0/24" spellcheck="false">
+    <span class="targetwrap"><input id="target" placeholder="192.168.1.0/24" spellcheck="false" list="rangeList"><button id="rangeBtn" class="rangebtn" title="Salva questo intervallo con un nome">☆</button>
+      <span id="rangeBox" class="rangebox" hidden></span></span>
+    <datalist id="rangeList"></datalist>
     <select id="ports" title="Porte da controllare">
       <option value="common">Porte comuni</option>
       <option value="none">Nessuna porta (più veloce)</option>
@@ -36,7 +38,8 @@
   </div>
 </div>
 <div class="progress"><div id="prog"></div></div>
-<div class="status" id="statusRow"><span id="status">Pronto.</span><span id="extra"></span><div class="netbar" id="netbar"></div></div>
+<div class="status" id="statusRow"><span id="status">Pronto.</span><span id="extra"></span><div class="netbar" id="netbar"></div><span id="pubip" class="pubip" hidden></span></div>
+<div class="vianote" id="viaNote" hidden></div>
 <div class="notice warn" id="issues"></div>
 <div class="notice" id="oui">
   <span>Scarica il database dei produttori (IEEE) per vedere chi ha fatto ogni dispositivo.</span>

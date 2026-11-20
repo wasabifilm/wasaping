@@ -37,7 +37,7 @@ type devInfo struct {
 // names and TXT records carry friendly names and models. Show gear first.
 var browseTypes = []string{
 	"_netaudio-arc._udp", "_netaudio-cmc._udp", "_netaudio-chan._udp", "_ndi._tcp", "_blackmagic._tcp", "_videohub._tcp",
-	"_qlab._tcp", "_qlab._udp", "_osc._udp", "_osc._tcp",
+	"_qlab._tcp", "_qlab._udp", "_osc._udp", "_osc._tcp", "_oscjson._tcp",
 	"_googlecast._tcp", "_airplay._tcp", "_companion-link._tcp", "_raop._tcp",
 	"_device-info._tcp", "_smb._tcp", "_afpovertcp._tcp", "_ipp._tcp", "_printer._tcp",
 	"_hap._tcp", "_spotify-connect._tcp", "_sonos._tcp", "_workstation._tcp", "_http._tcp",
@@ -274,6 +274,14 @@ func (d *devInfo) addInstance(svc, inst string) {
 			inst = host // "PC-GRAFICA (Resolume)" -> "PC-GRAFICA"
 		}
 	}
+	if svc == "osc" || svc == "oscjson" { // "Millumin on MacBook Pro di Anna"
+		if app := showApp(inst); app != "" {
+			d.services = mergeUnique(d.services, []string{app})
+			if _, host, ok := strings.Cut(inst, " on "); ok && host != "" {
+				inst = host
+			}
+		}
+	}
 	if svc == "raop" { // "A1B2C3D4E5F6@Soggiorno"
 		if _, after, ok := strings.Cut(inst, "@"); ok {
 			inst = after
@@ -282,6 +290,21 @@ func (d *devInfo) addInstance(svc, inst string) {
 	if p, ok := friendlyPrio[svc]; ok && p < d.fprio {
 		d.friendly, d.fprio = inst, p
 	}
+}
+
+// showApps are show programs that announce themselves over Bonjour as an
+// OSC (or OSCQuery) service called "<App> on <computer>".
+var showApps = []string{"Millumin", "MadMapper", "TouchDesigner", "Resolume", "Isadora", "Chataigne", "Vezér", "Vezer", "QLab", "Ableton Live", "Max"}
+
+// showApp returns the show program named at the start of an OSC service
+// instance, as a lower-case service name ("millumin"), or "".
+func showApp(inst string) string {
+	for _, a := range showApps {
+		if strings.HasPrefix(strings.ToLower(inst), strings.ToLower(a)+" ") || strings.EqualFold(inst, a) {
+			return strings.ToLower(strings.ReplaceAll(a, " ", "-"))
+		}
+	}
+	return ""
 }
 
 func (d *devInfo) setModel(prio int, m string) {

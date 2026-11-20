@@ -35,6 +35,7 @@ func handleInfo(w http.ResponseWriter, r *http.Request) {
 		"interfaces":    ifs,
 		"defaultTarget": def,
 		"allTargets":    localScanTargets(),
+		"routed":        scanner.RoutedNetworks(),
 		"hasOUI":        scanner.HasOUI(),
 		"os":            runtime.GOOS,
 		"app":           app,

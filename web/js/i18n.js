@@ -260,7 +260,7 @@ const PAT = [
   [/^visto (.+)$/, (m, w) => "seen " + tr(w)], [/^oggi alle (.+)$/, "today at $1"], [/^ieri alle (.+)$/, "yesterday at $1"], [/^(.+) alle (\d+:\d+)$/, "$1 at $2"],
   [/^(\d+) su (\d+) scansioni$/, "$1 of $2 scans"], [/^(\d+) (NON RISPONDE|NON RISPONDONO)$/, "$1 NOT RESPONDING"], [/^da (.+)$/, "since $1"],
   [/^di nuovo in linea dopo (.+)$/, (m, d) => "back online after " + d.replace(" min ", " min ")],
-  [/^Rete (\S+) senza router$/, "Network $1 without router"], [/^Rete (\S+), router (.+)$/, "Network $1, router $2"],
+  [/^Rete (\S+) senza router$/, "Network $1 without router"], [/^Rete (\S+) via (.+)$/, "Network $1 via $2"], [/^Rete (\S+), router (.+)$/, "Network $1, router $2"],
   [/^ · (Rete \S+.*)$/, (m, r) => " · " + tr(r)], [/^ · attivo, anche a finestra chiusa$/, " · on, with the window closed too"], [/^ · fermo$/, " · stopped"],
   [/^(.+) · attivo, anche a finestra chiusa$/, "$1 · on, with the window closed too"], [/^(.+) · fermo$/, "$1 · stopped"],
   [/^(.+) · non risponde$/, (m, k) => tr(k) + " · not responding"],
@@ -458,3 +458,22 @@ PAT.push(
   [/^([\d.]+) di ([\d.]+) · aperte: (.+)$/, "$1 of $2 · open: $3"], [/^([\d.]+) di ([\d.]+) · nessuna aperta finora$/, "$1 of $2 · none open so far"],
   [/^✓ (\d+) port[ae] apert[ae] su ([\d.]+) controllate, in (\d+) s\.$/, "✓ $1 open of $2 checked, in $3 s."],
 );
+// Saved ranges, text size, colours, public IP (0.8.9).
+for (const [k, v] of Object.entries({
+  "Salva questo intervallo con un nome": "Save this range with a name", "Nome, es. Palco": "Name, e.g. Stage", "Togli": "Remove",
+  "Intervallo tolto.": "Range removed.", "Dimensione del testo": "Text size", "normale": "normal",
+  "Anche con ⌘+ e ⌘− (Ctrl su Windows e Linux), ⌘0 per tornare normale.": "Also with ⌘+ and ⌘− (Ctrl on Windows and Linux), ⌘0 for normal.",
+  "Colori": "Colours", "per daltonici": "colour-blind friendly",
+  "Blu per «tutto bene» e arancione per «problema», al posto di verde e rosso.": "Blue for \"all good\" and orange for \"problem\", instead of green and red.",
+  "Intervalli salvati": "Saved ranges", "nessuno": "none",
+  "Si salvano con ☆ accanto al campo dell'intervallo e si ritrovano nel menu delle interfacce.": "Save them with ☆ beside the range field; they appear in the interface menu.",
+  "IP pubblico": "Public IP", "mostra IP pubblico, provider e paese": "show public IP, provider and country",
+  "Lo chiede a ipinfo.io (un servizio su internet) ogni 10 minuti: per questo è spento finché non lo accendi.": "It asks ipinfo.io (an internet service) every 10 minutes: that is why it is off until you turn it on.",
+  "Salvato.": "Saved.",
+})) EN.set(k, v);
+PAT.push(
+  [/^Testo al (\d+)%$/, "Text at $1%"], [/^Salvato: «(.+)»\. Lo ritrovi nel menu delle interfacce\.$/, "Saved: \"$1\". You find it in the interface menu."],
+  [/^Intervallo salvato: «(.+)»\. Clic per toglierlo$/, "Saved range: \"$1\". Click to remove it"],
+);
+PAT.push([/^Attraverso (.+): arrivano IP, porte, ping e nomi DNS o SMB; MAC, produttori, Bonjour e protocolli show in broadcast \(Art-Net, Dante\) no\.$/,
+  "Through $1: IP, ports, ping and DNS or SMB names arrive; MACs, makers, Bonjour and broadcast show protocols (Art-Net, Dante) do not."]);

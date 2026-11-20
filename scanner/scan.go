@@ -42,7 +42,8 @@ type Host struct {
 	Dante        *DanteInfo `json:"dante,omitempty"`
 	Kind         string     `json:"kind,omitempty"` // see GuessKind
 	Warnings     []string   `json:"warnings,omitempty"`
-	OffSubnet    bool       `json:"off_subnet,omitempty"` // not in any network of this computer
+	OffSubnet    bool       `json:"off_subnet,omitempty"` // not in any network of this computer, nor reached through a route
+	Via          string     `json:"via,omitempty"`        // reached through a route (VPN, router): the interface
 	Gateway      bool       `json:"gateway,omitempty"`
 	Self         bool       `json:"self,omitempty"`
 	ArtBroadcast []int      `json:"art_broadcast,omitempty"` // Art-Net universes it sends in broadcast
@@ -110,6 +111,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 		inTargets[ip.String()] = true
 	}
 	localNets := localNetworks()
+	routed := RoutedNetworks()
 
 	// Show protocols are heard while the probes run.
 	var show map[string]*showInfo
@@ -366,7 +368,8 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				host.Friendly = showName(host)
 			}
 			host.Gateway = ip == gateway
-			host.OffSubnet = !inNets(ip, localNets)
+			host.Via = InRouted(ip, routed)
+			host.OffSubnet = !inNets(ip, localNets) && host.Via == ""
 			host.Protocols = protocolsOf(host)
 			if host.Self {
 				host.Kind = KindComputer

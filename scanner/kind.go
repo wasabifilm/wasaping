@@ -67,7 +67,7 @@ func GuessKind(h Host) string {
 		port(30000, 30001) && has(vendor, "ma lighting"):
 		return KindLightDesk
 	case h.ArtNet != nil && h.ArtNet.Style == "media server", len(h.NDI) > 0,
-		svc("blackmagic", "videohub", "ndi") || port(9990, 9993, 9910, 5960),
+		svc("blackmagic", "videohub", "ndi", "millumin", "madmapper", "resolume", "touchdesigner", "isadora") || port(9990, 9993, 9910, 5960),
 		has(name, "atem", "hyperdeck", "videohub", "resolume", "millumin", "disguise", "pixera"):
 		return KindVideo
 	case h.ArtNet != nil || h.SACN != nil:

@@ -24,6 +24,11 @@ func protocolsOf(h Host) []string {
 	add(svc("blackmagic") || svc("videohub") || containsInt(h.Ports, 9990) || containsInt(h.Ports, 9993), "Blackmagic")
 	add(h.PJLink != nil, "PJLink")
 	add(svc("qlab") || containsInt(h.Ports, 53000), "QLab")
+	add(svc("millumin"), "Millumin")
+	add(svc("madmapper"), "MadMapper")
+	add(svc("touchdesigner"), "TouchDesigner")
+	add(svc("resolume"), "Resolume")
+	add(svc("isadora"), "Isadora")
 	add(svc("osc"), "OSC")
 	add(containsInt(h.Ports, 30000) || containsInt(h.Ports, 30001), "MA-Net")
 	add(containsInt(h.Ports, 49280), "Yamaha RCP")
@@ -73,9 +78,13 @@ func NetworkIssues(hosts []Host) []string {
 	gw := false
 	masters := map[string][]string{}
 	sacnUni := map[int][]string{}
+	direct := 0 // devices on this computer's own network (not via a VPN or router)
 	for _, h := range hosts {
 		if h.Gateway {
 			gw = true
+		}
+		if h.Via == "" && !h.OffSubnet && !h.Self {
+			direct++
 		}
 		if h.PTP != "" {
 			masters[h.PTP] = append(masters[h.PTP], h.IP)
@@ -86,7 +95,7 @@ func NetworkIssues(hosts []Host) []string {
 			}
 		}
 	}
-	if !gw && len(hosts) > 0 {
+	if !gw && direct > 0 {
 		out = append(out, "Nessun router su questa rete: normale per una rete show isolata, ma niente internet e niente DHCP dal router.")
 	}
 	for kind, ips := range masters {

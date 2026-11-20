@@ -92,6 +92,12 @@ async function init() {
     $("iface").add(o);
   }
   if ((info.allTargets || []).length > 1) $("iface").add(new Option(`Tutte le reti (${info.allTargets.length})`, "all"));
+  routedNets = info.routed || [];
+  if (routedNets.length) { // networks behind a VPN or a router
+    const g = document.createElement("optgroup"); g.label = LANG === "en" ? "Reachable through a VPN or router" : "Raggiungibili via VPN o router";
+    for (const r of routedNets) g.append(new Option(`${r.network} — ${r.label}`, r.network));
+    $("iface").add(g);
+  }
   $("iface").add(new Option("Personalizzato…", ""));
   $("target").value = info.defaultTarget;
   if (!info.hasOUI) $("oui").style.display = "flex";
@@ -105,7 +111,7 @@ async function init() {
   setInterval(pollLast, 15000);
   snmpCommunity = info.snmp || "public";
   try { prefs = await fetch("api/prefs").then(r => r.json()); snmpCommunity = prefs.snmp_community; } catch {}
-  applyDefaultPorts();
+  applyDefaultPorts(); applyLook(); fillRanges(); showPublicIP(); markVia();
   // Back where the page was before a reload (language change).
   let reopen = ""; try { reopen = sessionStorage.getItem("wasaping.reopen") || ""; sessionStorage.removeItem("wasaping.reopen"); } catch {}
   if (reopen) runTool(reopen);
@@ -391,6 +397,9 @@ async function settingsView() {
     <h4 id="sGen">Generali</h4>
     <b>Lingua</b><div class="opt">${sel("sLang", [["it", "Italiano"], ["en", "English"]], LANG)}</div>
     <b>Tema</b><div class="opt">${sel("sTheme", [["", "automatico"], ["light", "chiaro"], ["dark", "scuro"]], theme)}</div>
+    <b>Dimensione del testo</b><div class="opt">${sel("sTextSize", [[80, "80%"], [90, "90%"], [100, "normale"], [110, "110%"], [125, "125%"], [150, "150%"], [175, "175%"]], prefs.text_size || 100)}<span class="tag">Anche con ⌘+ e ⌘− (Ctrl su Windows e Linux), ⌘0 per tornare normale.</span></div>
+    <b>Colori</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sCB"${prefs.colorblind ? " checked" : ""}> per daltonici</label><span class="tag">Blu per «tutto bene» e arancione per «problema», al posto di verde e rosso.</span></div>
+    <b>Intervalli salvati</b><div class="opt"><span id="sRanges">${(prefs.saved_ranges || []).length ? prefs.saved_ranges.map(r => `<span class="pill"><b class="nt">${esc(r.name)}</b> <span class="mono">${esc(r.target)}</span></span>`).join(" ") : "nessuno"}</span><span class="tag">Si salvano con ☆ accanto al campo dell'intervallo e si ritrovano nel menu delle interfacce.</span></div>
 
     <h4 id="sScan">Scansione</h4>
     <b>Porte da controllare</b><div class="opt">${sel("sPorts", [["common", "Porte comuni"], ["none", "Nessuna porta (più veloce)"], ["custom", "Porte personalizzate…"]], portMode)}
@@ -417,6 +426,7 @@ async function settingsView() {
     <b></b><div class="opt"><button id="sAlertTest">Manda una prova</button><span class="tag" id="sAlertMsg"></span></div>
 
     <h4 id="sAcc">Rete e accesso</h4>
+    <b>IP pubblico</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sPub"${prefs.public_ip ? " checked" : ""}> mostra IP pubblico, provider e paese</label><span class="tag">Lo chiede a ipinfo.io (un servizio su internet) ogni 10 minuti: per questo è spento finché non lo accendi.</span></div>
     ${info.remote ? `<b>Accesso dalla rete</b><div class="opt"><span>Sei collegato da un altro computer.</span><form method="post" action="/logout" style="margin:0"><button>Disconnetti</button></form></div>` : `<b>Accesso completo dalla rete</b><div class="opt"><label class="check" style="margin:0"><input type="checkbox" id="sWeb"${wa.on ? " checked" : ""}> attivo</label>
       <input type="password" id="sWebPw" placeholder="${wa.has_password ? "nuova password (facoltativa)" : "password (almeno 8 caratteri)"}" autocomplete="new-password" style="width:230px"><button id="sWebPwSave">Salva password</button>
       <span class="tag" id="sWebInfo">${waInfo(wa)}</span><img id="sWebQR" class="qr" alt=""${wa.on ? ` src="api/qr?for=web&t=${Date.now()}"` : " hidden"}></div>
@@ -437,6 +447,9 @@ async function settingsView() {
     try { localStorage.setItem("wasaping.lang", $("sLang").value); sessionStorage.setItem("wasaping.reopen", "settings"); } catch {}
     location.reload();
   };
+  $("sTextSize").onchange = () => setTextSize(+$("sTextSize").value);
+  $("sCB").onchange = () => savePrefs({colorblind: $("sCB").checked}).then(() => { applyLook(); toast("Salvato."); }).catch(e => toast("Non salvato: " + e.message));
+  $("sPub").onchange = () => savePrefs({public_ip: $("sPub").checked}).then(() => { showPublicIP(); toast("Salvato."); }).catch(e => toast("Non salvato: " + e.message));
   $("sTheme").onchange = () => { theme = $("sTheme").value; try { localStorage.setItem("wasaping.theme", theme); } catch {} applyTheme(theme); };
   const portsChanged = () => {
     const custom = $("sPorts").value === "custom";
@@ -566,3 +579,99 @@ function sortValue(h, k) {
     default: return (h[k] || "").toLowerCase();
   }
 }
+
+// ---- Look: text size and colour-blind colours (Settings → Generali) ----
+function applyLook() {
+  document.documentElement.style.zoom = (prefs.text_size || 100) === 100 ? "" : String((prefs.text_size || 100) / 100);
+  document.documentElement.classList.toggle("cb", !!prefs.colorblind);
+}
+let textSizeT = 0;
+function setTextSize(v) {
+  prefs.text_size = Math.min(175, Math.max(70, v)); applyLook();
+  toast(`Testo al ${prefs.text_size}%`);
+  clearTimeout(textSizeT); textSizeT = setTimeout(() => post("api/prefs", {text_size: prefs.text_size}).catch(() => {}), 600);
+  if ($("sTextSize")) $("sTextSize").value = String(prefs.text_size);
+}
+// ⌘+ / ⌘− / ⌘0 (Ctrl on Windows and Linux): bigger, smaller, normal text.
+document.addEventListener("keydown", e => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const steps = [70, 80, 90, 100, 110, 125, 150, 175], cur = prefs.text_size || 100;
+  if (e.key === "+" || e.key === "=") { e.preventDefault(); setTextSize(steps.find(s => s > cur) || 175); }
+  else if (e.key === "-" || e.key === "_") { e.preventDefault(); setTextSize([...steps].reverse().find(s => s < cur) || 70); }
+  else if (e.key === "0") { e.preventDefault(); setTextSize(100); }
+});
+
+// ---- Networks reached through a VPN or a router ----
+let routedNets = [];
+const ipOf = s => { const m = /^(\d+\.\d+\.\d+\.\d+)/.exec((s || "").trim()); return m ? ipNum(m[1]) : null; };
+function routeOf(target) {
+  const ip = ipOf(target); if (ip === null) return null;
+  return routedNets.find(r => { const [a, b] = r.network.split("/"); const size = 2 ** (32 - +b), base = ipNum(a); return ip >= base && ip < base + size; }) || null;
+}
+// What crosses a VPN: a note beside the status while such a range is chosen.
+function markVia() {
+  const r = routeOf($("target").value), el = $("viaNote");
+  el.hidden = !r;
+  if (r) el.textContent = `Attraverso ${r.label}: arrivano IP, porte, ping e nomi DNS o SMB; MAC, produttori, Bonjour e protocolli show in broadcast (Art-Net, Dante) no.`;
+}
+
+// ---- Saved ranges: a scan target with a name ("Palco" = 10.0.0.1-50) ----
+function fillRanges() {
+  const rs = prefs.saved_ranges || [];
+  $("rangeList").innerHTML = rs.map(r => `<option value="${esc(r.target)}">${esc(r.name)}</option>`).join("");
+  $("iface").querySelector("optgroup.saved")?.remove();
+  if (rs.length) {
+    const g = document.createElement("optgroup"); g.className = "saved"; g.label = LANG === "en" ? "Saved ranges" : "Intervalli salvati";
+    for (const r of rs) g.append(new Option(`${r.name} — ${r.target}`, r.target));
+    $("iface").insertBefore(g, [...$("iface").options].find(o => o.value === "") || null);
+  }
+  markRange();
+}
+const savedRange = () => (prefs.saved_ranges || []).find(r => r.target === $("target").value.trim());
+function markRange() {
+  const r = savedRange();
+  const opt = r && [...$("iface").querySelectorAll("optgroup.saved option")].find(o => o.value === r.target);
+  if (opt) opt.selected = true;
+  $("rangeBtn").textContent = r ? "★" : "☆"; $("rangeBtn").classList.toggle("on", !!r);
+  $("rangeBtn").title = r ? `Intervallo salvato: «${r.name}». Clic per toglierlo` : "Salva questo intervallo con un nome";
+}
+$("target").addEventListener("input", () => { markRange(); markVia(); });
+$("iface").addEventListener("change", () => { markRange(); markVia(); });
+const saveRanges = list => post("api/prefs", {saved_ranges: list}).then(r => r.json()).then(p => { prefs = p; fillRanges(); });
+$("rangeBtn").onclick = () => {
+  const box = $("rangeBox"), target = $("target").value.trim(), r = savedRange();
+  if (!box.hidden) { box.hidden = true; return; }
+  if (!target) { $("target").focus(); return; }
+  box.innerHTML = r
+    ? `<span class="nt">${esc(r.name)}</span> <span class="muted mono">${esc(r.target)}</span><button id="rangeDel" class="danger">Togli</button>`
+    : `<input id="rangeName" maxlength="40" placeholder="Nome, es. Palco" spellcheck="false"><button id="rangeSave" class="primary">Salva</button>`;
+  box.hidden = false;
+  if (r) $("rangeDel").onclick = () => saveRanges(prefs.saved_ranges.filter(x => x !== r)).then(() => { box.hidden = true; toast("Intervallo tolto."); }).catch(e => toast("Errore: " + e.message));
+  else {
+    const save = () => {
+      const name = $("rangeName").value.trim(); if (!name) { $("rangeName").focus(); return; }
+      saveRanges([...(prefs.saved_ranges || []), {name, target}]).then(() => { box.hidden = true; toast(`Salvato: «${name}». Lo ritrovi nel menu delle interfacce.`); }).catch(e => toast("Non salvato: " + e.message));
+    };
+    $("rangeSave").onclick = save;
+    $("rangeName").onkeydown = e => { if (e.key === "Enter") save(); if (e.key === "Escape") { e.stopPropagation(); box.hidden = true; } };
+    $("rangeName").focus();
+  }
+};
+document.addEventListener("click", e => { if (!e.target.closest(".targetwrap")) $("rangeBox").hidden = true; });
+
+// ---- Public IP, provider and country (off until turned on in Settings) ----
+async function showPublicIP() {
+  const el = $("pubip");
+  if (!prefs.public_ip) { el.hidden = true; return; }
+  let d; try { d = await fetch("api/publicip").then(r => r.json()); } catch { return; }
+  if (!d.on) { el.hidden = true; return; }
+  el.hidden = false;
+  if (d.error) { el.textContent = (LANG === "en" ? "Public IP: " : "IP pubblico: ") + d.error; return; }
+  let country = d.country || "";
+  try { country = new Intl.DisplayNames([LANG], {type: "region"}).of(d.country) || country; } catch {}
+  const flag = /^[A-Z]{2}$/.test(d.country || "") ? String.fromCodePoint(...[...d.country].map(c => 0x1F1A5 + c.charCodeAt(0))) + " " : "";
+  const org = (d.org || "").replace(/^AS\d+\s+/, "");
+  el.innerHTML = `<span class="muted">IP pubblico</span> <span class="mono" data-copy="${esc(d.ip)}">${esc(d.ip)}</span>${org ? ` · <span class="nt">${esc(org)}</span>` : ""}${country ? ` · ${flag}<span class="nt">${esc(country)}</span>` : ""}`;
+  el.title = [d.city, country].filter(Boolean).join(", ");
+}
+setInterval(() => { if (!document.hidden) showPublicIP(); }, 10 * 60 * 1000);

@@ -88,35 +88,39 @@ func runCollect(ctx context.Context, target string, ips []net.IP, opt scanner.Op
 // ---- Settings ----
 
 type settings struct {
-	Repeat          int       `json:"repeat_minutes"` // 0 = no background scans
-	MonitorOn       bool      `json:"monitor_on,omitempty"`
-	MonitorEvery    int       `json:"monitor_every,omitempty"` // seconds
-	RemoteOn        bool      `json:"remote_on,omitempty"`
-	RemotePIN       string    `json:"remote_pin,omitempty"`
-	RemotePort      int       `json:"remote_port,omitempty"`
-	SNMPCommunity   string    `json:"snmp_community,omitempty"`
-	NoUpdateCheck   bool      `json:"no_update_check,omitempty"`
-	UpdateChecked   time.Time `json:"update_checked,omitempty"`
-	LatestVersion   string    `json:"latest_version,omitempty"`
-	LatestURL       string    `json:"latest_url,omitempty"`
-	Lang            string    `json:"lang,omitempty"`
-	AlertOSC        string    `json:"alert_osc,omitempty"`
-	AlertOSCAddr    string    `json:"alert_osc_address,omitempty"`
-	AlertWebhook    string    `json:"alert_webhook,omitempty"`
-	LatestMacZip    string    `json:"latest_mac_zip,omitempty"`
-	LatestSums      string    `json:"latest_sums,omitempty"`
-	Telegram        string    `json:"telegram,omitempty"`   // "bot-token|chat-id"
-	Ntfy            string    `json:"ntfy,omitempty"`       // https://ntfy.sh/topic
-	Slack           string    `json:"slack,omitempty"`      // incoming webhook
-	WebAccess       bool      `json:"web_access,omitempty"` // full interface from the network, with password
-	WebPasswordHash string    `json:"web_password_hash,omitempty"`
-	WebPasswordSalt string    `json:"web_password_salt,omitempty"`
-	WebPort         int       `json:"web_port,omitempty"`
-	DefaultPorts    string    `json:"default_ports,omitempty"`   // "common", "none" or a list
-	LoopPause       int       `json:"loop_pause,omitempty"`      // seconds between continuous scans
-	AlarmVolume     int       `json:"alarm_volume,omitempty"`    // 10–100, 0 = default
-	MonitorSlowMs   int       `json:"monitor_slow_ms,omitempty"` // a critical device answering slower is flagged
-	OSCInPort       int       `json:"osc_in_port,omitempty"`     // commands from QLab, consoles…: 0 = off
+	Repeat          int          `json:"repeat_minutes"` // 0 = no background scans
+	MonitorOn       bool         `json:"monitor_on,omitempty"`
+	MonitorEvery    int          `json:"monitor_every,omitempty"` // seconds
+	RemoteOn        bool         `json:"remote_on,omitempty"`
+	RemotePIN       string       `json:"remote_pin,omitempty"`
+	RemotePort      int          `json:"remote_port,omitempty"`
+	SNMPCommunity   string       `json:"snmp_community,omitempty"`
+	NoUpdateCheck   bool         `json:"no_update_check,omitempty"`
+	UpdateChecked   time.Time    `json:"update_checked,omitempty"`
+	LatestVersion   string       `json:"latest_version,omitempty"`
+	LatestURL       string       `json:"latest_url,omitempty"`
+	Lang            string       `json:"lang,omitempty"`
+	AlertOSC        string       `json:"alert_osc,omitempty"`
+	AlertOSCAddr    string       `json:"alert_osc_address,omitempty"`
+	AlertWebhook    string       `json:"alert_webhook,omitempty"`
+	LatestMacZip    string       `json:"latest_mac_zip,omitempty"`
+	LatestSums      string       `json:"latest_sums,omitempty"`
+	Telegram        string       `json:"telegram,omitempty"`   // "bot-token|chat-id"
+	Ntfy            string       `json:"ntfy,omitempty"`       // https://ntfy.sh/topic
+	Slack           string       `json:"slack,omitempty"`      // incoming webhook
+	WebAccess       bool         `json:"web_access,omitempty"` // full interface from the network, with password
+	WebPasswordHash string       `json:"web_password_hash,omitempty"`
+	WebPasswordSalt string       `json:"web_password_salt,omitempty"`
+	WebPort         int          `json:"web_port,omitempty"`
+	DefaultPorts    string       `json:"default_ports,omitempty"`   // "common", "none" or a list
+	LoopPause       int          `json:"loop_pause,omitempty"`      // seconds between continuous scans
+	AlarmVolume     int          `json:"alarm_volume,omitempty"`    // 10–100, 0 = default
+	MonitorSlowMs   int          `json:"monitor_slow_ms,omitempty"` // a critical device answering slower is flagged
+	OSCInPort       int          `json:"osc_in_port,omitempty"`     // commands from QLab, consoles…: 0 = off
+	SavedRanges     []SavedRange `json:"saved_ranges,omitempty"`    // named scan targets
+	TextSize        int          `json:"text_size,omitempty"`       // percent, 0 = 100
+	Colorblind      bool         `json:"colorblind,omitempty"`      // blue / orange instead of green / red
+	PublicIP        bool         `json:"public_ip,omitempty"`       // ask an internet service for the public IP
 }
 
 var (

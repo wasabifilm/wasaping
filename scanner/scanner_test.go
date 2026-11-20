@@ -146,3 +146,22 @@ func TestEmbeddedOUI(t *testing.T) {
 		t.Errorf("44a8fc = %q", v)
 	}
 }
+
+func TestShowAppFromOSC(t *testing.T) {
+	d := &devInfo{fprio: 99, mprio: 99}
+	d.addInstance("oscjson", "Millumin on MacBook Pro di Anna")
+	d.addInstance("osc", "Millumin on MacBook Pro di Anna")
+	if len(d.services) != 1 || d.services[0] != "millumin" || d.friendly != "MacBook Pro di Anna" {
+		t.Fatalf("services %v friendly %q", d.services, d.friendly)
+	}
+	h := Host{Services: d.services}
+	if p := protocolsOf(h); len(p) != 1 || p[0] != "Millumin" {
+		t.Fatalf("protocols %v", p)
+	}
+	if k := GuessKind(h); k != KindVideo {
+		t.Fatalf("kind %q", k)
+	}
+	if showApp("Oscar's mixer") != "" || showApp("TouchDesigner on PC-LED") != "touchdesigner" {
+		t.Fatal("showApp")
+	}
+}

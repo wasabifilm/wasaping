@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -9,18 +10,24 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/wasabifilm/wasaping/scanner"
 )
 
 // Preferences of the page (Settings → Scansione, Sistema), the data folder,
 // export and import of the settings, and QR codes of the access addresses.
 
 type prefsView struct {
-	SNMPCommunity string     `json:"snmp_community"`
-	DefaultPorts  string     `json:"default_ports"`
-	LoopPause     int        `json:"loop_pause"`
-	AlarmVolume   int        `json:"alarm_volume"`
-	DataDir       string     `json:"data_dir"`
-	Files         []dataFile `json:"files"`
+	SNMPCommunity string       `json:"snmp_community"`
+	DefaultPorts  string       `json:"default_ports"`
+	LoopPause     int          `json:"loop_pause"`
+	AlarmVolume   int          `json:"alarm_volume"`
+	SavedRanges   []SavedRange `json:"saved_ranges"`
+	TextSize      int          `json:"text_size"`
+	Colorblind    bool         `json:"colorblind"`
+	PublicIP      bool         `json:"public_ip"`
+	DataDir       string       `json:"data_dir"`
+	Files         []dataFile   `json:"files"`
 }
 
 type dataFile struct {
@@ -30,7 +37,11 @@ type dataFile struct {
 
 func prefsOf(s settings) prefsView {
 	v := prefsView{SNMPCommunity: firstNonEmpty(s.SNMPCommunity, "public"), DefaultPorts: firstNonEmpty(s.DefaultPorts, "common"),
-		LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, DataDir: dataDir()}
+		LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, DataDir: dataDir(),
+		SavedRanges: s.SavedRanges, TextSize: firstPositive(s.TextSize, 100), Colorblind: s.Colorblind, PublicIP: s.PublicIP}
+	if v.SavedRanges == nil {
+		v.SavedRanges = []SavedRange{}
+	}
 	if v.LoopPause == 0 {
 		v.LoopPause = 10
 	}
@@ -62,10 +73,14 @@ func validPorts(p string) bool {
 func handlePrefs(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var req struct {
-			SNMPCommunity *string `json:"snmp_community"`
-			DefaultPorts  *string `json:"default_ports"`
-			LoopPause     *int    `json:"loop_pause"`
-			AlarmVolume   *int    `json:"alarm_volume"`
+			SNMPCommunity *string       `json:"snmp_community"`
+			DefaultPorts  *string       `json:"default_ports"`
+			LoopPause     *int          `json:"loop_pause"`
+			AlarmVolume   *int          `json:"alarm_volume"`
+			SavedRanges   *[]SavedRange `json:"saved_ranges"`
+			TextSize      *int          `json:"text_size"`
+			Colorblind    *bool         `json:"colorblind"`
+			PublicIP      *bool         `json:"public_ip"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 			http.Error(w, "richiesta non valida", http.StatusBadRequest)
@@ -97,6 +112,24 @@ func handlePrefs(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.AlarmVolume != nil {
 			s.AlarmVolume = min(max(*req.AlarmVolume, 10), 100)
+		}
+		if req.SavedRanges != nil {
+			sr, err := cleanRanges(*req.SavedRanges)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			s.SavedRanges = sr
+		}
+		if req.TextSize != nil {
+			s.TextSize = min(max(*req.TextSize, 70), 175)
+		}
+		if req.Colorblind != nil {
+			s.Colorblind = *req.Colorblind
+		}
+		if req.PublicIP != nil {
+			s.PublicIP = *req.PublicIP
+			publicIPReset()
 		}
 		saveSettings(s)
 	}
@@ -131,16 +164,20 @@ func handleReveal(w http.ResponseWriter, r *http.Request) {
 // settingsFile is what travels to another computer: no PIN, no password,
 // nothing about this machine's state.
 type settingsFile struct {
-	Format        string `json:"format"` // "wasaping-settings"
-	Version       int    `json:"version"`
-	Exported      string `json:"exported,omitempty"`
-	Repeat        int    `json:"repeat_minutes"`
-	MonitorEvery  int    `json:"monitor_every,omitempty"`
-	SNMPCommunity string `json:"snmp_community,omitempty"`
-	NoUpdateCheck bool   `json:"no_update_check,omitempty"`
-	DefaultPorts  string `json:"default_ports,omitempty"`
-	LoopPause     int    `json:"loop_pause,omitempty"`
-	AlarmVolume   int    `json:"alarm_volume,omitempty"`
+	Format        string       `json:"format"` // "wasaping-settings"
+	Version       int          `json:"version"`
+	Exported      string       `json:"exported,omitempty"`
+	Repeat        int          `json:"repeat_minutes"`
+	MonitorEvery  int          `json:"monitor_every,omitempty"`
+	SNMPCommunity string       `json:"snmp_community,omitempty"`
+	NoUpdateCheck bool         `json:"no_update_check,omitempty"`
+	DefaultPorts  string       `json:"default_ports,omitempty"`
+	LoopPause     int          `json:"loop_pause,omitempty"`
+	AlarmVolume   int          `json:"alarm_volume,omitempty"`
+	SavedRanges   []SavedRange `json:"saved_ranges,omitempty"`
+	TextSize      int          `json:"text_size,omitempty"`
+	Colorblind    bool         `json:"colorblind,omitempty"`
+	PublicIP      bool         `json:"public_ip,omitempty"`
 	alertCfg
 }
 
@@ -148,7 +185,8 @@ func handleSettingsExport(w http.ResponseWriter, r *http.Request) {
 	s := loadSettings()
 	writeJSON(w, settingsFile{Format: "wasaping-settings", Version: 1, Exported: time.Now().Format(time.RFC3339),
 		Repeat: s.Repeat, MonitorEvery: s.MonitorEvery, SNMPCommunity: s.SNMPCommunity, NoUpdateCheck: s.NoUpdateCheck,
-		DefaultPorts: s.DefaultPorts, LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, alertCfg: alertsOf(s)})
+		DefaultPorts: s.DefaultPorts, LoopPause: s.LoopPause, AlarmVolume: s.AlarmVolume, alertCfg: alertsOf(s),
+		SavedRanges: s.SavedRanges, TextSize: s.TextSize, Colorblind: s.Colorblind, PublicIP: s.PublicIP})
 }
 
 func handleSettingsImport(w http.ResponseWriter, r *http.Request) {
@@ -185,6 +223,13 @@ func handleSettingsImport(w http.ResponseWriter, r *http.Request) {
 		s.AlarmVolume = f.AlarmVolume
 	}
 	s.AlertOSC, s.AlertOSCAddr, s.AlertWebhook, s.Telegram, s.Ntfy, s.Slack = a.OSC, a.OSCAddr, a.Webhook, a.Telegram, a.Ntfy, a.Slack
+	if sr, err := cleanRanges(f.SavedRanges); err == nil {
+		s.SavedRanges = sr
+	}
+	if f.TextSize == 0 || (f.TextSize >= 70 && f.TextSize <= 175) {
+		s.TextSize = f.TextSize
+	}
+	s.Colorblind, s.PublicIP = f.Colorblind, f.PublicIP
 	saveSettings(s)
 	writeJSON(w, prefsOf(s))
 }
@@ -235,4 +280,34 @@ func firstPositive(v ...int) int {
 		}
 	}
 	return 0
+}
+
+// SavedRange is a scan target with a name, e.g. "Palco" = 10.0.0.1-50.
+type SavedRange struct {
+	Name   string `json:"name"`
+	Target string `json:"target"`
+}
+
+// cleanRanges checks saved ranges: at most 50, a name, a valid target.
+func cleanRanges(in []SavedRange) ([]SavedRange, error) {
+	if len(in) > 50 {
+		return nil, fmt.Errorf(T("troppi intervalli salvati (massimo 50)", "too many saved ranges (50 at most)"))
+	}
+	var out []SavedRange
+	seen := map[string]bool{}
+	for _, r := range in {
+		r.Name, r.Target = strings.TrimSpace(r.Name), strings.TrimSpace(r.Target)
+		if r.Name == "" || len([]rune(r.Name)) > 40 {
+			return nil, fmt.Errorf(T("nome dell'intervallo non valido (1–40 caratteri)", "invalid range name (1–40 characters)"))
+		}
+		if _, err := scanner.ParseTargets(r.Target); err != nil {
+			return nil, fmt.Errorf("%s: %v", r.Name, err)
+		}
+		if seen[r.Target] {
+			continue
+		}
+		seen[r.Target] = true
+		out = append(out, r)
+	}
+	return out, nil
 }

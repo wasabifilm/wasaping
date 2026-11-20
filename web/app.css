@@ -365,3 +365,22 @@ button.ident.on { animation: blink 1s steps(2) infinite; }
 .label .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
 .label .txt b { font-size: 15px; }
 .label .mac { color: var(--muted); font-size: 11px; }
+
+/* Saved ranges: the star beside the range field and its little box. */
+.targetwrap { position: relative; display: inline-flex; align-items: center; }
+.targetwrap #target { padding-right: 28px; }
+.rangebtn { position: absolute; right: 2px; border: none; background: none; padding: 2px 6px; font-size: 15px; color: var(--muted); cursor: pointer; }
+.rangebtn.on { color: #e0a800; }
+.rangebox { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; display: flex; gap: 8px; align-items: center; padding: 8px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); white-space: nowrap; font-size: 13px; }
+.rangebox[hidden] { display: none; }
+.rangebox input { width: 170px; }
+.pubip { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.pubip + .netbar, .netbar + .pubip { margin-left: 12px; }
+
+/* Colour-blind colours: blue for "fine", orange-red for "problem". */
+:root.cb { --wasabi: #3d8fe0; --wasabi-text: #1d64b3; --wasabi-soft: #e5effa; --warn: #d55e00; }
+@media (prefers-color-scheme: dark) { :root.cb:not([data-theme="light"]) { --wasabi-text: #6cb2f5; --wasabi-soft: #1b2a3a; } }
+:root.cb[data-theme="dark"] { --wasabi-text: #6cb2f5; --wasabi-soft: #1b2a3a; }
+.vianote { margin: 0 24px 10px; font-size: 12px; color: var(--muted); }
+.vianote::before { content: "⇄ "; }

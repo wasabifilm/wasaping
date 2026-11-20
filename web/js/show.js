@@ -1,33 +1,42 @@
 // Show tools in sheets: live DMX, RDM, Dante, video, pre-show check,
 // end-of-show report.
-// Live DMX: universes heard on Art-Net and sACN. "Elenco": the table and,
-// for the universe picked, its 512 channels with the RDM patch on top, the
-// history of one channel and the sources side by side. "Panoramica": all
+// Live DMX: universes heard on Art-Net and sACN. "Universi": three columns,
+// the universes on the left, the 512 channels of the one picked in the
+// middle (with the RDM patch on top and the sources side by side below),
+// the channel picked on the right with its history (10 s to 5 min).
+// "Elenco": the table of universes, sources and nodes. "Panoramica": all
 // universes as strips. "Nodi": the Art-Net nodes (ArtPoll every 3 s) with
 // their ports and whether data reaches them. "Timecode": ArtTimeCode.
 // wasaping never sends DMX.
-let dmxES = null, dmxSel = "", dmxSess = "", dmxCh = 0, dmxTab = "list", dmxPatch = [], dmxTableAt = 0, dmxTableKey = "", dmxGridFor = "", critUnis = new Set();
+let dmxES = null, dmxSel = "", dmxSess = "", dmxCh = 0, dmxTab = "view", dmxPatch = [], dmxTableAt = 0, dmxTableKey = "", dmxGridFor = "", critUnis = new Set();
 let dmxFrozen = false, dmxPrev = null, dmxLast = null;
-let dmxMode = (() => { try { return localStorage.getItem("wasaping.dmxMode") || "color"; } catch { return "color"; } })();
+let dmxMode = (() => { try { return localStorage.getItem("wasaping.dmxMode") || "fader"; } catch { return "fader"; } })();
+let dmxSpan = (() => { try { return +localStorage.getItem("wasaping.dmxSpan") || 10; } catch { return 10; } })();
+let dmxSideKey = "";
 const b64bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-const dmxQuery = () => `s=${dmxSess}&u=${encodeURIComponent(dmxSel)}&ch=${dmxCh}&all=${dmxTab === "all" ? 1 : 0}&nodes=1`;
+const dmxQuery = () => `s=${dmxSess}&u=${encodeURIComponent(dmxSel)}&ch=${dmxCh}&all=${dmxTab === "all" ? 1 : 0}&nodes=1&h=${dmxSpan}`;
 const dmxWantPost = () => fetch(`api/dmx?${dmxQuery()}`, {method: "POST"}).catch(() => {});
-const DMX_TABS = [["list", "Elenco"], ["all", "Panoramica"], ["nodes", "Nodi Art-Net"], ["tc", "Timecode"]];
+const DMX_TABS = [["view", "Universi"], ["list", "Elenco"], ["all", "Panoramica"], ["nodes", "Nodi Art-Net"], ["tc", "Timecode"]];
+// The 15-bit port-address in hex, as grandMA and many nodes show it.
+const artHex = n => "0x" + n.toString(16).toUpperCase().padStart(4, "0");
+const dmxCols = () => dmxMode === "color" ? 32 : 16;
 // Art-Net port-address as Net:Sub-Net:Universe, as consoles and nodes show it.
 const artAddr = n => `${n >> 8}:${(n >> 4) & 15}:${n & 15}`;
 function dmxView() {
   fetch("api/universe").then(r => r.json()).then(l => { critUnis = new Set(l || []); }).catch(() => {});
   fetch("api/rdm").then(r => r.json()).then(d => { dmxPatch = (d.fixtures || []).filter(f => f.address); dmxGridFor = ""; }).catch(() => {});
-  openSheet("DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). wasaping non manda DMX: per trovare i nodi manda solo un ArtPoll ogni 3 secondi. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.</p>
+  openSheet("DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). wasaping non manda DMX: per trovare i nodi manda solo un ArtPoll ogni 3 secondi. Clic su un universo per vedere i 512 canali, clic su un canale (o le frecce) per seguirlo nel tempo.</p>
     <div class="row">${DMX_TABS.map(([id, l]) => `<button data-tab="${id}" class="dmxtab">${l}</button>`).join("")}<span class="grow"></span>
-      <select id="dmxMode" title="Come mostrare i 512 canali"><option value="color">Canali: colori</option><option value="dec">Canali: 0–255</option><option value="pct">Canali: %</option></select>
+      <select id="dmxMode" title="Come mostrare i 512 canali"><option value="fader">Canali: fader</option><option value="color">Canali: colori</option><option value="dec">Canali: 0–255</option><option value="pct">Canali: %</option></select>
       <button id="dmxFreeze" title="Ferma la vista per leggere i valori con calma (l'ascolto continua)">⏸ Blocca</button></div>
-    <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxAll"></div><div id="dmxDetail"></div><div id="dmxNodes"></div><div id="dmxTC"></div>`);
+    <div id="dmxBody"><p>In ascolto…</p></div>
+    <div class="dmx3" id="dmxView"><aside id="dmxUnis"><p class="muted">In ascolto…</p></aside><div id="dmxDetail"></div><aside id="dmxSide"></aside></div>
+    <div id="dmxAll"></div><div id="dmxNodes"></div><div id="dmxTC"></div>`);
   dmxTableKey = ""; dmxGridFor = ""; dmxFrozen = false; dmxPrev = null; dmxLast = null;
   const tab = t => {
     dmxTab = t; document.querySelectorAll(".dmxtab").forEach(b => b.classList.toggle("primary", b.dataset.tab === t));
-    $("dmxBody").hidden = $("dmxDetail").hidden = t !== "list"; $("dmxAll").hidden = t !== "all"; $("dmxNodes").hidden = t !== "nodes"; $("dmxTC").hidden = t !== "tc";
-    $("dmxMode").hidden = t !== "list";
+    $("dmxBody").hidden = t !== "list"; $("dmxView").hidden = t !== "view"; $("dmxAll").hidden = t !== "all"; $("dmxNodes").hidden = t !== "nodes"; $("dmxTC").hidden = t !== "tc";
+    $("dmxMode").hidden = t !== "view"; dmxSideKey = "";
     dmxTableKey = ""; delete $("dmxAll").dataset.ids; dmxWantPost(); if (dmxLast) drawDMX(dmxLast, true);
   };
   document.querySelectorAll(".dmxtab").forEach(b => b.onclick = () => tab(b.dataset.tab));
@@ -58,11 +67,26 @@ function drawDMX(snap, force) {
   const nBtn = document.querySelector('.dmxtab[data-tab="nodes"]');
   if (nBtn) nBtn.textContent = `Nodi Art-Net (${(snap.nodes || []).length})`;
   if (!unis.length) {
-    $("dmxBody").innerHTML = "<p>Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.</p>";
-    $("dmxDetail").innerHTML = $("dmxAll").innerHTML = ""; delete $("dmxAll").dataset.ids; dmxTableKey = dmxGridFor = ""; return;
+    $("dmxBody").innerHTML = $("dmxUnis").innerHTML = "<p>Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.</p>";
+    $("dmxDetail").innerHTML = $("dmxSide").innerHTML = $("dmxAll").innerHTML = ""; delete $("dmxAll").dataset.ids; dmxTableKey = dmxGridFor = dmxSideKey = ""; return;
   }
   // The table: rebuilt when universes or sources change, else once a second.
   const key = unis.map(u => u.id + u.sources.map(x => x.ip + x.name).join()).join("|") + dmxSel + (snap.nodes || []).map(n => n.ip).join();
+  // Just opened: show the first universe at once.
+  if (!dmxSel || !unis.some(u => u.id === dmxSel)) { const first = unis.find(u => u.active) || unis[0]; if (first.id !== dmxSel) { dmxSel = first.id; dmxCh = 0; dmxGridFor = ""; dmxPrev = null; dmxWantPost(); } }
+  if (dmxTab === "view" && (key !== dmxTableKey || Date.now() - dmxTableAt > 1000 || force)) {
+    dmxTableKey = key; dmxTableAt = Date.now();
+    $("dmxUnis").innerHTML = `<div class="dmxh">Universi <span class="muted">${unis.length}</span></div>` + unis.map(u => {
+      const lost = u.sources.reduce((a, x) => a + (x.lost || 0), 0), fps = Math.max(0, ...u.sources.map(x => x.fps));
+      const src = u.sources.map(x => x.name || x.ip).join(" + ");
+      return `<div class="uitem${u.id === dmxSel ? " sel" : ""}" data-id="${esc(u.id)}">
+        <div class="un"><b>${u.number}</b><span class="tag">${u.protocol === "Art-Net" ? "Art-Net" : "sACN"}</span>${critUnis.has(u.id) ? '<span class="crit" title="Universo critico: il Monitor lo controlla">●</span>' : ""}</div>
+        ${u.protocol === "Art-Net" ? `<div class="ua mono muted" title="Net:Sub-Net:Universe · indirizzo in esadecimale">${artAddr(u.number)} · ${artHex(u.number)}</div>` : ""}
+        <div class="us nt" title="${esc(src)}">${esc(src)}</div>
+        <div class="uf muted">${fps.toFixed(0)} fps · ${u.active} ${u.active === 1 ? "canale" : "canali"}${u.sources.length > 1 ? ' · <span class="badge warn">più sorgenti</span>' : ""}${lost ? ` · <span class="badge warn">${lost} persi</span>` : ""}</div></div>`;
+    }).join("");
+    $("dmxUnis").querySelectorAll(".uitem").forEach(el => el.onclick = () => { if (dmxSel === el.dataset.id) return; dmxSel = el.dataset.id; dmxCh = 0; dmxGridFor = dmxSideKey = dmxTableKey = ""; dmxPrev = null; dmxWantPost(); if (dmxLast) drawDMX(dmxLast, true); });
+  }
   if (dmxTab === "list" && (key !== dmxTableKey || Date.now() - dmxTableAt > 1000 || force)) {
     dmxTableKey = key; dmxTableAt = Date.now();
     $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th><th title="I nodi Art-Net che mandano questo universo sulle loro uscite DMX">Nodi</th><th title="Il Monitor avvisa se l'universo smette di arrivare">Critico</th></tr></thead><tbody>
@@ -79,10 +103,10 @@ function drawDMX(snap, force) {
         critUnis = new Set(l || []); toast(c.checked ? "Il Monitor ora controlla questo universo." : "Universo tolto dal Monitor.");
       }).catch(e => toast("Errore: " + e.message));
     });
-    $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { dmxSel = tr.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxTableKey = ""; dmxPrev = null; dmxWantPost(); });
+    $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { dmxSel = tr.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxTableKey = ""; dmxPrev = null; document.querySelector('.dmxtab[data-tab="view"]').click(); });
   }
   if (dmxTab === "all") drawDMXAll(unis);
-  if (dmxTab === "list") drawDMXDetail(unis.find(u => u.id === dmxSel && u.levels));
+  if (dmxTab === "view") drawDMXDetail(unis.find(u => u.id === dmxSel && u.levels), snap);
 }
 // Art-Net nodes: their DMX outputs and inputs, and whether data reaches them.
 function drawNodes(snap) {
@@ -141,7 +165,7 @@ function drawDMXAll(unis) {
     $("dmxAll").dataset.ids = ids;
     $("dmxAll").innerHTML = `<div class="dmxall">${unis.map(u => `<div class="dmxrow" data-id="${esc(u.id)}"><span><b>${esc(u.protocol)} ${u.number}</b></span><canvas width="512" height="1"></canvas><span class="muted act"></span></div>`).join("")}</div>
       <div class="dmxscale"><span>1</span><span>128</span><span>256</span><span>384</span><span>512</span></div>`;
-    $("dmxAll").querySelectorAll(".dmxrow").forEach(r => r.onclick = () => { dmxSel = r.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxPrev = null; document.querySelector('.dmxtab[data-tab="list"]').click(); });
+    $("dmxAll").querySelectorAll(".dmxrow").forEach(r => r.onclick = () => { dmxSel = r.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxPrev = null; document.querySelector('.dmxtab[data-tab="view"]').click(); });
   }
   for (const u of unis) {
     const row = $("dmxAll").querySelector(`.dmxrow[data-id="${CSS.escape(u.id)}"]`);
@@ -150,10 +174,11 @@ function drawDMXAll(unis) {
     row.querySelector(".act").textContent = `${u.active} attivi`;
   }
 }
-// One universe: grid with patch, channel history, sources compared.
-function drawDMXDetail(sel) {
+// One universe: grid with patch and sources compared in the middle, the
+// channel picked on the right.
+function drawDMXDetail(sel, snap) {
   const box = $("dmxDetail");
-  if (!sel) { box.innerHTML = dmxSel ? "" : `<p class="muted">Scegli un universo dall'elenco.</p>`; dmxGridFor = ""; return; }
+  if (!sel) { box.innerHTML = `<p class="muted">Scegli un universo a sinistra.</p>`; $("dmxSide").innerHTML = ""; dmxGridFor = dmxSideKey = ""; return; }
   const fx = dmxFixtures(sel.id);
   // channel -> fixtures on it
   const at = Array.from({length: 512}, () => []);
@@ -162,38 +187,37 @@ function drawDMXDetail(sel) {
   if (dmxGridFor !== gridKey) {
     dmxGridFor = gridKey;
     const clash = new Set(at.filter(a => a.length > 1).flat());
-    box.innerHTML = `<h3 style="font-size:14px;margin:16px 0 0">${esc(sel.protocol)} universo ${sel.number}</h3>
+    box.innerHTML = `<div class="dmxh">${esc(sel.protocol)} universo ${sel.number}${sel.protocol === "Art-Net" ? ` <span class="muted mono">${artAddr(sel.number)} · ${artHex(sel.number)}</span>` : ""}</div>
       ${fx.length ? `<div class="dmxlegend">${fx.map((f, k) => `<span class="${clash.has(k) ? "fxc" : k % 2 ? "fxb" : "fxa"}"><b class="nt">${esc(f.label || f.model || f.uid)}</b> ${f.address}–${f.address + Math.max(f.footprint, 1) - 1}</span>`).join("")}</div>`
-        : sel.protocol === "Art-Net" ? `<p class="muted">Per vedere gli apparecchi sopra i canali, fai una ricerca in Show → Apparecchi RDM.</p>` : ""}
-      <div class="dmxgrid${dmxMode !== "color" ? " num" : ""}">${Array.from({length: 512}, (_, i) => { const a = at[i];
+        : sel.protocol === "Art-Net" ? `<p class="muted" style="margin:4px 0 0">Per vedere gli apparecchi sopra i canali, fai una ricerca in Show → RDM.</p>` : ""}
+      <div class="dmxgrid ${dmxMode === "color" ? "" : dmxMode === "fader" ? "num fader" : "num"}">${Array.from({length: 512}, (_, i) => { const a = at[i];
         const cls = a.length > 1 ? "fxc" : a.length ? (a[0] % 2 ? "fxb" : "fxa") : "";
         const first = a.some(k => fx[k].address === i + 1) ? " fs" : "";
         const who = a.map(k => `${fx[k].label || fx[k].model || fx[k].uid} · ${i + 2 - fx[k].address}/${fx[k].footprint}`).join(" + ");
-        return `<i data-c="${i + 1}" class="${cls}${first}${dmxCh === i + 1 ? " watch" : ""}" data-who="${esc(who)}"></i>`; }).join("")}</div>
-      <div id="dmxChan"></div><div id="dmxSrc"></div>`;
-    box.querySelectorAll(".dmxgrid i").forEach(c => c.onclick = () => {
-      dmxCh = +c.dataset.c; box.querySelectorAll(".dmxgrid i.watch").forEach(x => x.classList.remove("watch")); c.classList.add("watch"); dmxWantPost();
-    });
+        return `<i data-c="${i + 1}" class="${cls}${first}${dmxCh === i + 1 ? " watch" : ""}" data-who="${esc(who)}">${dmxMode === "fader" ? `<s>${i + 1}</s><u></u>` : ""}</i>`; }).join("")}</div>
+      <div id="dmxSrc"></div>`;
+    box.querySelector(".dmxgrid").onclick = e => { const c = e.target.closest("i[data-c]"); if (c) dmxPick(+c.dataset.c); };
   }
   const cells = box.querySelectorAll(".dmxgrid i");
-  const num = dmxMode !== "color", prev = dmxPrev && dmxPrev.id === sel.id ? dmxPrev.levels : null;
+  const prev = dmxPrev && dmxPrev.id === sel.id ? dmxPrev.levels : null;
   sel.levels.forEach((v, i) => {
     const c = cells[i]; if (!c) return;
-    c.style.background = v ? `rgba(129,215,66,${(num ? 0.08 : 0.15) + (num ? 0.5 : 0.85) * v / 255})` : "";
-    if (num) {
+    if (dmxMode === "fader") {
+      c.style.setProperty("--v", (v / 2.55).toFixed(1) + "%");
+      c.classList.toggle("z", !v);
+    } else if (dmxMode === "color") {
+      c.style.background = v ? `rgba(129,215,66,${0.15 + 0.85 * v / 255})` : "";
+    } else {
+      c.style.background = v ? `rgba(129,215,66,${0.08 + 0.5 * v / 255})` : "";
       const t = `<s>${i + 1}</s>${dmxMode === "pct" ? Math.round(v / 2.55) : v}`;
       if (c.innerHTML !== t) c.innerHTML = t;
-      c.classList.toggle("chg", !!prev && prev[i] !== v);
       c.classList.toggle("z", !v);
     }
+    if (dmxMode !== "color") c.classList.toggle("chg", !!prev && prev[i] !== v);
     c.title = `${LANG === "en" ? "channel" : "canale"} ${i + 1}: ${v} (${Math.round(v / 2.55)}%)${c.dataset.who ? " · " + c.dataset.who : ""}`;
   });
   dmxPrev = {id: sel.id, levels: sel.levels.slice()};
-  // the channel followed
-  if (dmxCh) {
-    const v = sel.levels[dmxCh - 1], who = cells[dmxCh - 1]?.dataset.who;
-    $("dmxChan").innerHTML = `<div class="chanbox"><div><b>${LANG === "en" ? "Channel" : "Canale"} ${dmxCh}</b>${who ? ` <span class="nt muted">${esc(who)}</span>` : ""} · <b>${v}</b> <span class="muted">(${Math.round(v / 2.55)}%)</span></div>${chanChart(sel.history || [])}</div>`;
-  } else $("dmxChan").innerHTML = "";
+  drawDMXSide(sel, snap, cells);
   // more sources: side by side
   const srcs = sel.sources.filter(x => x.data);
   if (srcs.length > 1) {
@@ -210,18 +234,73 @@ function drawDMXDetail(sel) {
     $("dmxSrc").querySelectorAll("canvas").forEach(cv => drawStrip(cv, lv[+cv.dataset.k]));
   } else $("dmxSrc").innerHTML = "";
 }
-// The last 10 seconds of one channel.
-function chanChart(h) {
-  const W = 600, H = 90, now = Date.now(), t0 = now - 10000;
+// Follow a channel (click, or the arrow keys).
+function dmxPick(ch) {
+  dmxCh = Math.min(512, Math.max(1, ch));
+  document.querySelectorAll("#dmxDetail .dmxgrid i.watch").forEach(x => x.classList.remove("watch"));
+  document.querySelector(`#dmxDetail .dmxgrid i[data-c="${dmxCh}"]`)?.classList.add("watch");
+  dmxSideKey = ""; dmxWantPost();
+  if (dmxLast) drawDMX(dmxLast, true);
+}
+document.addEventListener("keydown", e => {
+  if (!$("dmxView") || $("dmxView").hidden || !$("sheet").classList.contains("open")) return; // #dmxView exists only on the DMX page
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "") || e.metaKey || e.ctrlKey || e.altKey) return;
+  const step = {ArrowLeft: -1, ArrowRight: 1, ArrowUp: -dmxCols(), ArrowDown: dmxCols()}[e.key];
+  if (!step) return;
+  e.preventDefault();
+  dmxPick((dmxCh || 1 - Math.sign(step)) + step);
+});
+// The right column: where the universe comes from and the channel followed.
+function drawDMXSide(sel, snap, cells) {
+  const side = $("dmxSide");
+  const ns = nodesFor(snap, sel);
+  const key = sel.id + "|" + dmxCh + "|" + dmxSpan + "|" + sel.sources.map(x => x.ip + x.name + x.priority).join() + ns.map(n => n.ip).join() + critUnis.has(sel.id);
+  if (dmxSideKey !== key) {
+    dmxSideKey = key;
+    const who = dmxCh ? cells[dmxCh - 1]?.dataset.who : "";
+    side.innerHTML = `${dmxCh ? `<div class="dmxh">Canale <b class="big" id="dsCh">${dmxCh}</b></div>
+        <div class="chval"><b id="dsV"></b><span class="muted" id="dsP"></span></div><div class="chbar"><i id="dsBar"></i></div>
+        ${who ? `<div class="nt chwho">${esc(who)}</div>` : ""}
+        <div class="row spans">${[[10, "10 s"], [60, "1 min"], [300, "5 min"]].map(([v, l]) => `<button data-span="${v}" class="${v === dmxSpan ? "primary" : ""}">${l}</button>`).join("")}</div>
+        <div id="dsChart"></div>`
+      : `<div class="dmxh">Canale</div><p class="muted">Clic su un canale per seguirlo: valore e storia fino a 5 minuti. Le frecce passano da un canale all'altro.</p>`}
+      <dl class="dsinfo">
+        <dt>Universo</dt><dd>${esc(sel.protocol)} ${sel.number}</dd>
+        ${sel.protocol === "Art-Net" ? `<dt>Net:Sub:Uni</dt><dd class="mono">${artAddr(sel.number)}</dd><dt>Esadecimale</dt><dd class="mono">${artHex(sel.number)}</dd>` : ""}
+        <dt>Sorgente</dt><dd>${sel.sources.map(x => `<span class="nt">${esc(x.name || x.ip)}</span>${x.name ? ` <span class="muted">${esc(x.ip)}</span>` : ""}${x.priority ? ` <span class="muted">prio ${x.priority}</span>` : ""}`).join("<br>")}</dd>
+        ${sel.protocol === "Art-Net" ? `<dt>Nodi</dt><dd>${ns.length ? ns.map(n => `<span class="nt">${esc(n.short_name || n.ip)}</span>`).join(", ") : '<span class="muted">nessun nodo trovato</span>'}</dd>` : ""}
+        <dt>Frame/s</dt><dd id="dsFps"></dd>
+        <dt>Monitor</dt><dd><label class="check" style="margin:0"><input type="checkbox" id="dsCrit"${critUnis.has(sel.id) ? " checked" : ""}> universo critico</label></dd>
+      </dl>`;
+    side.querySelectorAll("[data-span]").forEach(b => b.onclick = () => {
+      dmxSpan = +b.dataset.span; try { localStorage.setItem("wasaping.dmxSpan", dmxSpan); } catch {}
+      dmxSideKey = ""; dmxWantPost();
+    });
+    $("dsCrit").onchange = () => post("api/universe", {id: sel.id, critical: $("dsCrit").checked}).then(r => r.json()).then(l => {
+      critUnis = new Set(l || []); dmxTableKey = ""; toast($("dsCrit").checked ? "Il Monitor ora controlla questo universo." : "Universo tolto dal Monitor.");
+    }).catch(e => toast("Errore: " + e.message));
+    translateTree(side);
+  }
+  $("dsFps").textContent = sel.sources.map(x => x.fps.toFixed(0) + (x.lost ? ` (${x.lost} ${LANG === "en" ? "lost" : "persi"})` : "")).join(" / ");
+  if (dmxCh) {
+    const v = sel.levels[dmxCh - 1];
+    $("dsV").textContent = v; $("dsP").textContent = ` ${Math.round(v / 2.55)}%`; $("dsBar").style.width = (v / 2.55) + "%";
+    $("dsChart").innerHTML = chanChart(sel.history || [], dmxSpan);
+  }
+}
+// The latest seconds of one channel (10 s to 5 min).
+function chanChart(h, span = 10) {
+  const W = 600, H = 120, now = Date.now(), ms = span * 1000, t0 = now - ms;
   if (!h.length) return `<p class="muted">Raccolgo i valori…</p>`;
   let d = "", prev = null;
   for (const [t, v] of h) {
-    const x = Math.max(0, (t - t0) / 10000 * W), y = H - 4 - v / 255 * (H - 8);
+    const x = Math.max(0, (t - t0) / ms * W), y = H - 4 - v / 255 * (H - 8);
     d += prev === null ? `M${x.toFixed(1)},${y.toFixed(1)}` : `H${x.toFixed(1)}V${y.toFixed(1)}`; prev = y;
   }
   d += `H${W}`;
+  const lab = s => s >= 60 ? `−${s / 60} min` : `−${s} s`;
   return `<svg class="chansvg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line x1="0" x2="${W}" y1="${H - 4}" y2="${H - 4}" class="ax"/><line x1="0" x2="${W}" y1="4" y2="4" class="ax"/><path d="${d}"/></svg>
-    <div class="dmxscale"><span>−10 s</span><span>−5 s</span><span>${LANG === "en" ? "now" : "ora"}</span></div>`;
+    <div class="dmxscale"><span>${lab(span)}</span><span>${lab(span / 2)}</span><span>${LANG === "en" ? "now" : "ora"}</span></div>`;
 }
 
 // RDM: the fixtures behind the Art-Net nodes; identify and, with two

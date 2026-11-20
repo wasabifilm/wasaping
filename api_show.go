@@ -117,7 +117,8 @@ var (
 // dmxWant reads ?u=sacn:1&ch=40&all=1.
 func dmxWant(q url.Values) scanner.DMXWant {
 	ch, _ := strconv.Atoi(q.Get("ch"))
-	return scanner.DMXWant{Uni: q.Get("u"), Channel: ch, All: q.Get("all") == "1", Nodes: q.Get("nodes") == "1"}
+	h, _ := strconv.Atoi(q.Get("h"))
+	return scanner.DMXWant{Uni: q.Get("u"), Channel: ch, All: q.Get("all") == "1", Nodes: q.Get("nodes") == "1", HistSecs: min(max(h, 0), scanner.MaxHistSecs)}
 }
 
 func handleDMX(w http.ResponseWriter, r *http.Request) {

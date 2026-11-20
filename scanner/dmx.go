@@ -33,6 +33,63 @@ type DMXWant struct {
 	Channel int    // 1-512, 0 = none
 	All     bool
 	Nodes   bool // poll Art-Net nodes every few seconds
+	// HistSecs is how much history of the channel to send: 10 (default),
+	// 60 or up to 300 seconds, thinned to at most histPoints points.
+	HistSecs int
+}
+
+// MaxHistSecs is the longest channel history kept.
+const MaxHistSecs = 300
+
+const histPoints = 600
+
+// thinHistory keeps the points of the last secs seconds (before end, unix
+// ms) and, when there are too many, the lowest and the highest value of
+// each slice of time, so that a short flash or drop still shows.
+func thinHistory(h [][2]int64, secs int, end int64) [][2]int64 {
+	if secs <= 0 {
+		secs = 10
+	}
+	from := end - int64(min(secs, MaxHistSecs))*1000
+	i := 0
+	for i < len(h) && h[i][0] < from {
+		i++
+	}
+	if i > 0 { // the value at the start of the window
+		h = append([][2]int64{{from, h[i-1][1]}}, h[i:]...)
+	} else {
+		h = append([][2]int64(nil), h...)
+	}
+	if len(h) <= histPoints {
+		return h
+	}
+	slots := histPoints / 2
+	step := (end - from) / int64(slots)
+	var out [][2]int64
+	j := 0
+	for k := 0; k < slots && j < len(h); k++ {
+		lim := from + step*int64(k+1)
+		if k == slots-1 {
+			lim = end + 1
+		}
+		lo, hi := h[j], h[j]
+		for ; j < len(h) && h[j][0] < lim; j++ {
+			if h[j][1] < lo[1] {
+				lo = h[j]
+			}
+			if h[j][1] > hi[1] {
+				hi = h[j]
+			}
+		}
+		if lo[0] > hi[0] {
+			lo, hi = hi, lo
+		}
+		out = append(out, lo)
+		if hi != lo {
+			out = append(out, hi)
+		}
+	}
+	return out
 }
 
 // ArtNode is an Art-Net node heard in an ArtPollReply, with its address.
@@ -163,7 +220,7 @@ func ListenDMXFull(ctx context.Context, iface *net.Interface, sacnUniverses int,
 			if len(u.hist) == 0 || u.hist[len(u.hist)-1][1] != v || u.last.UnixMilli()-u.hist[len(u.hist)-1][0] > 200 {
 				u.hist = append(u.hist, [2]int64{u.last.UnixMilli(), v})
 			}
-			for len(u.hist) > 0 && u.last.UnixMilli()-u.hist[0][0] > 10_000 {
+			for len(u.hist) > 0 && u.last.UnixMilli()-u.hist[0][0] > MaxHistSecs*1000 {
 				u.hist = u.hist[1:]
 			}
 		}
@@ -324,7 +381,7 @@ func ListenDMXFull(ctx context.Context, iface *net.Interface, sacnUniverses int,
 					v.Levels[i] = int(b)
 				}
 				if w.Channel > 0 && u.watch == w.Channel {
-					v.History = append([][2]int64(nil), u.hist...)
+					v.History = thinHistory(u.hist, w.HistSecs, time.Now().UnixMilli())
 				}
 			}
 			if w.All {

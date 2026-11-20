@@ -79,10 +79,11 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
 - **Diagnostica:** Progetto → «Salva diagnostica» (o `wasaping diag`) prepara un file da mandare a chi sviluppa wasaping quando un apparecchio non viene riconosciuto. Non contiene i tuoi nomi, ruoli e note, né PIN e password.
 - **Piano IP:** importi il patch previsto da un foglio di calcolo (CSV con Nome, IP, Ruolo, MAC) e wasaping lo confronta con la rete. Ti dice chi manca, chi ha l'IP sbagliato, chi occupa l'IP di un altro e chi non era previsto. Con un clic dà ai dispositivi i nomi e i ruoli del piano. Il piano si può anche **scrivere e modificare direttamente** in wasaping (Invio aggiunge una riga con l'IP successivo; IP ripetuti o sbagliati in rosso) ed esportare in CSV.
 - **Visualizzatore DMX dal vivo** (solo ascolto):
+  - la vista **Universi a tre colonne**: a sinistra gli universi (con sorgente, frame al secondo e indirizzo Art-Net anche in esadecimale, es. `0x0011`), al centro i 512 canali come **fader** che si riempiono col valore, a destra il canale scelto con valore, apparecchio, nodi e la sua **storia di 10 s, 1 minuto o 5 minuti** (le frecce passano da un canale all'altro). All'apertura mostra subito il primo universo che arriva;
   - quali universi Art-Net e sACN arrivano, da quale sorgente, a quanti frame al secondo, con i **frame persi**;
   - la **panoramica** di tutti gli universi;
   - i 512 canali di un universo con sopra il **patch RDM** (nome dell'apparecchio, sovrapposizioni in rosso);
-  - un canale **nel tempo**, gli ultimi 10 secondi;
+  - un canale **nel tempo**, fino agli ultimi 5 minuti (i lampi brevi restano visibili anche sfoltendo);
   - **due console sullo stesso universo** a confronto: dove differiscono e chi vince (priorità o HTP).
   - i valori **in numeri** (0–255 o %) invece dei colori, con un bordo sui canali che cambiano, e **⏸ Blocca** per leggerli con calma;
   - i **nodi Art-Net** con le loro uscite e ingressi DMX (anche come Net:Sub-Net:Universe) e se i dati arrivano davvero: avvisa se un universo arriva ma nessun nodo lo emette, o se un'uscita aspetta un universo che non si sente;

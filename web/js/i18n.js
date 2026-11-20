@@ -509,3 +509,13 @@ for (const [k, v] of Object.entries({
   "Te lo ricordo domani. Intanto è in ⚙ Impostazioni → Sistema.": "I'll remind you tomorrow. Meanwhile it is in ⚙ Settings → System.",
 })) EN.set(k, v);
 PAT.push([/^È uscita$/, "Out now:"], [/^\(hai la (.+)\)$/, "(you have $1)"], [/^Impostazioni · è uscita wasaping (.+)$/, "Settings · wasaping $1 is out"]);
+// DMX in three columns (0.9.1).
+for (const [k, v] of Object.entries({
+  "In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). wasaping non manda DMX: per trovare i nodi manda solo un ArtPoll ogni 3 secondi. Clic su un universo per vedere i 512 canali, clic su un canale (o le frecce) per seguirlo nel tempo.": "Listening to Art-Net (broadcast packets or sent to this computer) and sACN (universes 1–64). wasaping does not send DMX: to find the nodes it only sends an ArtPoll every 3 seconds. Click a universe to see its 512 channels, click a channel (or use the arrows) to follow it over time.",
+  "Per vedere gli apparecchi sopra i canali, fai una ricerca in Show → RDM.": "To see the fixtures over the channels, run a search in Show → RDM.",
+  "Scegli un universo a sinistra.": "Pick a universe on the left.", "Canali: fader": "Channels: fader", "Esadecimale": "Hex",
+  "universo critico": "critical universe", "nessun nodo trovato": "no node found",
+  "Clic su un canale per seguirlo: valore e storia fino a 5 minuti. Le frecce passano da un canale all'altro.": "Click a channel to follow it: value and history up to 5 minutes. The arrow keys move from channel to channel.",
+  "Net:Sub-Net:Universe · indirizzo in esadecimale": "Net:Sub-Net:Universe · address in hex", "Universo critico: il Monitor lo controlla": "Critical universe: the Monitor watches it",
+})) EN.set(k, v);
+PAT.push([/^(\d+) fps · (\d+) canal[ei](.*)$/, (m, f, n, rest) => `${f} fps · ${n} ${n === "1" ? "channel" : "channels"}${rest}`]);

@@ -16,7 +16,7 @@ func protocolsOf(h Host) []string {
 		}
 	}
 	svc := func(s string) bool { return slices.Contains(h.Services, s) }
-	add(h.ArtNet != nil, "Art-Net")
+	add(h.ArtNet != nil || len(h.ArtBroadcast) > 0, "Art-Net")
 	add(h.SACN != nil, "sACN")
 	add(svc("netaudio-arc") || svc("netaudio-cmc") || svc("netaudio-dbc") || svc("netaudio-chan") || h.Dante != nil, "Dante")
 	add(h.PTP != "", "PTP master")
@@ -97,6 +97,24 @@ func NetworkIssues(hosts []Host) []string {
 	for u, ips := range sacnUni {
 		if len(ips) > 1 {
 			out = append(out, fmt.Sprintf("Universo sACN %d inviato da più sorgenti (%s): controlla le priorità o il merge.", u, strings.Join(ips, ", ")))
+		}
+	}
+	var dup []string
+	for _, h := range hosts {
+		if len(h.OtherMACs) > 0 {
+			dup = append(dup, h.IP)
+		}
+	}
+	if len(dup) > 0 {
+		out = append(out, fmt.Sprintf("IP doppi: %s. Due dispositivi con lo stesso indirizzo si contendono il traffico: apri il dispositivo per vedere chi sono.", strings.Join(dup, ", ")))
+	}
+	for _, h := range hosts {
+		if len(h.ArtBroadcast) > 0 {
+			n := fmt.Sprintf("%d universi arrivano", len(h.ArtBroadcast))
+			if len(h.ArtBroadcast) == 1 {
+				n = "1 universo arriva"
+			}
+			out = append(out, fmt.Sprintf("Art-Net in broadcast da %s: %s a tutti i dispositivi della rete (anche Dante, video e Wi-Fi). Meglio l'unicast verso i nodi.", firstNonEmpty(h.Friendly, h.Hostname, h.IP), n))
 		}
 	}
 	out = append(out, danteIssues(hosts)...)

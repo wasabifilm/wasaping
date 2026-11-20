@@ -49,6 +49,7 @@ func runCollect(ctx context.Context, target string, ips []net.IP, opt scanner.Op
 	res := &ScanResult{Target: target, Auto: auto}
 	var mu sync.Mutex
 	opt.Targets = ips
+	dhcpDone := dhcpForScan(ctx, ips)
 	hosts, err := scanner.Scan(ctx, opt, func(h scanner.Host) {
 		v := sess.View(h)
 		mu.Lock()
@@ -68,6 +69,13 @@ func runCollect(ctx context.Context, target string, ips []net.IP, opt scanner.Op
 	res.At, res.Count, res.Seconds = time.Now(), len(hosts), time.Since(start).Seconds()
 	res.MacHidden, res.New = scanner.MACsHidden(hosts), len(res.Fresh)
 	res.Network, res.Issues = sess.Network(), scanner.NetworkIssues(hosts)
+	gw := ""
+	for _, h := range hosts {
+		if h.Gateway {
+			gw = h.IP
+		}
+	}
+	res.Issues = append(res.Issues, dhcpIssues(dhcpDone(), res.Hosts, gw)...)
 	lastMu.Lock()
 	lastResult = res
 	lastMu.Unlock()

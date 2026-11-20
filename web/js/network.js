@@ -313,3 +313,64 @@ function labelsView() {
   };
   draw();
 }
+
+// DHCP servers: who hands out addresses on this network. A DHCPDISCOVER
+// in broadcast; the offers are never accepted, so no address is taken.
+async function dhcpView() {
+  openSheet("Server DHCP", `<p class="muted">wasaping chiede in broadcast chi distribuisce gli indirizzi su questa rete e raccoglie tutte le risposte. Non accetta nessuna offerta: nessun indirizzo viene occupato. Lo stesso controllo gira da solo con le scansioni, al massimo ogni 5 minuti.</p>
+    <div class="row"><button id="dhcpAgain" class="primary">Chiedi di nuovo</button></div><div id="dhcpBody"><p>Chiedo…</p></div>`);
+  const run = async () => {
+    $("dhcpBody").innerHTML = "<p>Chiedo… (3 secondi)</p>"; $("dhcpAgain").disabled = true;
+    let d;
+    try { d = await fetch("api/dhcp").then(r => r.json()); } catch (e) { $("dhcpBody").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; return; }
+    finally { if ($("dhcpAgain")) $("dhcpAgain").disabled = false; }
+    if (!$("dhcpBody")) return;
+    const sv = d.servers || [];
+    const head = d.error ? `<div class="netnote"><b>Non riesco a chiedere</b><span class="nt">${esc(d.error)}</span></div>`
+      : !sv.length ? `<div class="netnote"><b>Nessun server DHCP ha risposto.</b><span>Normale su una rete show con indirizzi fissi; altrimenti i dispositivi impostati in automatico non prendono un indirizzo (o si danno da soli un 169.254.x.x).</span></div>`
+      : sv.length === 1 ? `<p class="okline">✓ Un solo server DHCP: <b class="nt">${esc(d.names[sv[0].ip] || sv[0].ip)}</b>.</p>`
+      : `<div class="netnote"><b>${sv.length} server DHCP rispondono.</b><span>I dispositivi prendono l'indirizzo dal primo che risponde: possono finire su un'altra rete o con il router sbagliato. Lascia acceso il DHCP su uno solo (spesso il colpevole è un router di casa o un access point collegato per sbaglio).</span></div>`;
+    const lease = s => !s ? "" : s === 86400 ? "1 giorno" : s >= 86400 ? `${Math.round(s / 8640) / 10} giorni` : s >= 3600 ? `${Math.round(s / 360) / 10} ore` : `${Math.round(s / 60)} min`;
+    $("dhcpBody").innerHTML = head + (sv.length ? `<div class="wrap" style="margin:12px 0 0"><table><thead><tr><th>Server</th><th>Offre</th><th>Maschera</th><th>Router</th><th>DNS</th><th>Durata</th></tr></thead><tbody>
+      ${sv.map(s => `<tr><td><b class="nt">${esc(d.names[s.ip] || s.ip)}</b>${s.passive ? ' <span class="badge off" title="Sentito mentre rispondeva a un altro dispositivo">sentito</span>' : ""}${s.domain ? `<br><span class="muted nt">${esc(s.domain)}</span>` : ""}</td>
+        <td class="mono">${esc(s.offered || "—")}</td><td class="mono">${esc(s.mask || "—")}</td>
+        <td class="mono">${esc(s.router || "—")}${s.router && d.gateway && s.router !== d.gateway ? ' <span class="badge warn" title="Diverso dal router che usa questo computer">diverso</span>' : ""}</td>
+        <td class="mono">${esc((s.dns || []).join(", ") || "—")}</td><td>${lease(s.lease)}</td></tr>`).join("")}</tbody></table></div>` : "")
+      + ((d.issues || []).filter(i => !i.startsWith("Più server")).map(i => `<p class="warnline">⚠ ${esc(i)}</p>`).join(""))
+      + `<p class="muted">Interfaccia <span class="nt">${esc(d.interface || "")}</span> · rete ${esc(d.network || "")}${d.gateway ? ` · router ${esc(d.gateway)}` : ""}</p>`;
+  };
+  $("dhcpAgain").onclick = run;
+  run();
+}
+
+// Traffic: what reaches this computer without asking (broadcast and
+// multicast reach every device), and the show protocols in it.
+async function trafficView() {
+  openSheet("Traffico", `<p class="muted">Ascolta per qualche secondo cosa arriva a questo computer. Uno switch manda a tutte le porte il broadcast (e il multicast, se manca l'IGMP snooping): quello che arriva qui senza averlo chiesto arriva anche a tutti gli altri dispositivi.</p>
+    <div class="row"><button id="trAgain" class="primary">Misura di nuovo</button><select id="trSec"><option value="6">6 secondi</option><option value="15">15 secondi</option></select></div><div id="trBody"><p>Ascolto…</p></div>`);
+  const fmt = (v, d = 0) => v < 0 ? "—" : v.toLocaleString(LANG === "en" ? "en" : "it", {maximumFractionDigits: d});
+  const run = async () => {
+    const s = +$("trSec").value;
+    $("trBody").innerHTML = `<p>Ascolto per ${s} secondi…</p>`; $("trAgain").disabled = true;
+    let d;
+    try { d = await fetch(`api/traffic?s=${s}`).then(r => r.json()); } catch (e) { $("trBody").innerHTML = `<p>Errore: ${esc(e.message)}</p>`; return; }
+    finally { if ($("trAgain")) $("trAgain").disabled = false; }
+    if (!$("trBody")) return;
+    const r = d.report, pr = r.protocols || [];
+    $("trBody").innerHTML = (d.notes || []).map(n => `<p class="${n.level === "ok" ? "okline" : n.level === "warn" ? "warnline" : "infoline"}">${n.level === "ok" ? "✓" : n.level === "warn" ? "⚠" : "ℹ"} ${esc(n.text)}</p>`).join("")
+      + `<div class="trtiles">
+        <div class="trtile"><b>${fmt(r.rx_pps)}</b><span>pacchetti/s in arrivo</span></div>
+        <div class="trtile"><b>${fmt(r.rx_mbps, 1)}</b><span>Mbit/s in arrivo</span></div>
+        <div class="trtile"><b>${fmt(r.nonunicast_pps)}</b><span>broadcast e multicast/s</span></div></div>
+      ${r.nonunicast_pps < 0 ? `<p class="muted">Il sistema non conta a parte broadcast e multicast su questa interfaccia: guarda i protocolli qui sotto.</p>` : ""}
+      ${r.all_ifaces ? `<p class="muted">Su Windows i contatori comprendono tutte le interfacce di rete.</p>` : ""}
+      <h3 style="font-size:14px;margin:16px 0 4px">Protocolli show</h3>
+      ${pr.length ? `<div class="wrap" style="margin:0"><table><thead><tr><th>Protocollo</th><th>Universi</th><th>Pacchetti/s</th><th>Mbit/s</th><th>Sorgenti</th></tr></thead><tbody>
+        ${pr.map(p => `<tr><td><b>${esc(p.name)}</b></td><td>${p.universes || "—"}</td><td>${fmt(p.pps)}</td><td>${fmt(p.mbps, 2)}</td><td class="nt">${esc((p.sources || []).join(", "))}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="muted">Nessun DMX né timecode in arrivo.</p>`}
+      ${(r.art_broadcast || []).length ? `<p class="muted">Quali universi Art-Net sono in broadcast: <span class="mono">${esc(ranges(r.art_broadcast.map(n => n)))}</span></p>` : ""}
+      <p class="muted">Interfaccia <span class="nt">${esc(r.interface)}</span> · ${fmt(r.seconds, 1)} s</p>`;
+  };
+  $("trAgain").onclick = run;
+  run();
+}

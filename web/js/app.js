@@ -195,7 +195,7 @@ $("clearBtn").onclick = () => {
   hosts = []; gone = []; freshKeys = new Set(); issues = []; network = null; networks = []; activeNet = "";
   closeDetail(); showNetwork();
   $("extra").innerHTML = ""; $("status").textContent = "Pronto."; $("prog").style.width = "0";
-  $("rows").innerHTML = `<tr><td colspan="7" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr>`;
+  $("rows").innerHTML = `<tr><td colspan="9" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr>`;
   shownKeys = []; $("fcount").textContent = ""; pageTitle(); refreshGroupPage();
 };
 
@@ -551,6 +551,8 @@ function needOneNet() {
   if (networks.length > 1 && !activeNet) { toast("Scegli prima una rete dalle schede."); return true; }
   return false;
 }
+// 2 = a problem that breaks things (duplicate IP), 1 = other warnings.
+const warnLevel = h => !(h.warnings || []).length ? 0 : h.warnings.some(w => /^(IP doppio|Conflitto di IP)/.test(w)) ? 2 : 1;
 function sortValue(h, k) {
   switch (k) {
     case "protocols": return (h.protocols || []).join(" ").toLowerCase();
@@ -558,6 +560,8 @@ function sortValue(h, k) {
     case "ip": return ipNum(h.ip);
     case "ports": return (h.ports || []).length;
     case "rtt_ms": return h.rtt_ms || 0;
+    case "critical": return h.critical ? 0 : 1;
+    case "warn": return -warnLevel(h) * 100 - (h.warnings || []).length;
     case "label": return label(h).toLowerCase();
     default: return (h[k] || "").toLowerCase();
   }

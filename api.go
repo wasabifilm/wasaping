@@ -93,6 +93,8 @@ func apiMux(quit func()) *http.ServeMux {
 	mux.HandleFunc("/api/prefs/import", handleSettingsImport)
 	mux.HandleFunc("/api/qr", handleQR)
 	mux.HandleFunc("/api/oscin", handleOSCIn)
+	mux.HandleFunc("/api/dhcp", handleDHCP)
+	mux.HandleFunc("/api/traffic", handleTraffic)
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) {
 		lastPing.Store(time.Now().UnixNano())
 		w.WriteHeader(http.StatusNoContent)

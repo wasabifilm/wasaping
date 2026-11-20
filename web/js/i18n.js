@@ -393,3 +393,51 @@ PAT.push(
   [/^partito da (.+)$/, "running from $1"], [/^fermo a (.+)$/, "stopped at $1"], [/^salto da (.+) a (.+)$/, "jump from $1 to $2"], [/^saltato da (.+) a (.+)$/, "jumped from $1 to $2"],
   [/^non arriva più \(ultimo (.+)\)$/, "no longer arriving (last $1)"], [/^formato cambiato da (.+) a (.+)$/, "format changed from $1 to $2"],
 );
+// Network checks: DHCP, duplicate IPs, traffic (0.8.7).
+PAT.push(
+  [/^IP doppio: a questo indirizzo ha risposto anche (.+)\. Due dispositivi con lo stesso IP si rubano il traffico a vicenda \(se hai appena sostituito l'apparecchio, ignora\)\.$/, "Duplicate IP: $1 answered at this address too. Two devices with the same IP steal each other's traffic (if you just replaced the device, ignore this)."],
+  [/^IP doppi: (.+)\. Due dispositivi con lo stesso indirizzo si contendono il traffico: apri il dispositivo per vedere chi sono\.$/, "Duplicate IPs: $1. Two devices with the same address fight over the traffic: open the device to see who they are."],
+  [/^Art-Net in broadcast da (.+): (\d+) (?:universo arriva|universi arrivano) a tutti i dispositivi della rete \(anche Dante, video e Wi-Fi\)\. Meglio l'unicast verso i nodi\.$/, "Art-Net broadcast from $1: $2 universes reach every device on the network (Dante, video and Wi-Fi too). Unicast to the nodes is better."],
+  [/^Più server DHCP: (.+)\. I dispositivi possono prendere indirizzi e router sbagliati: lascia acceso il DHCP su uno solo\.$/, "Several DHCP servers: $1. Devices can get wrong addresses and routers: leave DHCP on in only one."],
+  [/^Il server DHCP (.+) dà come router (.+), ma il router di questa rete è (.+)\.$/, "DHCP server $1 hands out router $2, but this network's router is $3."],
+  [/^per sentire i server DHCP serve la porta 68: avvia wasaping come root, oppure dagli il permesso una volta con «(.+)»$/, "to hear DHCP servers wasaping needs port 68: run it as root, or give it the permission once with «$1»"],
+  [/^porta 68 non disponibile: (.+)$/, "port 68 not available: $1"],
+  [/^non riesco a mandare la richiesta DHCP$/, "cannot send the DHCP request"],
+  [/^Chiedo… \(3 secondi\)$/, "Asking… (3 seconds)"], [/^Ascolto per (\d+) secondi…$/, "Listening for $1 seconds…"],
+  [/^(\d+) server DHCP rispondono\.$/, "$1 DHCP servers answer."], [/^Interfaccia (.+)$/, "Interface $1"],
+  [/^(\d+(?:[.,]\d+)?) giorni$/, "$1 days"], [/^(\d+(?:[.,]\d+)?) ore$/, "$1 hours"], [/^· rete (.+)$/, "· network $1"], [/^· router (.+)$/, "· router $1"],
+);
+for (const [k, v] of Object.entries({
+  "Server DHCP": "DHCP servers", "Traffico": "Traffic", "Chiedi di nuovo": "Ask again", "Chiedo…": "Asking…", "Misura di nuovo": "Measure again", "Ascolto…": "Listening…",
+  "6 secondi": "6 seconds", "1 giorno": "1 day", "15 secondi": "15 seconds",
+  "Chi distribuisce gli indirizzi: avvisa se rispondono due server (il router di casa collegato per sbaglio).": "Who hands out addresses: warns when two servers answer (the home router plugged in by mistake).",
+  "Cosa arriva a tutti: broadcast, multicast, Art-Net in broadcast, Mbit/s del DMX.": "What reaches everyone: broadcast, multicast, Art-Net broadcast, DMX Mbit/s.",
+  "wasaping chiede in broadcast chi distribuisce gli indirizzi su questa rete e raccoglie tutte le risposte. Non accetta nessuna offerta: nessun indirizzo viene occupato. Lo stesso controllo gira da solo con le scansioni, al massimo ogni 5 minuti.":
+    "wasaping asks in broadcast who hands out addresses on this network and collects every answer. It accepts no offer: no address gets taken. The same check runs by itself with the scans, at most every 5 minutes.",
+  "Non riesco a chiedere": "Cannot ask", "Nessun server DHCP ha risposto.": "No DHCP server answered.",
+  "Normale su una rete show con indirizzi fissi; altrimenti i dispositivi impostati in automatico non prendono un indirizzo (o si danno da soli un 169.254.x.x).": "Normal on a show network with fixed addresses; otherwise devices set to automatic get no address (or give themselves a 169.254.x.x).",
+  "✓ Un solo server DHCP:": "✓ Only one DHCP server:",
+  "I dispositivi prendono l'indirizzo dal primo che risponde: possono finire su un'altra rete o con il router sbagliato. Lascia acceso il DHCP su uno solo (spesso il colpevole è un router di casa o un access point collegato per sbaglio).":
+    "Devices take the address from whoever answers first: they can end up on another network or with the wrong router. Leave DHCP on in only one (often the culprit is a home router or an access point plugged in by mistake).",
+  "Server": "Server", "Offre": "Offers", "Maschera": "Mask", "DNS": "DNS", "Durata": "Lease", "sentito": "heard", "Sentito mentre rispondeva a un altro dispositivo": "Heard while answering another device",
+  "diverso": "different", "Diverso dal router che usa questo computer": "Different from the router this computer uses",
+  "Ascolta per qualche secondo cosa arriva a questo computer. Uno switch manda a tutte le porte il broadcast (e il multicast, se manca l'IGMP snooping): quello che arriva qui senza averlo chiesto arriva anche a tutti gli altri dispositivi.":
+    "Listens for a few seconds to what reaches this computer. A switch sends broadcast to every port (and multicast, without IGMP snooping): what arrives here unasked reaches every other device too.",
+  "pacchetti/s in arrivo": "packets/s arriving", "Mbit/s in arrivo": "Mbit/s arriving", "broadcast e multicast/s": "broadcast and multicast/s",
+  "Il sistema non conta a parte broadcast e multicast su questa interfaccia: guarda i protocolli qui sotto.": "The system does not count broadcast and multicast separately on this interface: see the protocols below.",
+  "Su Windows i contatori comprendono tutte le interfacce di rete.": "On Windows the counters cover every network interface.",
+  "Protocolli show": "Show protocols", "Protocollo": "Protocol", "Universi": "Universes", "Pacchetti/s": "Packets/s", "Sorgenti": "Sources",
+  "Nessun DMX né timecode in arrivo.": "No DMX or timecode arriving.", "Quali universi Art-Net sono in broadcast:": "Which Art-Net universes are broadcast:",
+})) EN.set(k, v);
+for (const [k, v] of Object.entries({
+  "nessun ping": "no ping",
+  "Non risponde al ping né alle porte, nemmeno al secondo tentativo. C'è perché ha risposto alla richiesta ARP («chi ha questo IP?»), quindi era sulla rete negli ultimi minuti. Succede con telefoni in standby, PC con il firewall e dispositivi smart.":
+    "Answers neither ping nor ports, not even on the second try. It is listed because it answered the ARP request (\"who has this IP?\"), so it was on the network in the last few minutes. Typical of phones in standby, PCs with a firewall and smart devices.",
+})) EN.set(k, v);
+EN.set("Avvisi: clic sulla riga per leggerli", "Warnings: click the row to read them");
+EN.set("Trascina per allargare · doppio clic: larghezze iniziali", "Drag to resize · double-click: default widths");
+for (const [k, v] of Object.entries({
+  "Spunta i dispositivi critici: il Monitor li tiene d'occhio e suona se spariscono": "Tick the critical devices: the Monitor watches them and sounds if they disappear",
+  "Critico: il Monitor lo tiene d'occhio. Togli la spunta per smettere": "Critical: the Monitor watches it. Untick to stop",
+  "Spunta per tenerlo d'occhio nel Monitor": "Tick to watch it in the Monitor",
+})) EN.set(k, v);

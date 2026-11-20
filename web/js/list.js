@@ -1,4 +1,6 @@
 // The device list, context menu and the detail panel.
+// Shown for devices found only in the system's ARP table.
+const NOPING_TIP = "Non risponde al ping né alle porte, nemmeno al secondo tentativo. C'è perché ha risposto alla richiesta ARP («chi ha questo IP?»), quindi era sulla rete negli ultimi minuti. Succede con telefoni in standby, PC con il firewall e dispositivi smart.";
 
 // During a scan hosts arrive one by one: draw the list at most every 150 ms
 // instead of once per host (with hundreds of hosts that was slow).
@@ -34,21 +36,24 @@ function render() {
   $("fcount").textContent = words.length && all ? `${list.length + off.length} di ${all}` : "";
   shownKeys = list.concat(off).map(h => h.key);
   if (!list.length && !off.length) {
-    $("rows").innerHTML = `<tr><td colspan="7" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
+    $("rows").innerHTML = `<tr><td colspan="9" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
     return;
   }
   const row = (h, isGone) => {
     const main = label(h);
     const sub = [h.role, h.name ? (h.friendly || h.hostname) : (h.friendly && h.hostname && h.friendly !== h.hostname ? h.hostname : "")].filter(Boolean).join(" · ");
     const warns = (h.warnings || []).length;
-    return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${selected === h.key ? " sel" : ""}${!isGone && freshKeys.has(h.key) ? " fresh" : ""}">
-    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${h.critical ? '<span class="badge crit">critico</span>' : ""}${warns ? `<span class="badge warn" title="${esc(h.warnings.map(tr).join("\n"))}">⚠ ${warns}</span>` : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
+    const wl = isGone ? 0 : warnLevel(h);
+    return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${wl === 2 ? " bad" : wl ? " warned" : ""}${selected === h.key ? " sel" : ""}${!isGone && freshKeys.has(h.key) ? " fresh" : ""}">
+    <td class="ccell"><input type="checkbox" class="mcrit" aria-label="Monitor"${h.critical ? " checked" : ""} title="${h.critical ? "Critico: il Monitor lo tiene d'occhio. Togli la spunta per smettere" : "Spunta per tenerlo d'occhio nel Monitor"}"></td>
+    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
     <td class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
-    <td>${isGone ? "" : protoChips(h)}</td>
+    <td class="protos">${isGone ? "" : protoChips(h)}</td>
     <td class="ports">${isGone ? "" : portLinks(h)}</td>
-    <td class="muted">${isGone ? "" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? "ARP" : ""}</td>
+    <td class="muted">${isGone ? "" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? `<span class="noping" title="${esc(NOPING_TIP)}">nessun ping</span>` : ""}</td>
+    <td class="wcell">${warns && !isGone ? `<span class="wico" title="${esc(h.warnings.map(tr).join("\n"))}">⚠ ${warns}</span>` : ""}</td>
   </tr>`;
   };
   $("rows").innerHTML = list.map(h => row(h, false)).join("") + off.map(h => row(h, true)).join("");
@@ -175,10 +180,88 @@ document.querySelectorAll("th").forEach(th => th.onclick = () => {
   try { localStorage.setItem("wasaping.sort", `${sortKey} ${sortDir}`); } catch {}
   render();
 });
+// The list box ends at the bottom of the window (see #listWrap in app.css).
+(() => {
+  const fit = () => {
+    const top = $("listWrap").getBoundingClientRect().top + scrollY;
+    document.documentElement.style.setProperty("--listTop", Math.round(top) + "px");
+  };
+  new ResizeObserver(fit).observe(document.body);
+  addEventListener("resize", fit);
+  fit();
+})();
+// Columns always fit the list box. IP, MAC, response, Monitor and ⚠ have
+// the width of what they hold; the text columns share the rest by weight
+// (never below a minimum: on a very narrow window the box scrolls
+// sideways). Dragging the edge of a text column moves width between it and
+// the next text column; double-click goes back to the default.
+// Remembered in wasaping.colpct.
+const COL_FIXED = {critical: 84, ip: 130, mac: 158, rtt_ms: 96, warn: 46};
+const COL_PCT = {label: 34, model: 28, protocols: 17, ports: 21};
+const COL_MIN = {label: 130, model: 100, protocols: 86, ports: 90};
+(() => {
+  const wrap = $("listWrap"), table = wrap.querySelector("table");
+  const all = [...table.querySelectorAll("thead th")];
+  const flex = all.filter(t => COL_PCT[t.dataset.k]);
+  let pct = {...COL_PCT};
+  try { const v = JSON.parse(localStorage.getItem("wasaping.colpct") || "null"); if (v && flex.every(t => v[t.dataset.k] > 0)) pct = v; } catch {}
+  const fixedPx = all.reduce((a, t) => a + (COL_FIXED[t.dataset.k] || 0), 0);
+  const room = () => Math.max(wrap.clientWidth - fixedPx, 0);
+  // Share the room by weight; a column held at its minimum takes its
+  // share from the others (still above theirs).
+  const widths = () => {
+    const r = room(), w = {};
+    let free = flex.map(t => t.dataset.k), left = r;
+    for (let pass = 0; pass < flex.length; pass++) {
+      const sum = free.reduce((a, k) => a + pct[k], 0);
+      const low = free.filter(k => left * pct[k] / sum < COL_MIN[k]);
+      if (!low.length) { free.forEach(k => w[k] = Math.floor(left * pct[k] / sum)); break; }
+      low.forEach(k => { w[k] = COL_MIN[k]; left -= COL_MIN[k]; });
+      free = free.filter(k => !low.includes(k));
+      if (!free.length) break;
+    }
+    return w;
+  };
+  const apply = () => {
+    const w = widths();
+    let total = fixedPx;
+    all.forEach(t => {
+      const k = t.dataset.k, px = COL_FIXED[k] || w[k];
+      t.style.width = px + "px"; total += COL_FIXED[k] ? 0 : px;
+    });
+    table.style.width = total + "px";
+  };
+  new ResizeObserver(apply).observe(wrap);
+  apply();
+  flex.slice(0, -1).forEach((th, i) => {
+    const next = flex[i + 1];
+    const g = document.createElement("span"); g.className = "colgrip"; g.title = "Trascina per allargare · doppio clic: larghezze iniziali"; th.append(g);
+    g.onclick = e => e.stopPropagation();
+    g.ondblclick = e => { e.stopPropagation(); pct = {...COL_PCT}; apply(); try { localStorage.removeItem("wasaping.colpct"); } catch {} };
+    g.onpointerdown = e => {
+      e.preventDefault(); e.stopPropagation(); g.setPointerCapture(e.pointerId);
+      const k = th.dataset.k, n = next.dataset.k, a0 = pct[k], b0 = pct[n], x0 = e.clientX;
+      const perPx = flex.reduce((a, t) => a + pct[t.dataset.k], 0) / Math.max(room(), 1);
+      g.onpointermove = m => {
+        const d = Math.max(5 - a0, Math.min(b0 - 5, (m.clientX - x0) * perPx));
+        pct[k] = a0 + d; pct[n] = b0 - d; apply();
+      };
+      g.onpointerup = () => { g.onpointermove = g.onpointerup = null; try { localStorage.setItem("wasaping.colpct", JSON.stringify(pct)); } catch {} };
+    };
+  });
+  try { localStorage.removeItem("wasaping.colw"); } catch {} // widths in pixels, before 0.8.7
+})();
 try { const [k, d] = (localStorage.getItem("wasaping.sort") || "").split(" "); if (document.querySelector(`th[data-k="${k}"]`)) { sortKey = k; sortDir = d === "-1" ? -1 : 1; } } catch {}
 $("filter").oninput = render;
 $("rows").onclick = e => {
   if (e.target.closest("a")) return; // port links open the device page
+  if (e.target.closest("td.ccell")) { // the Monitor checkbox, not the detail
+    const box = e.target.closest("td.ccell").querySelector("input"), key = e.target.closest("tr[data-key]")?.dataset.key;
+    if (e.target !== box) box.checked = !box.checked;
+    const h = hosts.find(x => x.key === key) || gone.find(x => x.key === key);
+    if (h) setCritical(h, box.checked);
+    return;
+  }
   const tr = e.target.closest("tr[data-key]");
   if (tr) openDetail(tr.dataset.key);
 };
@@ -220,7 +303,7 @@ function openDetail(key) {
     ...showFacts(h),
     ["Servizi", svcs.length ? svcs.map(s => `<span class="svc">${esc(s)}</span>`).join("") : "—"],
     ["Porte aperte", isGone ? "—" : portLinks(h) || "nessuna tra quelle controllate"],
-    ["Risposta", isGone ? "—" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? "solo tabella ARP" : "—"],
+    ["Risposta", isGone ? "—" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? NOPING_TIP : "—"],
     ["Visto la prima volta", esc(when(h.first_seen)) || "—"],
   ];
   if (isGone) rows.push(["Visto l'ultima volta", esc(when(h.last_seen))]);

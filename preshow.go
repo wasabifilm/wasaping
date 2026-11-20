@@ -310,6 +310,23 @@ func runPreshow(ctx context.Context, net, lang string) (*Report, error) {
 		rep.Sections = append(rep.Sections, sec)
 	}
 
+	// DHCP servers (the problems themselves are counted below).
+	sec = ReportSection{Title: L(lang, "Server DHCP", "DHCP servers"), Rows: []ReportRow{}}
+	if _, servers, err := dhcpServers(ctx, false); err != nil {
+		sec.Note = msgLang(err.Error(), lang)
+	} else if len(servers) == 0 {
+		sec.Note = L(lang, "Nessuno ha risposto: normale con indirizzi fissi.", "None answered: normal with fixed addresses.")
+	} else {
+		for _, sv := range servers {
+			row := ReportRow{Name: serverName(sv.IP, hosts), Class: "ok", Detail: L(lang, "router ", "router ") + firstNonEmpty(sv.Router, "—")}
+			if len(servers) > 1 {
+				row.Class = "warn"
+			}
+			sec.Rows = append(sec.Rows, row)
+		}
+	}
+	rep.Sections = append(rep.Sections, sec)
+
 	// Network problems and device warnings.
 	lastMu.Lock()
 	var issues []string

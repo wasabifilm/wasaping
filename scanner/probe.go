@@ -125,6 +125,34 @@ func systemPing(ctx context.Context, ip string, timeout time.Duration) (bool, ti
 	return true, pingRTT(string(out))
 }
 
+// pingAgain gives a quiet device a second chance: two pings a second
+// apart (phones in standby and busy devices answer late), true when any of
+// them comes back.
+func pingAgain(ctx context.Context, ip string) (bool, time.Duration) {
+	var args []string
+	switch runtime.GOOS {
+	case "windows":
+		args = []string{"-n", "2", "-w", "1000", ip}
+	case "darwin", "freebsd", "openbsd", "netbsd":
+		args = []string{"-c", "2", "-t", "2", ip}
+	default:
+		args = []string{"-c", "2", "-W", "1", "-w", "2", ip}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ping", args...)
+	hideWindow(cmd)
+	out, err := cmd.Output()
+	if runtime.GOOS == "windows" {
+		if !strings.Contains(strings.ToUpper(string(out)), "TTL=") {
+			return false, 0
+		}
+	} else if err != nil && !strings.Contains(string(out), "time=") {
+		return false, 0
+	}
+	return true, pingRTT(string(out))
+}
+
 // reverseDNS looks up a hostname for ip with a short timeout.
 func reverseDNS(ctx context.Context, ip string, timeout time.Duration) string {
 	ctx, cancel := context.WithTimeout(ctx, timeout)

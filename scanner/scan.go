@@ -33,18 +33,20 @@ type Host struct {
 	PTP       string      `json:"ptp,omitempty"` // set when this device is a PTP clock master
 	// PTPFollower: this device asked the master for the delay (Delay_Req):
 	// it is following the clock.
-	PTPFollower bool       `json:"ptp_follower,omitempty"`
-	PJLink      *PJLink    `json:"pjlink,omitempty"`
-	UPnP        string     `json:"upnp,omitempty"`      // UPnP device type, e.g. MediaRenderer
-	WebTitle    string     `json:"web_title,omitempty"` // <title> of its web page
-	NDI         []string   `json:"ndi,omitempty"`       // NDI sources it publishes
-	IPv6        []string   `json:"ipv6,omitempty"`      // from the neighbour table, matched by MAC
-	Dante       *DanteInfo `json:"dante,omitempty"`
-	Kind        string     `json:"kind,omitempty"` // see GuessKind
-	Warnings    []string   `json:"warnings,omitempty"`
-	OffSubnet   bool       `json:"off_subnet,omitempty"` // not in any network of this computer
-	Gateway     bool       `json:"gateway,omitempty"`
-	Self        bool       `json:"self,omitempty"`
+	PTPFollower  bool       `json:"ptp_follower,omitempty"`
+	PJLink       *PJLink    `json:"pjlink,omitempty"`
+	UPnP         string     `json:"upnp,omitempty"`      // UPnP device type, e.g. MediaRenderer
+	WebTitle     string     `json:"web_title,omitempty"` // <title> of its web page
+	NDI          []string   `json:"ndi,omitempty"`       // NDI sources it publishes
+	IPv6         []string   `json:"ipv6,omitempty"`      // from the neighbour table, matched by MAC
+	Dante        *DanteInfo `json:"dante,omitempty"`
+	Kind         string     `json:"kind,omitempty"` // see GuessKind
+	Warnings     []string   `json:"warnings,omitempty"`
+	OffSubnet    bool       `json:"off_subnet,omitempty"` // not in any network of this computer
+	Gateway      bool       `json:"gateway,omitempty"`
+	Self         bool       `json:"self,omitempty"`
+	ArtBroadcast []int      `json:"art_broadcast,omitempty"` // Art-Net universes it sends in broadcast
+	OtherMACs    []string   `json:"other_macs,omitempty"`    // other devices seen with this IP in the last minutes
 }
 
 // Options controls a scan.
@@ -124,6 +126,11 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 	v6Ready := make(chan struct{})
 	go func() { wakeV6(ctx, interfaceFor(opt.Targets, localNets)); close(v6Ready) }()
 
+	// The neighbour cache, every second while the probes run: two devices
+	// with the same IP take turns in it.
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	go watchARP(watchCtx)
+
 	// Phase 1: liveness probes.
 	type hit struct {
 		method string
@@ -172,13 +179,16 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 	wg.Wait()
 	<-showReady
 	if ctx.Err() != nil {
+		stopWatch()
 		return nil, ctx.Err()
 	}
 
 	// Phase 2: the probes above filled the ARP cache, even for hosts
 	// whose ports are all filtered. Any target with a MAC is alive, and so
 	// is anyone who spoke a show protocol.
+	stopWatch()
 	arp := ARPTable(ctx)
+	NoteARP(arp)
 	<-v6Ready
 	v6 := NeighborsV6(ctx)
 	for ip := range arp {
@@ -196,7 +206,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			continue
 		}
 		m := "ptp"
-		if s.artnet != nil {
+		if s.artnet != nil || len(s.artDmx) > 0 {
 			m = "artnet"
 		} else if s.sacn != nil {
 			m = "sacn"
@@ -250,6 +260,15 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			defer wg2.Done()
 			defer func() { <-sem }()
 			host := Host{IP: ip, Method: h.method, RTTms: h.rtt.Milliseconds()}
+			// Second chance for a device found only in the ARP table: it
+			// answered neither the probes nor the ping in time. Two slower
+			// pings, alongside the rest of this phase, give many of them a
+			// response time (phones in standby, Wi-Fi in power saving).
+			if h.method == "arp" && opt.Ping {
+				if ok, rtt := pingAgain(ctx, ip); ok {
+					host.Method, host.RTTms = "ping", rtt.Milliseconds()
+				}
+			}
 			if mac, ok := selfIPs[ip]; ok {
 				host.Self, host.MAC = true, mac
 			} else {
@@ -260,6 +279,19 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				host.MAC = s.artnet.MAC
 			}
 			host.Vendor = Vendor(host.MAC)
+			if host.MAC != "" && !host.Self {
+				host.OtherMACs = ConflictMACs(ip, host.MAC)
+				if len(host.OtherMACs) > 0 {
+					var who []string
+					for _, m := range host.OtherMACs {
+						if v := Vendor(m); v != "" {
+							m += " (" + v + ")"
+						}
+						who = append(who, m)
+					}
+					host.Warnings = append(host.Warnings, "IP doppio: a questo indirizzo ha risposto anche "+joinStrings(who)+". Due dispositivi con lo stesso IP si rubano il traffico a vicenda (se hai appena sostituito l'apparecchio, ignora).")
+				}
+			}
 			if host.MAC != "" {
 				host.IPv6 = v6[host.MAC]
 			}
@@ -296,6 +328,10 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			}
 			if s != nil {
 				host.ArtNet, host.SACN, host.PTP, host.PTPFollower = s.artnet, s.sacn, s.ptp, s.ptpFollow
+				for u := range s.artDmx {
+					host.ArtBroadcast = append(host.ArtBroadcast, u)
+				}
+				sort.Ints(host.ArtBroadcast)
 				if len(s.artMACs) > 1 {
 					host.Warnings = append(host.Warnings, "Conflitto di IP: su Art-Net rispondono più dispositivi con questo indirizzo ("+joinStrings(s.artMACs)+").")
 				}

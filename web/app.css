@@ -76,6 +76,34 @@ tr:last-child td { border-bottom: none; }
 tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr.sel { background: var(--wasabi-soft); }
 tr.gone td { color: var(--muted); }
+tbody tr.warned { background: rgba(242, 153, 74, .12); }
+tbody tr.warned td:first-child { box-shadow: inset 4px 0 0 #f2994a; }
+tbody tr.bad { background: rgba(214, 63, 63, .12); }
+tbody tr.bad td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
+tbody tr.warned:hover, tbody tr.bad:hover { filter: brightness(.97); }
+tbody tr.warned.sel, tbody tr.bad.sel { outline: 2px solid var(--wasabi); outline-offset: -2px; }
+/* The list fills the window down to the bottom and scrolls inside, like a
+   spreadsheet: column names stay on top, wide tables scroll sideways inside
+   the box, the bar above stays in view. --listTop is set by list.js. */
+#listWrap { overflow: auto; max-height: max(320px, calc(100vh - var(--listTop, 220px) - 32px)); }
+#listWrap thead th { top: 0; z-index: 5; }
+.colgrip { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
+.colgrip::after { content: ""; position: absolute; left: 4px; top: 25%; height: 50%; width: 1px; background: var(--line); }
+th:hover .colgrip::after, .colgrip:active::after { background: var(--wasabi); width: 2px; }
+
+#listWrap table { table-layout: fixed; }
+#listWrap th, #listWrap td { box-sizing: border-box; }
+#listWrap th { overflow: hidden; text-overflow: ellipsis; }
+#listWrap td { overflow: hidden; text-overflow: ellipsis; }
+#listWrap td.name { min-width: 0; }
+#listWrap td.ports, #listWrap td.protos { white-space: normal; min-width: 0; }
+#listWrap .namecell > div { min-width: 0; overflow: hidden; }
+#listWrap .namecell .sub, #listWrap td .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+th.ccol, td.ccell { text-align: center; width: 1%; padding-left: 10px; padding-right: 6px; }
+td.ccell input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--wasabi); margin: 0; vertical-align: middle; }
+th.wcol, td.wcell { text-align: center; white-space: nowrap; width: 1%; }
+.wico { font-size: 12px; font-weight: 600; color: #b35f12; cursor: help; }
+tr.bad .wico { color: var(--warn); }
 tr.gone .kind { opacity: .45; }
 td.ports { white-space: normal; min-width: 140px; }
 td.mono, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
@@ -241,6 +269,15 @@ button.ident.on { animation: blink 1s steps(2) infinite; }
 .chansvg path { fill: none; stroke: var(--wasabi); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .chansvg .ax { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .row .grow { flex: 1; }
+.noping { font-size: 12px; cursor: help; border-bottom: 1px dotted var(--muted); }
+.netnote { margin: 12px 0 0; padding: 10px 12px; border: 1px solid #f2994a; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.okline, .warnline, .infoline { margin: 10px 0 0; }
+.okline { color: var(--wasabi-text); }
+.warnline { color: #c5701f; }
+.trtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+.trtile { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+.trtile b { font-size: 26px; font-variant-numeric: tabular-nums; }
+.trtile span { font-size: 12px; color: var(--muted); }
 .tcst.running { color: var(--wasabi-text); font-weight: 600; } .tcst.stopped { color: #c5701f; } .tcst.silent { color: var(--warn); }
 #dmxFreeze.on { background: #f2994a; border-color: #f2994a; color: #171717; font-weight: 600; }
 .dmxgrid.num { grid-template-columns: repeat(16, 1fr); }

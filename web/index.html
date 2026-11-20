@@ -27,8 +27,8 @@
     </select>
     <input id="custom" hidden placeholder="22,80,443 o 1-1024" spellcheck="false" title="Porte da controllare">
     <button id="scan" class="primary">Scansiona</button>
-    <button id="clearBtn" title="Toglie l'elenco dallo schermo. Nomi, ruoli, note e dispositivi conosciuti restano">Svuota</button>
     <button id="loopBtn" class="loop" aria-pressed="false" title="Rifà la scansione di continuo finché la finestra è aperta: l'elenco si aggiorna da solo e avvisa se arriva o sparisce qualcuno">↻ Continua</button>
+    <button id="clearBtn" title="Toglie l'elenco dallo schermo. Nomi, ruoli, note e dispositivi conosciuti restano">Svuota</button>
   </div>
   <div class="group tools">
     <input id="filter" placeholder="Filtra per IP, nome, produttore…" title="Più parole: tutte devono comparire. Anche «critico», «nuovo», «avviso», «non risponde». Tasto: /"><span id="fcount" class="fcount"></span>
@@ -54,10 +54,10 @@
 <div class="wrap" id="listWrap">
   <table>
     <thead><tr>
-      <th data-k="label">Dispositivo</th><th data-k="ip">IP</th><th data-k="mac">MAC</th>
-      <th data-k="model">Modello / produttore</th><th data-k="protocols">Protocolli</th><th data-k="ports">Porte aperte</th><th data-k="rtt_ms">Risposta</th>
+      <th data-k="critical" class="ccol" title="Spunta i dispositivi critici: il Monitor li tiene d'occhio e suona se spariscono">Monitor</th><th data-k="label">Dispositivo</th><th data-k="ip">IP</th><th data-k="mac">MAC</th>
+      <th data-k="model">Modello / produttore</th><th data-k="protocols">Protocolli</th><th data-k="ports">Porte aperte</th><th data-k="rtt_ms">Risposta</th><th data-k="warn" class="wcol" title="Avvisi: clic sulla riga per leggerli">⚠</th>
     </tr></thead>
-    <tbody id="rows"><tr><td colspan="7" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr></tbody>
+    <tbody id="rows"><tr><td colspan="9" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr></tbody>
   </table>
 </div>
 

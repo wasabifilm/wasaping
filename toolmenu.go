@@ -20,6 +20,8 @@ var toolMenuItems = []toolMenuItem{
 	{"net", "plan", "Piano IP", "IP plan", "i", true},
 	{"net", "free", "IP liberi", "Free IPs", "", false},
 	{"net", "map", "Mappa della rete", "Network map", "", false},
+	{"net", "dhcp", "Server DHCP", "DHCP servers", "", false},
+	{"net", "traffic", "Traffico", "Traffic", "", false},
 	{"net", "compare", "Confronta con l'ultima volta", "Compare with last time", "", false},
 	{"project", "report", "Report di fine show", "End-of-show report", "", false},
 	{"project", "-", "", "", "", false},

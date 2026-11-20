@@ -85,6 +85,10 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - il **timecode Art-Net** (ArtTimeCode) in grande, con il formato (24, 25, 29,97 DF, 30) e cosa è successo: partito, fermo, saltato, non arriva più. Gli stessi eventi finiscono nel registro del Monitor, senza allarmi (il timecode si ferma anche tra una cue e l'altra).
 - **Porta dello switch:** chiede agli switch gestiti (via SNMP in sola lettura) su quale porta è collegato ogni dispositivo, con la descrizione della porta.
 - **IP liberi** nell'intervallo, per dare un IP fisso a un nuovo apparecchio.
+- **Server DHCP** (Rete): chi distribuisce gli indirizzi, cosa offre (indirizzo, maschera, router, DNS, durata). Se rispondono **due server** (il classico router di casa o access point collegato per sbaglio) o se il DHCP dà un router diverso da quello della rete, l'avviso compare da solo dopo la scansione (il controllo gira con le scansioni, al massimo ogni 5 minuti) e nel check pre-show. wasaping non accetta nessuna offerta: nessun indirizzo viene occupato. Su Linux serve la porta 68 (il servizio del `.deb` ha già il permesso).
+- **IP doppi:** durante la scansione wasaping legge la tabella ARP ogni secondo e ricorda per 10 minuti quali MAC hanno risposto a ogni IP. Se due dispositivi si alternano sullo stesso indirizzo, il dispositivo e la rete lo segnalano, con MAC e produttore di entrambi. Con «↻ Continua» o la ripetizione in background se ne accorge anche tra una scansione e l'altra.
+- **Elenco più leggibile:** la prima colonna «Monitor» ha una casella per segnare al volo i dispositivi critici; le righe con avvisi sono colorate (arancione; rosso per un IP doppio) con il numero di avvisi nell'ultima colonna; le colonne restano sempre dentro la finestra e si allargano trascinando il bordo del nome (doppio clic: larghezze iniziali) e i nomi delle colonne restano in cima mentre l'elenco scorre. «nessun ping» indica un dispositivo che c'è (ha risposto alla richiesta ARP) ma non risponde al ping né alle porte, nemmeno al secondo tentativo: telefoni in standby, PC con il firewall, dispositivi smart.
+- **Traffico** (Rete): cosa arriva a questo computer senza averlo chiesto, cioè a tutti: pacchetti e Mbit/s in arrivo (su Windows e Linux anche broadcast e multicast a parte) e i protocolli show con universi, pacchetti/s e Mbit/s. Avvisa per l'**Art-Net in broadcast** (anche dopo ogni scansione), per il DMX oltre i 50 Mbit/s e per le tempeste di broadcast.
 - **Progetto dello show:** «Salva progetto» mette in un file `.wasaping` tutto il lavoro su un locale, anche su più reti: dispositivi con nomi, ruoli, note e tipi, critici, piano IP, universi critici, patch RDM, storico e note dello show. «Apri progetto» lo riporta qui o su un altro computer; una rete mai vista viene preparata e si attiva quando arrivi lì e fai la scansione.
 - **Pulisci i dispositivi vecchi:** toglie in un colpo quelli non visti da 3 mesi, 30 giorni o una settimana (i critici restano sempre).
 - **Un elenco per ogni locale:** ogni rete ha i suoi dispositivi, con nome, ruolo e note. La riconosce dal router, o dalla sottorete sulle reti show senza router. Le dai un nome ("Arena Verona") e la volta dopo vedi cosa c'è di nuovo e cosa manca.
@@ -160,6 +164,8 @@ wasaping -o csv > rete.csv   # esporta in CSV (oppure -o json)
 wasaping app                 # apre la finestra
 wasaping web                 # apre l'interfaccia nel browser (Ctrl+C per uscire)
 wasaping interfaces          # elenca le interfacce di rete
+wasaping dhcp                # chi distribuisce gli indirizzi (avvisa se sono due)
+wasaping traffic -t 6s       # traffico in arrivo: broadcast, multicast, DMX
 wasaping update-oui          # aggiorna il database dei produttori (è già incluso)
 wasaping helper install      # macOS: aiuto per leggere i MAC (anche: uninstall, status)
 ```

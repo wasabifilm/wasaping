@@ -44,7 +44,8 @@ type showInfo struct {
 	sacn      *SACNSource
 	ptp       string // "PTPv1" (Dante) / "PTPv2 dominio N" when this IP is the clock master
 	ptpPrio1  int
-	ptpFollow bool // sent a Delay_Req: follows the clock
+	ptpFollow bool         // sent a Delay_Req: follows the clock
+	artDmx    map[int]bool // Art-Net universes this IP sends where we hear them (broadcast)
 }
 
 // ArtNetNodePort is where requests to Art-Net nodes go (always 6454 on a
@@ -79,6 +80,16 @@ func showDiscover(ctx context.Context, iface *net.Interface, wait time.Duration)
 				c.WriteToUDP(poll, &net.UDPAddr{IP: b, Port: ArtNetNodePort})
 			}
 			readUntil(ctx, c, "artnet", func(b []byte, from *net.UDPAddr) {
+				if uni, _, ok := parseArtDmx(b); ok {
+					mu.Lock()
+					s := get(from.IP.String())
+					if s.artDmx == nil {
+						s.artDmx = map[int]bool{}
+					}
+					s.artDmx[uni] = true
+					mu.Unlock()
+					return
+				}
 				if n := parseArtPollReply(b); n != nil {
 					ip := from.IP.String()
 					if len(b) >= 14 {

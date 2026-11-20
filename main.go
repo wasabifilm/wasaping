@@ -29,6 +29,8 @@ Uso:
   wasaping web [-addr 127.0.0.1:0]     apre l'interfaccia grafica nel browser
   wasaping app                        come web, ma si chiude con la pagina (doppio clic)
   wasaping interfaces                  elenca le interfacce di rete
+  wasaping dhcp                        chi distribuisce gli indirizzi (avvisa se sono due)
+  wasaping traffic [-t 6s]             traffico in arrivo: broadcast, multicast, DMX
   wasaping helper install|uninstall    macOS: aiuto per leggere i MAC (password una volta)
   wasaping web-access password|on|off  interfaccia completa da un altro computer (HTTPS e password)
 
@@ -82,6 +84,10 @@ func main() {
 		err = runHelper(args)
 	case "preshow":
 		err = runPreshowCLI(ctx, args)
+	case "dhcp":
+		err = runDHCPCLI(ctx)
+	case "traffic":
+		err = runTrafficCLI(ctx, args)
 	case "rdm":
 		err = runRDMCLI(ctx, args)
 	case "dmx":

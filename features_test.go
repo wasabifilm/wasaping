@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,5 +114,39 @@ func TestShowMarkersReport(t *testing.T) {
 	rep, err := buildShowReportRange(s, e)
 	if err != nil || rep.Drops != 1 || len(rep.Devices) != 1 || rep.Devices[0].Name != "Stagebox" {
 		t.Fatalf("%+v %v", rep, err)
+	}
+}
+
+func TestNetworkChecks(t *testing.T) {
+	hosts := []HostView{{Host: scanner.Host{IP: "10.0.0.1", Vendor: "MikroTik"}}, {Host: scanner.Host{IP: "10.0.0.77", Vendor: "TP-Link"}}}
+	servers := []scanner.DHCPServer{{IP: "10.0.0.1", Router: "10.0.0.1"}, {IP: "10.0.0.77", Router: "192.168.0.1"}}
+	is := dhcpIssues(servers, hosts, "10.0.0.1")
+	if len(is) != 2 || !strings.Contains(is[0], "10.0.0.77 (TP-Link)") || !strings.Contains(is[1], "192.168.0.1") {
+		t.Fatalf("dhcp issues: %q", is)
+	}
+	for _, s := range is {
+		if en := msgIn(s, "en"); en == s {
+			t.Errorf("not translated: %q", s)
+		}
+	}
+	if is := dhcpIssues(servers[:1], hosts, "10.0.0.1"); len(is) != 0 {
+		t.Fatalf("one good server should be fine: %q", is)
+	}
+	calm := trafficNotes(scanner.TrafficReport{RxPPS: 300, NonUnicastPS: -1})
+	if len(calm) != 1 || calm[0].Level != "ok" {
+		t.Fatalf("calm traffic: %+v", calm)
+	}
+	busy := trafficNotes(scanner.TrafficReport{RxPPS: 30000, NonUnicastPS: 5000, ArtBroadcast: make([]int, 12),
+		Protocols: []scanner.TrafficProto{{Name: "Art-Net", Universes: 12, Mbps: 60}}})
+	if len(busy) != 4 || busy[0].Level != "warn" {
+		t.Fatalf("busy traffic: %+v", busy)
+	}
+	for _, m := range []string{
+		"IP doppi: 10.0.0.5. Due dispositivi con lo stesso indirizzo si contendono il traffico: apri il dispositivo per vedere chi sono.",
+		"Art-Net in broadcast da grandMA3: 4 universi arrivano a tutti i dispositivi della rete (anche Dante, video e Wi-Fi). Meglio l'unicast verso i nodi.",
+	} {
+		if msgIn(m, "en") == m {
+			t.Errorf("not translated: %q", m)
+		}
 	}
 }

@@ -26,6 +26,7 @@ func main() {
 	noPTP := flag.Bool("no-ptp", false, "do not simulate a PTP clock master")
 	backup := flag.Bool("backup", true, "a second console on sACN universe 2 (same priority)")
 	video := flag.Bool("video", true, "Videohub, HyperDeck, ATEM and vMix on their usual ports")
+	timecode := flag.Bool("timecode", true, "Art-Net timecode (EBU 25) that runs, stops, jumps and goes silent")
 	dante := flag.Bool("dante", true, "a Dante device answering ARC on UDP 4440 (routing, read-only)")
 	flag.Parse()
 	addr := net.ParseIP(*ip).To4()
@@ -51,7 +52,10 @@ func main() {
 		}()
 		fmt.Println("showsim: dispositivo Dante", showsim.DanteName, "su UDP 4440 (in wasaping: Dante in alto, con l'IP di questo computer)")
 	}
-	err := showsim.Run(ctx, showsim.Config{NodeIP: addr, NoPTP: *noPTP, Backup: *backup, Identify: func(uid [6]byte, on bool) {
+	if *timecode {
+		fmt.Println("showsim: timecode Art-Net EBU 25 (corre, si ferma, salta, tace; in wasaping: DMX → Timecode)")
+	}
+	err := showsim.Run(ctx, showsim.Config{NodeIP: addr, NoPTP: *noPTP, Backup: *backup, Timecode: *timecode, Identify: func(uid [6]byte, on bool) {
 		fmt.Printf("RDM identifica %X: %v\n", uid, on)
 	}})
 	if err != nil {

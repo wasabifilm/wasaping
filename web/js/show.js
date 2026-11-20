@@ -3,27 +3,41 @@
 // Live DMX: universes heard on Art-Net and sACN. "Elenco": the table and,
 // for the universe picked, its 512 channels with the RDM patch on top, the
 // history of one channel and the sources side by side. "Panoramica": all
-// universes as strips. Listening only: wasaping never sends DMX.
+// universes as strips. "Nodi": the Art-Net nodes (ArtPoll every 3 s) with
+// their ports and whether data reaches them. "Timecode": ArtTimeCode.
+// wasaping never sends DMX.
 let dmxES = null, dmxSel = "", dmxSess = "", dmxCh = 0, dmxTab = "list", dmxPatch = [], dmxTableAt = 0, dmxTableKey = "", dmxGridFor = "", critUnis = new Set();
+let dmxFrozen = false, dmxPrev = null, dmxLast = null;
+let dmxMode = (() => { try { return localStorage.getItem("wasaping.dmxMode") || "color"; } catch { return "color"; } })();
 const b64bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-const dmxQuery = () => `s=${dmxSess}&u=${encodeURIComponent(dmxSel)}&ch=${dmxCh}&all=${dmxTab === "all" ? 1 : 0}`;
+const dmxQuery = () => `s=${dmxSess}&u=${encodeURIComponent(dmxSel)}&ch=${dmxCh}&all=${dmxTab === "all" ? 1 : 0}&nodes=1`;
 const dmxWantPost = () => fetch(`api/dmx?${dmxQuery()}`, {method: "POST"}).catch(() => {});
+const DMX_TABS = [["list", "Elenco"], ["all", "Panoramica"], ["nodes", "Nodi Art-Net"], ["tc", "Timecode"]];
+// Art-Net port-address as Net:Sub-Net:Universe, as consoles and nodes show it.
+const artAddr = n => `${n >> 8}:${(n >> 4) & 15}:${n & 15}`;
 function dmxView() {
   fetch("api/universe").then(r => r.json()).then(l => { critUnis = new Set(l || []); }).catch(() => {});
   fetch("api/rdm").then(r => r.json()).then(d => { dmxPatch = (d.fixtures || []).filter(f => f.address); dmxGridFor = ""; }).catch(() => {});
-  openSheet("DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). Solo ascolto: wasaping non manda DMX. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.</p>
-    <div class="row"><button id="dmxTabList" class="primary">Elenco</button><button id="dmxTabAll">Panoramica</button></div>
-    <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxAll"></div><div id="dmxDetail"></div>`);
-  dmxTableKey = ""; dmxGridFor = "";
-  const tab = t => { dmxTab = t; $("dmxTabList").classList.toggle("primary", t === "list"); $("dmxTabAll").classList.toggle("primary", t === "all");
-    $("dmxBody").hidden = $("dmxDetail").hidden = t !== "list"; $("dmxAll").hidden = t !== "all"; dmxTableKey = ""; dmxWantPost(); };
-  $("dmxTabList").onclick = () => tab("list");
-  $("dmxTabAll").onclick = () => tab("all");
-  $("dmxAll").hidden = dmxTab !== "all"; $("dmxBody").hidden = $("dmxDetail").hidden = dmxTab !== "list";
-  $("dmxTabList").classList.toggle("primary", dmxTab === "list"); $("dmxTabAll").classList.toggle("primary", dmxTab === "all");
+  openSheet("DMX", `<p class="muted">In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). wasaping non manda DMX: per trovare i nodi manda solo un ArtPoll ogni 3 secondi. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.</p>
+    <div class="row">${DMX_TABS.map(([id, l]) => `<button data-tab="${id}" class="dmxtab">${l}</button>`).join("")}<span class="grow"></span>
+      <select id="dmxMode" title="Come mostrare i 512 canali"><option value="color">Canali: colori</option><option value="dec">Canali: 0–255</option><option value="pct">Canali: %</option></select>
+      <button id="dmxFreeze" title="Ferma la vista per leggere i valori con calma (l'ascolto continua)">⏸ Blocca</button></div>
+    <div id="dmxBody"><p>In ascolto…</p></div><div id="dmxAll"></div><div id="dmxDetail"></div><div id="dmxNodes"></div><div id="dmxTC"></div>`);
+  dmxTableKey = ""; dmxGridFor = ""; dmxFrozen = false; dmxPrev = null; dmxLast = null;
+  const tab = t => {
+    dmxTab = t; document.querySelectorAll(".dmxtab").forEach(b => b.classList.toggle("primary", b.dataset.tab === t));
+    $("dmxBody").hidden = $("dmxDetail").hidden = t !== "list"; $("dmxAll").hidden = t !== "all"; $("dmxNodes").hidden = t !== "nodes"; $("dmxTC").hidden = t !== "tc";
+    $("dmxMode").hidden = t !== "list";
+    dmxTableKey = ""; delete $("dmxAll").dataset.ids; dmxWantPost(); if (dmxLast) drawDMX(dmxLast, true);
+  };
+  document.querySelectorAll(".dmxtab").forEach(b => b.onclick = () => tab(b.dataset.tab));
+  $("dmxMode").value = dmxMode;
+  $("dmxMode").onchange = () => { dmxMode = $("dmxMode").value; try { localStorage.setItem("wasaping.dmxMode", dmxMode); } catch {} dmxGridFor = ""; if (dmxLast) drawDMX(dmxLast, true); };
+  $("dmxFreeze").onclick = () => { dmxFrozen = !dmxFrozen; $("dmxFreeze").textContent = dmxFrozen ? "▶ Riprendi" : "⏸ Blocca"; $("dmxFreeze").classList.toggle("on", dmxFrozen); if (!dmxFrozen && dmxLast) drawDMX(dmxLast, true); };
+  tab(dmxTab);
   dmxSess = Math.random().toString(36).slice(2);
   dmxES = new EventSource(`api/dmx?${dmxQuery()}`);
-  dmxES.addEventListener("snap", e => drawDMX(JSON.parse(e.data)));
+  dmxES.addEventListener("snap", e => { dmxLast = JSON.parse(e.data); drawDMX(dmxLast); });
   dmxES.onerror = () => { if (dmxES) $("dmxBody").innerHTML = "<p>Ascolto interrotto.</p>"; };
 }
 // The fixtures of the latest RDM search on this universe (Art-Net port-address).
@@ -31,21 +45,33 @@ function dmxFixtures(id) {
   const [proto, n] = id.split(":");
   return proto === "art" ? dmxPatch.filter(f => f.universe === +n) : [];
 }
-function drawDMX(unis) {
-  if (!$("dmxBody")) return;
+// Which Art-Net nodes put a universe out to DMX (port-address = number).
+const nodesFor = (snap, u) => u.protocol === "Art-Net" ? (snap.nodes || []).filter(n => (n.out || []).includes(u.number)) : [];
+function drawDMX(snap, force) {
+  if (!$("dmxBody") || (dmxFrozen && !force)) return;
+  const unis = snap.universes || [];
+  drawTC(snap.timecode || []);
+  drawNodes(snap);
+  const running = (snap.timecode || []).some(t => t.state === "running");
+  const tcBtn = document.querySelector('.dmxtab[data-tab="tc"]');
+  if (tcBtn) tcBtn.textContent = (snap.timecode || []).length ? `Timecode ${running ? "▶" : "■"}` : "Timecode";
+  const nBtn = document.querySelector('.dmxtab[data-tab="nodes"]');
+  if (nBtn) nBtn.textContent = `Nodi Art-Net (${(snap.nodes || []).length})`;
   if (!unis.length) {
     $("dmxBody").innerHTML = "<p>Nessun universo in arrivo. Sulla rete non passa DMX, oppure la console manda Art-Net diretto ai nodi (unicast) e non a questo computer.</p>";
-    $("dmxDetail").innerHTML = $("dmxAll").innerHTML = ""; dmxTableKey = dmxGridFor = ""; return;
+    $("dmxDetail").innerHTML = $("dmxAll").innerHTML = ""; delete $("dmxAll").dataset.ids; dmxTableKey = dmxGridFor = ""; return;
   }
   // The table: rebuilt when universes or sources change, else once a second.
-  const key = unis.map(u => u.id + u.sources.map(x => x.ip + x.name).join()).join("|") + dmxSel;
-  if (key !== dmxTableKey || Date.now() - dmxTableAt > 1000) {
+  const key = unis.map(u => u.id + u.sources.map(x => x.ip + x.name).join()).join("|") + dmxSel + (snap.nodes || []).map(n => n.ip).join();
+  if (dmxTab === "list" && (key !== dmxTableKey || Date.now() - dmxTableAt > 1000 || force)) {
     dmxTableKey = key; dmxTableAt = Date.now();
-    $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th><th title="Il Monitor avvisa se l'universo smette di arrivare">Critico</th></tr></thead><tbody>
-      ${unis.map(u => `<tr class="pick${u.id === dmxSel ? " sel" : ""}" data-id="${esc(u.id)}"><td><b>${u.number}</b></td><td>${esc(u.protocol)}</td>
+    $("dmxBody").innerHTML = `<div class="wrap" style="margin:0"><table><thead><tr><th>Universo</th><th>Protocollo</th><th>Sorgente</th><th>Frame/s</th><th>Canali attivi</th><th title="I nodi Art-Net che mandano questo universo sulle loro uscite DMX">Nodi</th><th title="Il Monitor avvisa se l'universo smette di arrivare">Critico</th></tr></thead><tbody>
+      ${unis.map(u => { const ns = nodesFor(snap, u); return `<tr class="pick${u.id === dmxSel ? " sel" : ""}" data-id="${esc(u.id)}"><td><b>${u.number}</b>${u.protocol === "Art-Net" ? ` <span class="muted mono" title="Net:Sub-Net:Universe">${artAddr(u.number)}</span>` : ""}</td><td>${esc(u.protocol)}</td>
         <td>${u.sources.map(x => `<span class="nt">${esc(x.name || x.ip)}</span>${x.name ? ` <span class="muted">${esc(x.ip)}</span>` : ""}${x.priority ? ` <span class="muted">prio ${x.priority}</span>` : ""}`).join("<br>")}${u.sources.length > 1 ? ' <span class="badge warn">più sorgenti</span>' : ""}</td>
         <td>${u.sources.map(x => `${x.fps.toFixed(0)}${x.lost ? ` <span class="badge warn" title="Pacchetti mancanti nell'ultimo secondo (numeri di sequenza saltati): rete congestionata, Wi-Fi o switch in difficoltà">${x.lost} persi</span>` : ""}`).join(" / ")}</td>
-        <td>${u.active} / 512</td><td><input type="checkbox" class="ucrit" data-id="${esc(u.id)}"${critUnis.has(u.id) ? " checked" : ""}></td></tr>`).join("")}
+        <td>${u.active} / 512</td>
+        <td>${u.protocol !== "Art-Net" ? '<span class="muted">—</span>' : ns.length ? ns.map(n => `<span class="nt">${esc(n.short_name || n.ip)}</span>`).join(", ") : (snap.nodes || []).length ? '<span class="badge warn" title="Nessun nodo trovato ha questo universo su un\'uscita: controlla Net/Sub-Net/Universe sul nodo e sulla console">nessun nodo</span>' : '<span class="muted">—</span>'}</td>
+        <td><input type="checkbox" class="ucrit" data-id="${esc(u.id)}"${critUnis.has(u.id) ? " checked" : ""}></td></tr>`; }).join("")}
     </tbody></table></div>`;
     $("dmxBody").querySelectorAll("input.ucrit").forEach(c => {
       c.onclick = e => e.stopPropagation();
@@ -53,10 +79,54 @@ function drawDMX(unis) {
         critUnis = new Set(l || []); toast(c.checked ? "Il Monitor ora controlla questo universo." : "Universo tolto dal Monitor.");
       }).catch(e => toast("Errore: " + e.message));
     });
-    $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { dmxSel = tr.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxTableKey = ""; dmxWantPost(); });
+    $("dmxBody").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { dmxSel = tr.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxTableKey = ""; dmxPrev = null; dmxWantPost(); });
   }
   if (dmxTab === "all") drawDMXAll(unis);
-  drawDMXDetail(unis.find(u => u.id === dmxSel && u.levels));
+  if (dmxTab === "list") drawDMXDetail(unis.find(u => u.id === dmxSel && u.levels));
+}
+// Art-Net nodes: their DMX outputs and inputs, and whether data reaches them.
+function drawNodes(snap) {
+  const box = $("dmxNodes");
+  if (!box || dmxTab !== "nodes") return;
+  const nodes = snap.nodes || [], unis = snap.universes || [];
+  const byID = new Map(unis.map(u => [u.id, u]));
+  if (!nodes.length) { box.innerHTML = `<p>Nessun nodo Art-Net ha risposto all'ArtPoll. I nodi devono stare sulla stessa sottorete di questo computer (spesso 2.x.x.x o 10.x.x.x).</p>`; return; }
+  const chip = n => {
+    const a = byID.get("art:" + n), s = byID.get("sacn:" + (n + 1));
+    const fps = a ? Math.max(0, ...a.sources.map(x => x.fps)) : 0;
+    return a ? `<span class="uchip on" title="Arriva Art-Net: ${fps.toFixed(0)} frame/s"><b>${n}</b> <span class="mono">${artAddr(n)}</span> · ${fps.toFixed(0)} fps</span>`
+      : s ? `<span class="uchip sacn" title="Non arriva Art-Net per questo universo, ma c'è sACN ${n + 1}: va bene se il nodo è impostato su sACN"><b>${n}</b> <span class="mono">${artAddr(n)}</span> · sACN ${n + 1}?</span>`
+      : `<span class="uchip off" title="Non arriva niente per questo universo: o la console non lo manda, o lo manda diretto al nodo (unicast) e questo computer non lo vede"><b>${n}</b> <span class="mono">${artAddr(n)}</span> · niente</span>`;
+  };
+  const outs = new Set(nodes.flatMap(n => n.out || []));
+  const orphan = unis.filter(u => u.protocol === "Art-Net" && !outs.has(u.number));
+  const silent = [...outs].filter(n => !byID.has("art:" + n) && !byID.has("sacn:" + (n + 1)));
+  box.innerHTML = `${orphan.length || silent.length ? `<ul class="dmxwarn">
+      ${orphan.length ? `<li class="warn">Arriva Art-Net per ${orphan.length === 1 ? "l'universo" : "gli universi"} <b>${orphan.map(u => `${u.number} (${artAddr(u.number)})`).join(", ")}</b>, ma nessun nodo trovato lo manda su un'uscita DMX.</li>` : ""}
+      ${silent.length ? `<li class="warn">${silent.length === 1 ? "Un'uscita DMX aspetta" : `${silent.length} uscite DMX aspettano`} un universo che qui non si sente: <b>${silent.map(n => `${n} (${artAddr(n)})`).join(", ")}</b>. Se le luci funzionano, la console lo manda diretto al nodo (unicast).</li>` : ""}
+    </ul>` : ""}
+    <div class="wrap" style="margin:12px 0 0"><table><thead><tr><th>Nodo</th><th>IP</th><th>Tipo</th><th>Uscite DMX</th><th>Ingressi DMX</th><th>Stato del nodo</th></tr></thead><tbody>
+    ${nodes.map(n => `<tr><td><b class="nt">${esc(n.short_name || "—")}</b>${n.long_name && n.long_name !== n.short_name ? `<br><span class="muted nt">${esc(n.long_name)}</span>` : ""}</td>
+      <td class="mono">${esc(n.ip)}</td><td>${esc(n.style || "")}</td>
+      <td>${(n.out || []).map(chip).join(" ") || '<span class="muted">—</span>'}</td>
+      <td>${(n.in || []).map(x => `<span class="uchip"><b>${x}</b> <span class="mono">${artAddr(x)}</span></span>`).join(" ") || '<span class="muted">—</span>'}</td>
+      <td class="nt" style="font-size:12px">${esc(n.report || "")}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="muted">Universo: numero a 15 bit e Net:Sub-Net:Universe. Attenzione: alcune console contano gli universi da 1, Art-Net da 0.</p>`;
+}
+const TC_STATE = {running: ["In corsa", "on"], stopped: ["Fermo", "stop"], silent: ["Non arriva", "off"]};
+const tcEvText = e => ({start: `partito da ${e.to}`, stop: `fermo a ${e.to}`, jump: `salto da ${e.from} a ${e.to}`, silent: `non arriva più (ultimo ${e.to})`, type: `formato cambiato da ${e.from} a ${e.to}`})[e.kind] || e.kind;
+// Art-Net timecode: one big clock per stream, and what happened to it.
+function drawTC(list) {
+  const box = $("dmxTC");
+  if (!box || dmxTab !== "tc") return;
+  if (!list.length) { box.innerHTML = `<p>Nessun timecode Art-Net in arrivo. Va acceso sulla console o sul media server (ArtTimeCode), di solito in broadcast.</p>`; return; }
+  box.innerHTML = list.map(t => { const [st, cls] = TC_STATE[t.state] || [t.state, ""]; return `<div class="tcbox ${cls}">
+    <div class="tctime mono">${esc(t.time)}</div>
+    <div><span class="tcstate">${st}</span> · ${esc(t.type)} · <span class="mono">${esc(t.ip)}</span>${t.stream ? ` · stream ${t.stream}` : ""} · <span class="muted">${t.pps} pacchetti/s</span>
+      <span class="muted">· dalle ${new Date(t.since).toLocaleTimeString("it")}</span></div>
+    ${(t.events || []).length ? `<ul class="tcev">${t.events.slice(0, 12).map(e => `<li class="${e.kind === "jump" || e.kind === "silent" ? "warn" : ""}"><span class="t">${new Date(e.at).toLocaleTimeString("it")}</span> ${esc(tcEvText(e))}</li>`).join("")}</ul>` : ""}
+  </div>`; }).join("");
 }
 // 512 levels as a strip of green, brighter where higher.
 function drawStrip(cv, lv) {
@@ -71,7 +141,7 @@ function drawDMXAll(unis) {
     $("dmxAll").dataset.ids = ids;
     $("dmxAll").innerHTML = `<div class="dmxall">${unis.map(u => `<div class="dmxrow" data-id="${esc(u.id)}"><span><b>${esc(u.protocol)} ${u.number}</b></span><canvas width="512" height="1"></canvas><span class="muted act"></span></div>`).join("")}</div>
       <div class="dmxscale"><span>1</span><span>128</span><span>256</span><span>384</span><span>512</span></div>`;
-    $("dmxAll").querySelectorAll(".dmxrow").forEach(r => r.onclick = () => { dmxSel = r.dataset.id; dmxCh = 0; dmxGridFor = ""; $("dmxTabList").click(); });
+    $("dmxAll").querySelectorAll(".dmxrow").forEach(r => r.onclick = () => { dmxSel = r.dataset.id; dmxCh = 0; dmxGridFor = ""; dmxPrev = null; document.querySelector('.dmxtab[data-tab="list"]').click(); });
   }
   for (const u of unis) {
     const row = $("dmxAll").querySelector(`.dmxrow[data-id="${CSS.escape(u.id)}"]`);
@@ -88,14 +158,14 @@ function drawDMXDetail(sel) {
   // channel -> fixtures on it
   const at = Array.from({length: 512}, () => []);
   fx.forEach((f, k) => { for (let c = f.address; c < f.address + Math.max(f.footprint, 1) && c <= 512; c++) at[c - 1].push(k); });
-  const gridKey = sel.id + "|" + fx.map(f => f.uid + f.address + f.footprint).join();
+  const gridKey = sel.id + "|" + dmxMode + "|" + fx.map(f => f.uid + f.address + f.footprint).join();
   if (dmxGridFor !== gridKey) {
     dmxGridFor = gridKey;
     const clash = new Set(at.filter(a => a.length > 1).flat());
     box.innerHTML = `<h3 style="font-size:14px;margin:16px 0 0">${esc(sel.protocol)} universo ${sel.number}</h3>
       ${fx.length ? `<div class="dmxlegend">${fx.map((f, k) => `<span class="${clash.has(k) ? "fxc" : k % 2 ? "fxb" : "fxa"}"><b class="nt">${esc(f.label || f.model || f.uid)}</b> ${f.address}–${f.address + Math.max(f.footprint, 1) - 1}</span>`).join("")}</div>`
         : sel.protocol === "Art-Net" ? `<p class="muted">Per vedere gli apparecchi sopra i canali, fai una ricerca in Show → Apparecchi RDM.</p>` : ""}
-      <div class="dmxgrid">${Array.from({length: 512}, (_, i) => { const a = at[i];
+      <div class="dmxgrid${dmxMode !== "color" ? " num" : ""}">${Array.from({length: 512}, (_, i) => { const a = at[i];
         const cls = a.length > 1 ? "fxc" : a.length ? (a[0] % 2 ? "fxb" : "fxa") : "";
         const first = a.some(k => fx[k].address === i + 1) ? " fs" : "";
         const who = a.map(k => `${fx[k].label || fx[k].model || fx[k].uid} · ${i + 2 - fx[k].address}/${fx[k].footprint}`).join(" + ");
@@ -106,11 +176,19 @@ function drawDMXDetail(sel) {
     });
   }
   const cells = box.querySelectorAll(".dmxgrid i");
+  const num = dmxMode !== "color", prev = dmxPrev && dmxPrev.id === sel.id ? dmxPrev.levels : null;
   sel.levels.forEach((v, i) => {
     const c = cells[i]; if (!c) return;
-    c.style.background = v ? `rgba(129,215,66,${0.15 + 0.85 * v / 255})` : "";
+    c.style.background = v ? `rgba(129,215,66,${(num ? 0.08 : 0.15) + (num ? 0.5 : 0.85) * v / 255})` : "";
+    if (num) {
+      const t = `<s>${i + 1}</s>${dmxMode === "pct" ? Math.round(v / 2.55) : v}`;
+      if (c.innerHTML !== t) c.innerHTML = t;
+      c.classList.toggle("chg", !!prev && prev[i] !== v);
+      c.classList.toggle("z", !v);
+    }
     c.title = `${LANG === "en" ? "channel" : "canale"} ${i + 1}: ${v} (${Math.round(v / 2.55)}%)${c.dataset.who ? " · " + c.dataset.who : ""}`;
   });
+  dmxPrev = {id: sel.id, levels: sel.levels.slice()};
   // the channel followed
   if (dmxCh) {
     const v = sel.levels[dmxCh - 1], who = cells[dmxCh - 1]?.dataset.who;

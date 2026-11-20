@@ -32,6 +32,21 @@ type DMXWant struct {
 	Uni     string // "sacn:1"
 	Channel int    // 1-512, 0 = none
 	All     bool
+	Nodes   bool // poll Art-Net nodes every few seconds
+}
+
+// ArtNode is an Art-Net node heard in an ArtPollReply, with its address.
+type ArtNode struct {
+	IP string `json:"ip"`
+	ArtNetNode
+}
+
+// DMXSnap is everything heard: universes, Art-Net nodes (when asked) and
+// timecode streams.
+type DMXSnap struct {
+	Universes []Universe       `json:"universes"`
+	Nodes     []ArtNode        `json:"nodes,omitempty"`
+	Timecode  []TimecodeSource `json:"timecode,omitempty"`
 }
 
 // Universe is the live state of one DMX universe.
@@ -82,7 +97,16 @@ func seqGap(last, now int) int {
 // ListenDMX listens until ctx ends and calls snapshot every `every` with all
 // universes heard (levels only for `detail`, e.g. "sacn:1").
 func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, every time.Duration, detail func() DMXWant, snapshot func([]Universe)) {
+	ListenDMXFull(ctx, iface, sacnUniverses, every, detail, func(s DMXSnap) { snapshot(s.Universes) })
+}
+
+// ListenDMXFull is ListenDMX with Art-Net nodes and timecode as well.
+func ListenDMXFull(ctx context.Context, iface *net.Interface, sacnUniverses int, every time.Duration, detail func() DMXWant, snapshot func(DMXSnap)) {
 	var mu sync.Mutex
+	var tc timecodes
+	nodes := map[string]ArtNode{}
+	nodeSeen := map[string]time.Time{}
+	var artConn *net.UDPConn
 	unis := map[string]*dmxUni{}
 	var want DMXWant
 	// key tells sources apart: the IP, plus the CID in sACN (two consoles
@@ -146,6 +170,7 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 	}
 	var wg sync.WaitGroup
 	if c, err := listenShared("0.0.0.0:6454"); err == nil {
+		artConn = c
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -155,6 +180,25 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 			for ctx.Err() == nil {
 				n, from, err := c.ReadFromUDP(buf)
 				if err != nil {
+					continue
+				}
+				if st, h, m, s, f, typ, ok := parseArtTimeCode(buf[:n]); ok {
+					mu.Lock()
+					tc.feed(time.Now(), from.IP.String(), st, h, m, s, f, typ)
+					mu.Unlock()
+					continue
+				}
+				if nd := parseArtPollReply(buf[:n]); nd != nil {
+					ip := from.IP.String()
+					if rep := net.IP(buf[10:14]).String(); rep != "0.0.0.0" {
+						ip = rep
+					}
+					mu.Lock()
+					if old, ok := nodes[ip]; ok && time.Since(nodeSeen[ip]) < 2*time.Second { // more binds of one node
+						nd.Out, nd.In = mergeInts(old.Out, nd.Out), mergeInts(old.In, nd.In)
+					}
+					nodes[ip], nodeSeen[ip] = ArtNode{IP: ip, ArtNetNode: *nd}, time.Now()
+					mu.Unlock()
 					continue
 				}
 				if uni, data, ok := parseArtDmx(buf[:n]); ok {
@@ -191,6 +235,7 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 	}
 	t := time.NewTicker(every)
 	defer t.Stop()
+	var polled time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -200,8 +245,24 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 		}
 		w := detail()
 		now := time.Now()
+		if w.Nodes && artConn != nil && now.Sub(polled) >= 3*time.Second {
+			polled = now
+			poll := append([]byte("Art-Net\x00"), 0x00, 0x20, 0, 14, 0, 0)
+			for _, b := range broadcastAddrs() {
+				artConn.WriteToUDP(poll, &net.UDPAddr{IP: b, Port: ArtNetNodePort})
+			}
+		}
 		mu.Lock()
 		want = w
+		snap := DMXSnap{Timecode: tc.snapshot(now)}
+		for ip, nd := range nodes {
+			if now.Sub(nodeSeen[ip]) > 10*time.Second {
+				delete(nodes, ip)
+				delete(nodeSeen, ip)
+				continue
+			}
+			snap.Nodes = append(snap.Nodes, nd)
+		}
 		var out []Universe
 		for id, u := range unis {
 			if now.Sub(u.last) > 5*time.Second {
@@ -278,7 +339,11 @@ func ListenDMX(ctx context.Context, iface *net.Interface, sacnUniverses int, eve
 			}
 			return out[i].Number < out[j].Number
 		})
-		snapshot(out)
+		sort.Slice(snap.Nodes, func(i, j int) bool {
+			return ipToU32(net.ParseIP(snap.Nodes[i].IP)) < ipToU32(net.ParseIP(snap.Nodes[j].IP))
+		})
+		snap.Universes = out
+		snapshot(snap)
 	}
 }
 

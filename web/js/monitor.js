@@ -131,7 +131,8 @@ function spark(rtts) {
 }
 function drawTiles(st) {
   const devs = st.devices || [], unis = st.universes || [];
-  $("mPTP").innerHTML = (st.ptp || []).map(p => `Clock PTP: master <b>${esc(p.ip)}</b> <span class="muted">${esc(p.kind)} · ${esc(new Date(p.since).toLocaleTimeString("it"))}</span>`).join("<br>");
+  $("mPTP").innerHTML = (st.ptp || []).map(p => `Clock PTP: master <b>${esc(p.ip)}</b> <span class="muted">${esc(p.kind)} · ${esc(new Date(p.since).toLocaleTimeString("it"))}</span>`)
+    .concat((st.timecode || []).map(t => `Timecode: <b class="mono">${esc(t.time)}</b> <span class="tcst ${esc(t.state)}">${({running: "in corsa", stopped: "fermo", silent: "non arriva"})[t.state] || esc(t.state)}</span> <span class="muted">${esc(t.type)} · ${esc(t.ip)}</span>`)).join("<br>");
   if (!devs.length && !unis.length) {
     $("tiles").innerHTML = '<div class="mhint">Nessun dispositivo critico su questa rete.<br>Apri un dispositivo dall\'elenco e spunta <b>Critico</b>: console, switch principale, stagebox Dante, media server…</div>';
     $("mState").className = "state ok"; $("mState").textContent = "—";

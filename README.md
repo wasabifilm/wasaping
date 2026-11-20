@@ -80,6 +80,9 @@ Con il doppio clic wasaping si apre in una **finestra sua**, senza passare dal b
   - i 512 canali di un universo con sopra il **patch RDM** (nome dell'apparecchio, sovrapposizioni in rosso);
   - un canale **nel tempo**, gli ultimi 10 secondi;
   - **due console sullo stesso universo** a confronto: dove differiscono e chi vince (priorità o HTP).
+  - i valori **in numeri** (0–255 o %) invece dei colori, con un bordo sui canali che cambiano, e **⏸ Blocca** per leggerli con calma;
+  - i **nodi Art-Net** con le loro uscite e ingressi DMX (anche come Net:Sub-Net:Universe) e se i dati arrivano davvero: avvisa se un universo arriva ma nessun nodo lo emette, o se un'uscita aspetta un universo che non si sente;
+  - il **timecode Art-Net** (ArtTimeCode) in grande, con il formato (24, 25, 29,97 DF, 30) e cosa è successo: partito, fermo, saltato, non arriva più. Gli stessi eventi finiscono nel registro del Monitor, senza allarmi (il timecode si ferma anche tra una cue e l'altra).
 - **Porta dello switch:** chiede agli switch gestiti (via SNMP in sola lettura) su quale porta è collegato ogni dispositivo, con la descrizione della porta.
 - **IP liberi** nell'intervallo, per dare un IP fisso a un nuovo apparecchio.
 - **Progetto dello show:** «Salva progetto» mette in un file `.wasaping` tutto il lavoro su un locale, anche su più reti: dispositivi con nomi, ruoli, note e tipi, critici, piano IP, universi critici, patch RDM, storico e note dello show. «Apri progetto» lo riporta qui o su un altro computer; una rete mai vista viene preparata e si attiva quando arrivi lì e fai la scansione.
@@ -204,7 +207,7 @@ La finestra nativa di macOS usa Cocoa e WebKit tramite cgo, quindi `wasaping.app
 go build -o wasaping .
 go test ./...
 WASAPING_INTEGRATION=1 go test ./scanner -run Integration   # con il simulatore show
-go run ./cmd/showsim              # simula nodo Art-Net, console sACN, DMX, RDM e PTP sulla rete
+go run ./cmd/showsim              # simula nodo Art-Net, console sACN, DMX, RDM, PTP e timecode sulla rete
 make release        # tutti gli eseguibili + wasaping-macos.zip in dist/
 make macapp         # solo dist/wasaping.app (universale, solo su macOS)
 make icon           # rigenera le icone in assets/ (serve Python + Pillow)

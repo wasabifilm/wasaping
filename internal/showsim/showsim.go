@@ -23,6 +23,9 @@ type Config struct {
 	// same priority, with different levels: the merge view must show both.
 	Backup    bool
 	Universes []int // sACN universes sent (default 1, 2)
+	// Timecode sends ArtTimeCode (EBU 25) in a loop: runs, stops, jumps
+	// and goes silent, so every state of the viewer shows up.
+	Timecode bool
 	// Identify, when set, is called on RDM SET IDENTIFY_DEVICE.
 	Identify func(uid [6]byte, on bool)
 }
@@ -187,6 +190,40 @@ func sacnPacket(u int, seq byte, backup bool) []byte {
 	return b
 }
 
+// artTimeCode builds an ArtTimeCode packet (EBU 25) for a frame count.
+func artTimeCode(frames int) []byte {
+	b := artHeader(0x9700, 19)
+	b[14], b[15], b[16], b[17], b[18] = byte(frames%25), byte(frames/25%60), byte(frames/1500%60), byte(frames/90000%24), 1
+	return b
+}
+
+// runTimecode: 20 s running from 01:00:00:00, 4 s stopped, a jump to
+// 02:00:00:00 and 15 s running, then 3 s of silence; and again.
+func runTimecode(ctx context.Context, out *net.UDPConn, to *net.UDPAddr) {
+	t := time.NewTicker(40 * time.Millisecond)
+	defer t.Stop()
+	for tick := 0; ; tick++ {
+		cycle := tick % (42 * 25)
+		frames := -1
+		switch {
+		case cycle < 20*25:
+			frames = 90000 + cycle
+		case cycle < 24*25:
+			frames = 90000 + 20*25
+		case cycle < 39*25:
+			frames = 180000 + cycle - 24*25
+		}
+		if frames >= 0 {
+			out.WriteToUDP(artTimeCode(frames), to)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 func artDmx(u int, phase, seq byte) []byte {
 	b := artHeader(0x5000, 18+512)
 	b[12] = seq
@@ -277,6 +314,10 @@ func Run(ctx context.Context, cfg Config) error {
 				}
 			}
 		}()
+	}
+	if cfg.Timecode {
+		wg.Add(1)
+		go func() { defer wg.Done(); runTimecode(ctx, out, &net.UDPAddr{IP: cfg.DMXTo, Port: 6454}) }()
 	}
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()

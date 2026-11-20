@@ -117,7 +117,7 @@ var (
 // dmxWant reads ?u=sacn:1&ch=40&all=1.
 func dmxWant(q url.Values) scanner.DMXWant {
 	ch, _ := strconv.Atoi(q.Get("ch"))
-	return scanner.DMXWant{Uni: q.Get("u"), Channel: ch, All: q.Get("all") == "1"}
+	return scanner.DMXWant{Uni: q.Get("u"), Channel: ch, All: q.Get("all") == "1", Nodes: q.Get("nodes") == "1"}
 }
 
 func handleDMX(w http.ResponseWriter, r *http.Request) {
@@ -141,15 +141,15 @@ func handleDMX(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
 	var iface = defaultIface()
-	scanner.ListenDMX(ctx, iface, 64, 250*time.Millisecond, func() scanner.DMXWant {
+	scanner.ListenDMXFull(ctx, iface, 64, 250*time.Millisecond, func() scanner.DMXWant {
 		dmxMu.Lock()
 		defer dmxMu.Unlock()
 		return dmxDetail[sess]
-	}, func(u []scanner.Universe) {
-		if u == nil {
-			u = []scanner.Universe{}
+	}, func(s scanner.DMXSnap) {
+		if s.Universes == nil {
+			s.Universes = []scanner.Universe{}
 		}
-		send("snap", u)
+		send("snap", s)
 	})
 }
 

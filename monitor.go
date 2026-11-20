@@ -58,6 +58,7 @@ type MonState struct {
 	Checked   time.Time     `json:"checked,omitempty"`
 	Universes []MonUniverse `json:"universes,omitempty"`
 	PTP       []MonPTP      `json:"ptp,omitempty"`
+	Timecode  []MonTimecode `json:"timecode,omitempty"`
 	SlowMs    int           `json:"slow_ms,omitempty"`     // threshold, 0 = off
 	Slow      int           `json:"slow,omitempty"`        // devices over it
 	MutedTill time.Time     `json:"muted_until,omitempty"` // no sound, notifications or alerts
@@ -147,6 +148,7 @@ func (m *monitor) state(maxEvents int) MonState {
 		}
 	}
 	st.PTP = m.ptpStateLocked()
+	st.Timecode = m.timecodeStateLocked()
 	ev := m.events
 	if len(ev) > maxEvents {
 		ev = ev[len(ev)-maxEvents:]
@@ -347,7 +349,7 @@ func (m *monitor) addEventRaw(e MonEvent) {
 		m.events = m.events[len(m.events)-2000:]
 	}
 	go appendMonitorLog(e)
-	if time.Now().Before(m.muted) || e.Kind == "note" || e.Kind == "show" {
+	if time.Now().Before(m.muted) || e.Kind == "note" || e.Kind == "show" || e.Kind == "timecode" {
 		return // silenced, or not something to alert about
 	}
 	go sendAlert(e)

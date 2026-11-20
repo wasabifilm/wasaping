@@ -42,6 +42,8 @@ type showMonitor struct {
 	ptpLost   map[string]bool
 	ptpFollow map[string]time.Time // ip -> last Delay_Req: follows the clock
 	clockLost map[string]bool      // device key -> warned that it stopped following
+	tc        []scanner.TimecodeSource
+	tcSeen    time.Time // latest timecode event already in the log
 	cancel    context.CancelFunc
 	listenMu  sync.Mutex
 }
@@ -61,12 +63,13 @@ func (m *monitor) startListeners(ctx context.Context) {
 	lctx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
 	iface := defaultIface()
-	go scanner.ListenDMX(lctx, iface, 64, time.Second, func() scanner.DMXWant { return scanner.DMXWant{} }, func(us []scanner.Universe) {
+	go scanner.ListenDMXFull(lctx, iface, 64, time.Second, func() scanner.DMXWant { return scanner.DMXWant{} }, func(ds scanner.DMXSnap) {
 		m.mu.Lock()
 		m.snap = map[string]scanner.Universe{}
-		for _, u := range us {
+		for _, u := range ds.Universes {
 			m.snap[u.ID] = u
 		}
+		m.tc = ds.Timecode
 		m.snapAt = time.Now()
 		m.mu.Unlock()
 	})
@@ -188,7 +191,66 @@ func (m *monitor) checkShowLocked(now time.Time) (lost, back []string) {
 			lost = append(lost, "PTP "+kind)
 		}
 	}
+	m.checkTimecodeLocked()
 	return lost, back
+}
+
+// MonTimecode is a timecode stream as the monitor shows it.
+type MonTimecode struct {
+	IP    string `json:"ip"`
+	Type  string `json:"type"`
+	Time  string `json:"time"`
+	State string `json:"state"`
+}
+
+// tcEventText describes a timecode event for the log.
+func tcEventText(e scanner.TimecodeEvent) string {
+	switch e.Kind {
+	case "start":
+		return fmt.Sprintf(T("partito da %s", "running from %s"), e.To)
+	case "stop":
+		return fmt.Sprintf(T("fermo a %s", "stopped at %s"), e.To)
+	case "jump":
+		return fmt.Sprintf(T("saltato da %s a %s", "jumped from %s to %s"), e.From, e.To)
+	case "silent":
+		return fmt.Sprintf(T("non arriva più (ultimo %s)", "no longer arriving (last %s)"), e.To)
+	case "type":
+		return fmt.Sprintf(T("formato cambiato da %s a %s", "format changed from %s to %s"), e.From, e.To)
+	}
+	return ""
+}
+
+// checkTimecodeLocked writes the new timecode events in the log (m.mu
+// held). Timecode stops between cues, so these never raise an alarm.
+func (m *monitor) checkTimecodeLocked() {
+	latest := m.tcSeen
+	for _, s := range m.tc {
+		for i := len(s.Events) - 1; i >= 0; i-- { // oldest first
+			e := s.Events[i]
+			if !e.At.After(m.tcSeen) {
+				continue
+			}
+			if m.tcSeen.IsZero() && e.Kind != "silent" {
+				continue // monitor just started: only the state, no history
+			}
+			m.addEventRaw(MonEvent{At: e.At, Name: "Timecode", IP: s.IP, Kind: "timecode", Up: true, Text: tcEventText(e)})
+		}
+		if len(s.Events) > 0 && s.Events[0].At.After(latest) {
+			latest = s.Events[0].At
+		}
+	}
+	if latest.IsZero() && len(m.tc) > 0 {
+		latest = time.Now()
+	}
+	m.tcSeen = latest
+}
+
+func (m *monitor) timecodeStateLocked() []MonTimecode {
+	var out []MonTimecode
+	for _, s := range m.tc {
+		out = append(out, MonTimecode{IP: s.IP, Type: s.Type, Time: s.Time, State: s.State})
+	}
+	return out
 }
 
 func (m *monitor) ptpStateLocked() []MonPTP {

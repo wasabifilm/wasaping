@@ -365,3 +365,31 @@ if (LANG === "en") {
 }
 fetch("api/lang", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({lang: LANG})}).catch(() => {});
 const PORT_NAMES = {21:"FTP",22:"SSH",23:"Telnet",53:"DNS",80:"HTTP",139:"NetBIOS",443:"HTTPS",445:"SMB",548:"AFP",554:"RTSP",631:"IPP",1883:"MQTT",3389:"RDP",5000:"UPnP",5900:"VNC",8000:"HTTP",8080:"HTTP",8443:"HTTPS",9100:"Stampante",32400:"Plex",62078:"iPhone"};
+// DMX viewer: Art-Net nodes, timecode, channel values (0.8.6).
+for (const [k, v] of Object.entries({
+  "In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). wasaping non manda DMX: per trovare i nodi manda solo un ArtPoll ogni 3 secondi. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.":
+    "Listening to Art-Net (broadcast packets or sent to this computer) and sACN (universes 1–64). wasaping sends no DMX: to find the nodes it only sends an ArtPoll every 3 seconds. Click a universe to see its 512 channels, click a channel to follow it over time.",
+  "Nodi Art-Net": "Art-Net nodes", "Canali: colori": "Channels: colours", "Canali: 0–255": "Channels: 0–255", "Canali: %": "Channels: %",
+  "⏸ Blocca": "⏸ Freeze", "▶ Riprendi": "▶ Resume", "Come mostrare i 512 canali": "How to show the 512 channels",
+  "Ferma la vista per leggere i valori con calma (l'ascolto continua)": "Freezes the view to read the values calmly (listening goes on)",
+  "Nodi": "Nodes", "I nodi Art-Net che mandano questo universo sulle loro uscite DMX": "The Art-Net nodes that put this universe out on their DMX outputs",
+  "nessun nodo": "no node", "Nessun nodo trovato ha questo universo su un'uscita: controlla Net/Sub-Net/Universe sul nodo e sulla console": "No node found has this universe on an output: check Net/Sub-Net/Universe on the node and on the console",
+  "Nessun nodo Art-Net ha risposto all'ArtPoll. I nodi devono stare sulla stessa sottorete di questo computer (spesso 2.x.x.x o 10.x.x.x).": "No Art-Net node answered the ArtPoll. Nodes must be on the same subnet as this computer (often 2.x.x.x or 10.x.x.x).",
+  "Uscite DMX": "DMX outputs", "Ingressi DMX": "DMX inputs", "Stato del nodo": "Node status", "· niente": "· nothing",
+  "Non arriva niente per questo universo: o la console non lo manda, o lo manda diretto al nodo (unicast) e questo computer non lo vede": "Nothing arrives for this universe: either the console does not send it, or it sends it straight to the node (unicast) and this computer cannot see it",
+  "Arriva Art-Net per l'universo": "Art-Net arrives for universe", "Arriva Art-Net per gli universi": "Art-Net arrives for universes",
+  ", ma nessun nodo trovato lo manda su un'uscita DMX.": ", but no node found puts it out on a DMX output.",
+  "Un'uscita DMX aspetta un universo che qui non si sente:": "A DMX output waits for a universe that cannot be heard here:",
+  ". Se le luci funzionano, la console lo manda diretto al nodo (unicast).": ". If the lights work, the console sends it straight to the node (unicast).",
+  "Universo: numero a 15 bit e Net:Sub-Net:Universe. Attenzione: alcune console contano gli universi da 1, Art-Net da 0.": "Universe: 15-bit number and Net:Sub-Net:Universe. Careful: some consoles count universes from 1, Art-Net from 0.",
+  "Nessun timecode Art-Net in arrivo. Va acceso sulla console o sul media server (ArtTimeCode), di solito in broadcast.": "No Art-Net timecode arriving. It has to be turned on in the console or media server (ArtTimeCode), usually as broadcast.",
+  "In corsa": "Running", "Fermo": "Stopped", "Non arriva": "Not arriving", "in corsa": "running", "fermo": "stopped", "Timecode:": "Timecode:",
+})) EN.set(k, v);
+PAT.push(
+  [/^Nodi Art-Net \((\d+)\)$/, "Art-Net nodes ($1)"], [/^(\d+) uscite DMX aspettano un universo che qui non si sente:$/, "$1 DMX outputs wait for a universe that cannot be heard here:"],
+  [/^Arriva Art-Net: (\d+) frame\/s$/, "Art-Net arriving: $1 frames/s"], [/^· sACN (\d+)\?$/, "· sACN $1?"],
+  [/^Non arriva Art-Net per questo universo, ma c'è sACN (\d+): va bene se il nodo è impostato su sACN$/, "No Art-Net for this universe, but sACN $1 is there: fine if the node is set to sACN"],
+  [/^(\d+) pacchetti\/s$/, "$1 packets/s"], [/^· dalle (.+)$/, "· since $1"],
+  [/^partito da (.+)$/, "running from $1"], [/^fermo a (.+)$/, "stopped at $1"], [/^salto da (.+) a (.+)$/, "jump from $1 to $2"], [/^saltato da (.+) a (.+)$/, "jumped from $1 to $2"],
+  [/^non arriva più \(ultimo (.+)\)$/, "no longer arriving (last $1)"], [/^formato cambiato da (.+) a (.+)$/, "format changed from $1 to $2"],
+);

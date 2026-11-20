@@ -101,8 +101,8 @@ func TestNetbiosStatus(t *testing.T) {
 	}
 	add("WORKGROUP", 0, 0x8400)
 	add("UFFICIO-PC", 0, 0x0400)
-	if got := parseNetbiosStatus(resp); got != "UFFICIO-PC" {
-		t.Errorf("got %q", got)
+	if got, group := parseNetbiosStatus(resp); got != "UFFICIO-PC" || group != "WORKGROUP" {
+		t.Errorf("got %q in %q", got, group)
 	}
 }
 

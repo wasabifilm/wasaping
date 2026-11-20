@@ -57,6 +57,7 @@ func apiMux(quit func()) *http.ServeMux {
 	mux.HandleFunc("/api/clientlog", handleClientLog)
 	mux.HandleFunc("/api/wol", handleWOL)
 	mux.HandleFunc("/api/ports", handlePorts)
+	mux.HandleFunc("/api/portscan", handlePortScan)
 	mux.HandleFunc("/api/helper", handleHelper)
 	mux.HandleFunc("/api/network", handleNetwork)
 	mux.HandleFunc("/api/check", handleCheck)

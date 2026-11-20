@@ -278,6 +278,19 @@ func (ss *Session) View(h scanner.Host) HostView {
 	if len(h.Ports) > 0 {
 		d.Ports = h.Ports
 	}
+	// A name heard once stays: devices in standby often do not answer the
+	// name questions (only for devices known by MAC, an IP may change hands).
+	if d.MAC != "" {
+		if h.Hostname == "" {
+			h.Hostname = d.Hostname
+		}
+		if h.Friendly == "" {
+			h.Friendly = d.Friendly
+		}
+		if h.Model == "" {
+			h.Model = d.Model
+		}
+	}
 	if h.Kind != "" && d.KindManual == "" {
 		d.Kind = h.Kind
 	}

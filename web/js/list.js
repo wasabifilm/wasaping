@@ -10,7 +10,7 @@ function renderSoon() { if (!renderTimer) renderTimer = setTimeout(render, 150);
 // What the filter looks into: the fields, plus the words of the badges
 // ("critico", "nuovo", "avviso", "non risponde") in both languages.
 function haystack(h, isGone) {
-  return [h.ip, (h.ipv6 || []).join(" "), h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "),
+  return [h.ip, (h.ipv6 || []).join(" "), Object.values(h.names || {}).join(" "), h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "),
     (KIND[h.kind] || KIND[""])[0], tr((KIND[h.kind] || KIND[""])[0]), (h.ports || []).join(" "),
     h.critical ? "critico critical" : "", h.new ? "nuovo new" : "", h.self ? "tu you" : "",
     (h.warnings || []).length ? "avviso avvisi warning " + h.warnings.join(" ") : "", isGone ? "non risponde offline spento" : ""].join(" ").toLowerCase();
@@ -269,6 +269,18 @@ $("rows").onclick = e => {
 // ---- Detail panel ----
 const findHost = key => hosts.find(h => h.key === key) || gone.find(h => h.key === key);
 
+// Every name the device gave, by protocol (only the ones that say
+// something more than "Nome in rete").
+function netNames(h) {
+  const n = h.names || {}, out = [];
+  const add = (label, v, tip) => { if (v) out.push([`<span title="${esc(tip)}">${label}</span>`, `<span class="nt">${esc(v)}</span>`]); };
+  if (n.dns && n.dns !== h.hostname) add("Nome DNS", n.dns, "Dal DNS (ricerca inversa)");
+  if (n.mdns && n.mdns !== h.hostname) add("Nome Bonjour", n.mdns, "Da mDNS / Bonjour");
+  if (n.netbios && n.netbios !== h.hostname) add("Nome SMB", n.netbios, "Da NetBIOS: il nome del computer per la condivisione file (Windows, NAS)");
+  add("Gruppo SMB", n.workgroup, "Gruppo di lavoro o dominio Windows (NetBIOS)");
+  if (n.dns && n.dns === h.hostname && (n.mdns || n.netbios)) add("Nome DNS", n.dns, "Dal DNS (ricerca inversa)");
+  return out;
+}
 function openDetail(key) {
   const h = findHost(key);
   if (!h) { closeDetail(); return; }
@@ -299,6 +311,7 @@ function openDetail(key) {
     ...(h.web_title ? [["Pagina web", esc(h.web_title)]] : []),
     ...(h.swport ? [["Switch", `${esc(h.swport.switch)} · porta <b>${esc(h.swport.port)}</b>${h.swport.alias ? ` <span class="muted">(${esc(h.swport.alias)})</span>` : ""}`]] : []),
     ["Nome in rete", esc(h.hostname) || "—"],
+    ...netNames(h),
     ...(h.protocols && h.protocols.length ? [["Protocolli", protoChips(h)]] : []),
     ...showFacts(h),
     ["Servizi", svcs.length ? svcs.map(s => `<span class="svc">${esc(s)}</span>`).join("") : "—"],
@@ -314,7 +327,7 @@ function openDetail(key) {
   }
   $("dInfo").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   $("dWol").disabled = !h.mac || h.self;
-  $("dPorts").disabled = isGone;
+  $("dPorts").disabled = isGone && !portES; $("dPortMode").disabled = isGone;
   $("dForget").hidden = !isGone;
   $("detail").classList.add("open"); $("detail").setAttribute("aria-hidden", "false");
   document.body.classList.add("detail-open");
@@ -396,16 +409,37 @@ $("dWol").onclick = async () => {
   } catch (e) { $("dMsg").textContent = "Non inviato: " + e.message; }
 };
 
-$("dPorts").onclick = async () => {
+// Deep port scan of one device (like the detail panel of LanScan): common
+// ports, all 65,535 or a list, with progress; a second click stops it.
+let portES = null;
+const stopPortScan = () => { if (portES) { portES.close(); portES = null; } $("dPorts").textContent = "Controlla porte"; $("dPortBar").hidden = true; };
+$("dPortMode").onchange = () => { $("dPortList").hidden = $("dPortMode").value !== "list"; if (!$("dPortList").hidden) $("dPortList").focus(); };
+$("dPorts").onclick = () => {
+  if (portES) { stopPortScan(); $("dMsg").textContent = "Controllo delle porte fermato."; return; }
   const h = findHost(selected); if (!h) return;
-  $("dPorts").disabled = true; $("dMsg").textContent = "Controllo 1024 porte…";
-  try {
-    const d = await fetch(`api/ports?ip=${encodeURIComponent(h.ip)}&ports=1-1024`).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }));
-    h.ports = [...new Set([...(h.ports || []), ...d.open])].sort((a, b) => a - b);
-    $("dMsg").textContent = `✓ ${d.open.length} porte aperte su ${d.checked} controllate.`;
-    openDetail(h.key);
-  } catch (e) { $("dMsg").textContent = "Errore: " + e.message; }
-  $("dPorts").disabled = false;
+  const mode = $("dPortMode").value, list = $("dPortList").value.trim();
+  if (mode === "list" && !list) { $("dPortList").focus(); return; }
+  const key = h.key;
+  $("dPorts").textContent = "Ferma"; $("dPortBar").hidden = false; $("dPortBar").firstElementChild.style.width = "0%";
+  $("dMsg").textContent = mode === "all" ? "Controllo tutte le 65.535 porte: circa un minuto…" : "Controllo le porte…";
+  portES = new EventSource(`api/portscan?ip=${encodeURIComponent(h.ip)}&mode=${mode}&ports=${encodeURIComponent(list)}`);
+  const found = open => open.length ? `aperte: ${open.join(", ")}` : "nessuna aperta finora";
+  portES.addEventListener("progress", e => {
+    const d = JSON.parse(e.data);
+    $("dPortBar").firstElementChild.style.width = (100 * d.done / d.total).toFixed(1) + "%"; $("dPortBar").hidden = selected !== key;
+    if (selected === key) $("dMsg").textContent = `${d.done.toLocaleString("it")} di ${d.total.toLocaleString("it")} · ${found(d.open)}`;
+  });
+  portES.addEventListener("done", e => {
+    const d = JSON.parse(e.data), hh = findHost(key);
+    stopPortScan();
+    if (hh) hh.ports = [...new Set([...(hh.ports || []), ...d.open])].sort((a, b) => a - b);
+    if (selected === key) {
+      openDetail(key);
+      $("dMsg").textContent = `✓ ${d.open.length} ${d.open.length === 1 ? "porta aperta" : "porte aperte"} su ${d.total.toLocaleString("it")} controllate, in ${Math.round(d.seconds)} s.`;
+    }
+    render();
+  });
+  portES.onerror = () => { if (portES) { stopPortScan(); $("dMsg").textContent = "Controllo interrotto."; } };
 };
 
 let toolES = null;

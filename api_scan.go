@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -218,4 +219,52 @@ func handleLast(w http.ResponseWriter, r *http.Request) {
 	res := lastResult
 	lastMu.Unlock()
 	writeJSON(w, res)
+}
+
+// handlePortScan: a deep port scan of one device, streamed (SSE):
+// ?ip=…&mode=common|all|list&ports=… (list). Events "progress" {done,
+// total, open} and "done" {total, open, seconds}.
+func handlePortScan(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	ip := net.ParseIP(q.Get("ip")).To4()
+	if ip == nil {
+		http.Error(w, T("indirizzo non valido", "invalid address"), http.StatusBadRequest)
+		return
+	}
+	var ports []int
+	switch q.Get("mode") {
+	case "all":
+		for p := 1; p <= 65535; p++ {
+			ports = append(ports, p)
+		}
+	case "list":
+		var err error
+		if ports, err = parsePorts(q.Get("ports")); err != nil || len(ports) == 0 {
+			http.Error(w, T("porte non valide", "invalid ports"), http.StatusBadRequest)
+			return
+		}
+	default:
+		ports = scanner.WellKnownPorts
+	}
+	send, ok := sseStart(w)
+	if !ok {
+		return
+	}
+	activeScan.Add(1)
+	defer activeScan.Add(-1)
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	var smu sync.Mutex
+	open := scanner.ScanPortsProgress(ctx, ip.String(), ports, 700*time.Millisecond, 400, func(done int, open []int) {
+		smu.Lock()
+		defer smu.Unlock()
+		send("progress", map[string]any{"done": done, "total": len(ports), "open": open})
+	})
+	if open == nil {
+		open = []int{}
+	}
+	smu.Lock()
+	send("done", map[string]any{"total": len(ports), "open": open, "seconds": time.Since(start).Seconds(), "stopped": ctx.Err() != nil})
+	smu.Unlock()
 }

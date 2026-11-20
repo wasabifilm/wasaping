@@ -16,6 +16,9 @@ import (
 type devInfo struct {
 	name       string // host name (reverse mDNS or NetBIOS)
 	src        string // "mdns" or "netbios"
+	mdnsName   string // from mDNS (reverse lookup)
+	nbName     string // NetBIOS / SMB computer name
+	workgroup  string // NetBIOS / SMB workgroup or domain
 	friendly   string // name chosen by the owner, e.g. "iPhone di Anna", "CL5-FOH"
 	model      string // e.g. "MacBookPro18,3", "Chromecast", "HP LaserJet M110"
 	services   []string
@@ -76,9 +79,12 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 	go func() {
 		for m := range ch {
 			if m.nb {
-				if d := out[m.from]; d != nil && d.name == "" {
-					if name := parseNetbiosStatus(m.b); name != "" {
-						d.name, d.src = name, "netbios"
+				if d := out[m.from]; d != nil {
+					if name, group := parseNetbiosStatus(m.b); name != "" {
+						d.nbName, d.workgroup = name, group
+						if d.name == "" {
+							d.name, d.src = name, "netbios"
+						}
 					}
 				}
 				continue
@@ -96,14 +102,30 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 			defer func() { c.Close(); finish <- struct{}{} }()
 			questions := make([]string, 0, len(ips))
 			for _, ip := range ips {
-				q := reverseName(ip)
-				questions = append(questions, q)
-				c.WriteToUDP(dnsQuery([]string{q}, 12), &net.UDPAddr{IP: net.ParseIP(ip), Port: 5353})
+				questions = append(questions, reverseName(ip))
 			}
 			mcast := &net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: 5353}
-			for i := 0; i < len(questions); i += 20 {
-				c.WriteToUDP(dnsQuery(questions[i:min(i+20, len(questions))], 12), mcast)
+			askNames := func() {
+				for i, ip := range ips {
+					c.WriteToUDP(dnsQuery([]string{questions[i]}, 12), &net.UDPAddr{IP: net.ParseIP(ip), Port: 5353})
+				}
+				for i := 0; i < len(questions); i += 20 {
+					c.WriteToUDP(dnsQuery(questions[i:min(i+20, len(questions))], 12), mcast)
+				}
 			}
+			askNames()
+			// Ask again twice: phones in standby and busy devices often miss
+			// the first question (duplicate answers are harmless).
+			go func() {
+				for _, d := range []time.Duration{350 * time.Millisecond, 400 * time.Millisecond} {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(d):
+						askNames()
+					}
+				}
+			}()
 			types := []string{serviceEnum}
 			for _, t := range browseTypes {
 				types = append(types, t+".local")
@@ -124,6 +146,15 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 			for _, ip := range ips {
 				c.WriteToUDP(q, &net.UDPAddr{IP: net.ParseIP(ip), Port: 137})
 			}
+			go func() {
+				select {
+				case <-ctx.Done():
+				case <-time.After(500 * time.Millisecond):
+					for _, ip := range ips {
+						c.WriteToUDP(q, &net.UDPAddr{IP: net.ParseIP(ip), Port: 137})
+					}
+				}
+			}()
 			readUntil(ctx, c, "netbios", func(b []byte, from *net.UDPAddr) {
 				ch <- msg{from: from.IP.String(), b: append([]byte(nil), b...), nb: true}
 			})
@@ -144,8 +175,11 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 // absorbMDNS reads one mDNS response sent by `from` into out.
 func absorbMDNS(b []byte, from string, out map[string]*devInfo) {
 	for ip, name := range parseMDNSPTR(b) {
-		if d := out[ip]; d != nil && d.src != "mdns" {
-			d.name, d.src = name, "mdns"
+		if d := out[ip]; d != nil {
+			d.mdnsName = name
+			if d.src != "mdns" {
+				d.name, d.src = name, "mdns"
+			}
 		}
 	}
 	d := out[from]
@@ -462,13 +496,15 @@ func netbiosStatusQuery() []byte {
 }
 
 // parseNetbiosStatus returns the machine name (unique name, suffix 0x00).
-func parseNetbiosStatus(msg []byte) string {
+// parseNetbiosStatus returns the computer name and its workgroup (or
+// domain) from a NetBIOS node status reply.
+func parseNetbiosStatus(msg []byte) (name, workgroup string) {
 	if len(msg) < 12 || binary.BigEndian.Uint16(msg[6:]) == 0 {
-		return ""
+		return "", ""
 	}
 	_, off, err := readName(msg, 12)
 	if err != nil || off+11 > len(msg) {
-		return ""
+		return "", ""
 	}
 	off += 10 // type, class, ttl, rdlength
 	count := int(msg[off])
@@ -476,9 +512,13 @@ func parseNetbiosStatus(msg []byte) string {
 	for i := 0; i < count && off+18 <= len(msg); i, off = i+1, off+18 {
 		suffix := msg[off+15]
 		group := binary.BigEndian.Uint16(msg[off+16:])&0x8000 != 0
-		if suffix == 0x00 && !group {
-			return strings.TrimSpace(strings.TrimRight(string(msg[off:off+15]), "\x00"))
+		n := strings.TrimSpace(strings.TrimRight(string(msg[off:off+15]), "\x00"))
+		switch {
+		case suffix == 0x00 && !group && name == "":
+			name = n
+		case suffix == 0x00 && group && workgroup == "":
+			workgroup = n
 		}
 	}
-	return ""
+	return name, workgroup
 }

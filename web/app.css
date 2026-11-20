@@ -269,6 +269,10 @@ button.ident.on { animation: blink 1s steps(2) infinite; }
 .chansvg path { fill: none; stroke: var(--wasabi); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .chansvg .ax { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .row .grow { flex: 1; }
+#detail .pscan { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+#detail .pscan input { flex: 1; min-width: 120px; }
+.pbar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.pbar i { display: block; height: 100%; width: 0; background: var(--wasabi); transition: width .3s; }
 .noping { font-size: 12px; cursor: help; border-bottom: 1px dotted var(--muted); }
 .netnote { margin: 12px 0 0; padding: 10px 12px; border: 1px solid #f2994a; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .okline, .warnline, .infoline { margin: 10px 0 0; }

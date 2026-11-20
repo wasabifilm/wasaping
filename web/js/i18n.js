@@ -441,3 +441,20 @@ for (const [k, v] of Object.entries({
   "Critico: il Monitor lo tiene d'occhio. Togli la spunta per smettere": "Critical: the Monitor watches it. Untick to stop",
   "Spunta per tenerlo d'occhio nel Monitor": "Tick to watch it in the Monitor",
 })) EN.set(k, v);
+// Device panel: names by protocol, deep port scan (0.8.8).
+for (const [k, v] of Object.entries({
+  "Nome DNS": "DNS name", "Nome Bonjour": "Bonjour name", "Nome SMB": "SMB name", "Gruppo SMB": "SMB workgroup",
+  "Dal DNS (ricerca inversa)": "From DNS (reverse lookup)", "Da mDNS / Bonjour": "From mDNS / Bonjour",
+  "Da NetBIOS: il nome del computer per la condivisione file (Windows, NAS)": "From NetBIOS: the computer name for file sharing (Windows, NAS)",
+  "Gruppo di lavoro o dominio Windows (NetBIOS)": "Windows workgroup or domain (NetBIOS)",
+  "Porte comuni (circa 1200)": "Common ports (about 1200)", "Tutte le porte (65.535)": "All ports (65,535)", "Elenco…": "List…",
+  "Quali porte controllare su questo dispositivo": "Which ports to check on this device", "Controlla porte": "Check ports", "Ferma": "Stop",
+  "Controlla le porte di questo dispositivo": "Checks the ports of this device",
+  "Porte da controllare, separate da virgole; intervalli con il trattino": "Ports to check, separated by commas; ranges with a dash",
+  "Controllo tutte le 65.535 porte: circa un minuto…": "Checking all 65,535 ports: about a minute…", "Controllo le porte…": "Checking the ports…",
+  "Controllo delle porte fermato.": "Port check stopped.", "Controllo interrotto.": "Check interrupted.",
+})) EN.set(k, v);
+PAT.push(
+  [/^([\d.]+) di ([\d.]+) · aperte: (.+)$/, "$1 of $2 · open: $3"], [/^([\d.]+) di ([\d.]+) · nessuna aperta finora$/, "$1 of $2 · none open so far"],
+  [/^✓ (\d+) port[ae] apert[ae] su ([\d.]+) controllate, in (\d+) s\.$/, "✓ $1 open of $2 checked, in $3 s."],
+);

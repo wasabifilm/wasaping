@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"encoding/binary"
 	"net"
 	"testing"
@@ -89,5 +90,37 @@ Protocolli sconosciuti            0
 `
 	if c := parseNetstatE(win); c.RxBytes != 1234567890 || c.RxPkts != 5250000 || c.RxNonUnicast != 250000 {
 		t.Fatalf("netstat -e: %+v", c)
+	}
+}
+
+func TestScanPortsProgress(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	port := l.Addr().(*net.TCPAddr).Port
+	ports := []int{port}
+	for p := 40000; p < 40300; p++ {
+		if p != port {
+			ports = append(ports, p)
+		}
+	}
+	calls := 0
+	open := ScanPortsProgress(context.Background(), "127.0.0.1", ports, 500*time.Millisecond, 64, func(done int, open []int) { calls++ })
+	if len(open) != 1 || open[0] != port {
+		t.Fatalf("open %v, want [%d]", open, port)
+	}
+	if n := len(WellKnownPorts); n < 1100 || n > 1300 || WellKnownPorts[0] != 1 {
+		t.Fatalf("well-known ports: %d", n)
 	}
 }

@@ -81,9 +81,16 @@
   <dl id="dInfo"></dl>
   <div class="actions">
     <button id="dWol" title="Accende il dispositivo, se la sua scheda di rete lo supporta">Sveglia (Wake-on-LAN)</button>
-    <button id="dPorts" title="Controlla le porte da 1 a 1024">Controlla porte 1–1024</button>
     <button id="dForget" class="danger" title="Toglie il dispositivo dall'elenco dei conosciuti">Dimentica</button>
   </div>
+  <div class="row pscan">
+    <select id="dPortMode" title="Quali porte controllare su questo dispositivo">
+      <option value="common">Porte comuni (circa 1200)</option><option value="all">Tutte le porte (65.535)</option><option value="list">Elenco…</option>
+    </select>
+    <input id="dPortList" hidden spellcheck="false" placeholder="80,443,8000-8100" title="Porte da controllare, separate da virgole; intervalli con il trattino">
+    <button id="dPorts" title="Controlla le porte di questo dispositivo">Controlla porte</button>
+  </div>
+  <div class="pbar" id="dPortBar" hidden><i></i></div>
   <div class="msg" id="dMsg"></div>
   <details class="ntool" id="dTools">
     <summary>Strumenti di rete</summary>

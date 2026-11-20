@@ -47,6 +47,7 @@ type Host struct {
 	Self         bool       `json:"self,omitempty"`
 	ArtBroadcast []int      `json:"art_broadcast,omitempty"` // Art-Net universes it sends in broadcast
 	OtherMACs    []string   `json:"other_macs,omitempty"`    // other devices seen with this IP in the last minutes
+	Names        *HostNames `json:"names,omitempty"`         // every name heard, by source
 }
 
 // Options controls a scan.
@@ -313,8 +314,10 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				}
 				host.WebTitle = webTitle(ctx, ip, web)
 			}
+			names := HostNames{DNS: host.Hostname}
 			<-infoReady
 			if d := info[ip]; d != nil {
+				names.MDNS, names.NetBIOS, names.Workgroup = d.mdnsName, d.nbName, d.workgroup
 				if host.Hostname == "" {
 					host.Hostname = d.name
 				}
@@ -325,6 +328,9 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			}
 			if host.Self && opt.ResolveDNS {
 				host.Hostname = selfName
+			}
+			if names != (HostNames{}) {
+				host.Names = &names
 			}
 			if s != nil {
 				host.ArtNet, host.SACN, host.PTP, host.PTPFollower = s.artnet, s.sacn, s.ptp, s.ptpFollow
@@ -474,6 +480,14 @@ func isLetter(r rune) bool { return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z'
 func upnpSoftware(u *upnpInfo) bool {
 	s := strings.ToLower(u.maker + " " + u.model)
 	return strings.Contains(s, "minidlna") || strings.Contains(s, "justin maggard") || strings.Contains(s, "windows media connect")
+}
+
+// HostNames are the names a device gave through each protocol.
+type HostNames struct {
+	DNS       string `json:"dns,omitempty"`       // reverse DNS
+	MDNS      string `json:"mdns,omitempty"`      // Bonjour / mDNS
+	NetBIOS   string `json:"netbios,omitempty"`   // NetBIOS / SMB computer name
+	Workgroup string `json:"workgroup,omitempty"` // NetBIOS / SMB workgroup or domain
 }
 
 // DanteInfo is what a Dante device announces about its transmit channels.

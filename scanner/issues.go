@@ -34,6 +34,11 @@ func protocolsOf(h Host) []string {
 	add(containsInt(h.Ports, 49280), "Yamaha RCP")
 	add(containsInt(h.Ports, 51325) || containsInt(h.Ports, 51326), "Allen & Heath")
 	add(containsInt(h.Ports, 2202), "Shure")
+	add(svc("oca"), "AES70")
+	add(containsInt(h.Ports, 1710) || serverTitle(strings.ToLower(h.WebTitle)) == "Q-SYS", "Q-SYS")
+	add(containsInt(h.Ports, 41794) || containsInt(h.Ports, 41795), "Crestron")
+	add(containsInt(h.Ports, 1319), "AMX")
+	add(serverTitle(strings.ToLower(h.WebTitle)) == "Companion", "Companion")
 	add(svc("airplay"), "AirPlay")
 	return p
 }
@@ -52,6 +57,18 @@ func Exposure(h Host) []string {
 	}
 	if h.Gateway && containsInt(h.Ports, 80) && !containsInt(h.Ports, 443) {
 		w = append(w, "Pannello del router solo in HTTP: la password viaggia in chiaro.")
+	}
+	for _, a := range h.Apps {
+		switch {
+		case a.Name == "Docker":
+			w = append(w, "API di Docker aperta senza TLS (porta "+itoa(a.Port)+"): chi la raggiunge controlla il server.")
+		case a.NoAuth:
+			w = append(w, a.Name+" senza password (porta "+itoa(a.Port)+"): chiunque sulla rete legge i dati.")
+		}
+	}
+	switch serverTitle(strings.ToLower(h.WebTitle)) {
+	case "iDRAC", "iLO", "IPMI", "IMM", "XClarity", "CIMC":
+		w = append(w, "Gestione remota del server ("+serverTitle(strings.ToLower(h.WebTitle))+") raggiungibile da questa rete: meglio tenerla su una rete separata.")
 	}
 	if containsInt(h.Ports, 3389) {
 		w = append(w, "Desktop remoto di Windows aperto (porta 3389).")

@@ -31,7 +31,7 @@ const EN = new Map(Object.entries({
   "Controlla porte 1–1024": "Check ports 1–1024", "Controlla le porte da 1 a 1024": "Checks ports 1 to 1024", "Dimentica": "Forget", "Toglie il dispositivo dall'elenco dei conosciuti": "Removes the device from the known ones",
   "Strumenti di rete": "Network tools", "Qualità del collegamento": "Link quality", "20 ping: perdite, tempi e stabilità del collegamento": "20 pings: loss, times and stability of the link",
   "Traceroute": "Traceroute", "Il percorso dei pacchetti fino al dispositivo": "The path of packets to the device", "IP o nome: anche un indirizzo internet, es. 8.8.8.8": "IP or name, internet addresses too, e.g. 8.8.8.8",
-  "Produttore": "Maker", "Modello": "Model", "Nome del dispositivo": "Device name", "Nome in rete": "Network name", "Pagina web": "Web page", "Servizi": "Services",
+  "Produttore": "Maker", "Modello": "Model", "Nome del dispositivo": "Device name", "Nome in rete": "Network name", "Pagina web": "Web page", "Macchina virtuale": "Virtual machine", "(da NetBIOS)": "(from NetBIOS)", "Programmi": "Software", "senza password": "no password", "Servizi": "Services",
   "nessuna tra quelle controllate": "none of those checked", "solo tabella ARP": "ARP table only", "Visto la prima volta": "First seen", "Visto l'ultima volta": "Last seen", "Presenza": "Presence",
   "ultime scansioni, la più recente a destra": "latest scans, most recent on the right", "Universi in uscita": "Output universes", "Universi in ingresso": "Input universes", "Stato del nodo": "Node status",
   "Firmware": "Firmware", "Sorgente sACN": "sACN source", "Universi sACN": "sACN universes", "Priorità sACN": "sACN priority", "Clock PTP": "PTP clock", "Sorgenti NDI": "NDI sources",
@@ -284,6 +284,9 @@ const PAT = [
     (m, p, rest) => ({"Non salvato": "Not saved", "Errore": "Error", "Non inviato": "Not sent", "Non esportato": "Not exported", "Non importato": "Not imported", "Piano non importato": "Plan not imported", "Non attivato": "Not turned on", "Aiuto non installato": "Helper not installed", "Aiuto non rimosso": "Helper not removed", "Download non riuscito": "Download failed", "Salvataggio non riuscito": "Saving failed"}[p]) + ": " + tr(rest)],
   [/^Conflitto di IP: su Art-Net rispondono più dispositivi con questo indirizzo \((.+)\)\.$/, "IP conflict: several devices answer on Art-Net with this address ($1)."],
   [/^Alla scansione precedente questo IP era di (.+) \((.+)\): dispositivo sostituito o conflitto di IP\.$/, "At the previous scan this IP belonged to $1 ($2): device replaced, or an IP conflict."],
+  [/^(.+) senza password \(porta (\d+)\): chiunque sulla rete legge i dati\.$/, "$1 without a password (port $2): anyone on the network can read the data."],
+  [/^API di Docker aperta senza TLS \(porta (\d+)\): chi la raggiunge controlla il server\.$/, "Docker API open without TLS (port $1): whoever reaches it controls the server."],
+  [/^Gestione remota del server \((.+)\) raggiungibile da questa rete: meglio tenerla su una rete separata\.$/, "Server remote management ($1) reachable from this network: better keep it on a separate network."],
   [/^Il proiettore segnala: (.+)\.$/, "The projector reports: $1."], [/^Il nodo Art-Net segnala un problema: (.+)$/, "The Art-Net node reports a problem: $1"],
   [/^Dante a frequenze di campionamento diverse \((.+)\): tra loro l\'audio non passa\.$/, "Dante at different sample rates ($1): audio does not pass between them."],
   [/^Dante: (.+) risponde da (.+) sulla stessa rete\. .*$/, "Dante: $1 answers from $2 on the same network. Are primary and secondary on the same switch? They must be on separate networks."],
@@ -364,7 +367,7 @@ if (LANG === "en") {
   }).observe(document.body, {childList: true, subtree: true, characterData: true});
 }
 fetch("api/lang", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({lang: LANG})}).catch(() => {});
-const PORT_NAMES = {21:"FTP",22:"SSH",23:"Telnet",53:"DNS",80:"HTTP",139:"NetBIOS",443:"HTTPS",445:"SMB",548:"AFP",554:"RTSP",631:"IPP",1883:"MQTT",3389:"RDP",5000:"UPnP",5900:"VNC",8000:"HTTP",8080:"HTTP",8443:"HTTPS",9100:"Stampante",32400:"Plex",62078:"iPhone"};
+const PORT_NAMES = {21:"FTP",22:"SSH",23:"Telnet",53:"DNS",80:"HTTP",139:"NetBIOS",443:"HTTPS",445:"SMB",548:"AFP",554:"RTSP",631:"IPP",1883:"MQTT",3389:"RDP",5000:"UPnP",5900:"VNC",8000:"HTTP",8006:"Proxmox",8007:"Proxmox Backup",902:"VMware ESXi",1319:"AMX",1433:"SQL Server",1710:"Q-SYS",2375:"Docker",3306:"MySQL",5001:"HTTPS",5432:"PostgreSQL",6379:"Redis",6443:"Kubernetes",8086:"InfluxDB",8096:"Jellyfin",8123:"Home Assistant",8291:"Winbox",8728:"MikroTik API",9200:"Elasticsearch",9443:"HTTPS",27017:"MongoDB",41794:"Crestron",8080:"HTTP",8443:"HTTPS",9100:"Stampante",32400:"Plex",62078:"iPhone"};
 // DMX viewer: Art-Net nodes, timecode, channel values (0.8.6).
 for (const [k, v] of Object.entries({
   "In ascolto su Art-Net (pacchetti in broadcast o diretti a questo computer) e sACN (universi 1–64). wasaping non manda DMX: per trovare i nodi manda solo un ArtPoll ogni 3 secondi. Clic su un universo per vedere i 512 canali, clic su un canale per seguirlo nel tempo.":
@@ -475,8 +478,8 @@ PAT.push(
   [/^Testo al (\d+)%$/, "Text at $1%"], [/^Salvato: «(.+)»\. Lo ritrovi nel menu delle interfacce\.$/, "Saved: \"$1\". You find it in the interface menu."],
   [/^Intervallo salvato: «(.+)»\. Clic per toglierlo$/, "Saved range: \"$1\". Click to remove it"],
 );
-PAT.push([/^Attraverso (.+): arrivano IP, porte, ping e nomi DNS o SMB; MAC, produttori, Bonjour e protocolli show in broadcast \(Art-Net, Dante\) no\.$/,
-  "Through $1: IP, ports, ping and DNS or SMB names arrive; MACs, makers, Bonjour and broadcast show protocols (Art-Net, Dante) do not."]);
+PAT.push([/^Attraverso (.+): arrivano IP, porte, ping e nomi DNS o SMB \(con il MAC dei PC Windows e di molti NAS\); gli altri MAC, Bonjour e i protocolli show in broadcast \(Art-Net, Dante\) no\.$/,
+  "Through $1: IP, ports, ping and DNS or SMB names arrive (with the MAC of Windows PCs and many NAS); other MACs, Bonjour and broadcast show protocols (Art-Net, Dante) do not."]);
 // Departments, problem history, alarm sound (0.9).
 for (const [k, v] of Object.entries({
   "Reparto": "Department", "Luci": "Lights", "Altro": "Other",

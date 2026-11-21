@@ -104,6 +104,17 @@ func TestNetbiosStatus(t *testing.T) {
 	if got, group := parseNetbiosStatus(resp); got != "UFFICIO-PC" || group != "WORKGROUP" {
 		t.Errorf("got %q in %q", got, group)
 	}
+	if _, _, mac := parseNetbiosStatusMAC(resp); mac != "" {
+		t.Errorf("no unit ID: got %q", mac)
+	}
+	withMAC := append(append([]byte{}, resp...), 0xbc, 0x24, 0x11, 0x0a, 0x0b, 0x0c, 0, 0)
+	if _, _, mac := parseNetbiosStatusMAC(withMAC); mac != "bc:24:11:0a:0b:0c" {
+		t.Errorf("mac %q", mac)
+	}
+	zeros := append(append([]byte{}, resp...), 0, 0, 0, 0, 0, 0)
+	if _, _, mac := parseNetbiosStatusMAC(zeros); mac != "" {
+		t.Errorf("Samba zeros: got %q", mac)
+	}
 }
 
 func TestWindowsRoute(t *testing.T) {
@@ -128,6 +139,10 @@ func TestGuessKind(t *testing.T) {
 		{Host{Hostname: "MacBook-Pro.local"}, KindComputer},
 		{Host{Services: []string{"ipp"}}, KindPrinter},
 		{Host{Ports: []int{554}}, KindCamera},
+		{Host{Ports: []int{22, 111, 3128, 8006}}, KindComputer},
+		{Host{Ports: []int{22, 8007}}, KindNAS},
+		{Host{Ports: []int{22}, WebTitle: "pve1 - Proxmox Virtual Environment"}, KindComputer},
+		{Host{VM: "Proxmox"}, KindComputer},
 		{Host{}, ""},
 	}
 	for _, c := range cases {
@@ -163,5 +178,13 @@ func TestShowAppFromOSC(t *testing.T) {
 	}
 	if showApp("Oscar's mixer") != "" || showApp("TouchDesigner on PC-LED") != "touchdesigner" {
 		t.Fatal("showApp")
+	}
+}
+
+func TestVirtualMachine(t *testing.T) {
+	for mac, want := range map[string]string{"BC:24:11:0a:0b:0c": "Proxmox", "52-54-00-12-34-56": "QEMU/KVM", "00:50:56:aa:bb:cc": "VMware", "44:a8:fc:00:00:01": "", "": ""} {
+		if got := VirtualMachine(mac); got != want {
+			t.Errorf("%s: got %q, want %q", mac, got, want)
+		}
 	}
 }

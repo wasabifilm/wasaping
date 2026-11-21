@@ -115,6 +115,7 @@ td.name { min-width: 180px; }
 .namecell { display: flex; align-items: center; }
 .badge { font-size: 11px; border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: 1px; }
 .badge.me { background: var(--wasabi); color: var(--wasabi-ink); }
+.badge.vm { border: 1px solid var(--line); color: var(--muted); }
 .badge.new { background: #f2c94c; color: #171717; font-weight: 600; }
 .badge.off { border: 1px solid var(--line); color: var(--muted); }
 .muted { color: var(--muted); }
@@ -330,6 +331,7 @@ button.ident.on { animation: blink 1s steps(2) infinite; }
 #detail .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 #detail .msg { font-size: 13px; color: var(--muted); margin-top: 10px; min-height: 18px; }
 .svc { display: inline-block; font-size: 12px; padding: 1px 6px; margin: 1px 2px 1px 0; border-radius: 4px; border: 1px solid var(--line); }
+.svc.risky { border-color: var(--warn); color: var(--warn); }
 @media (max-width: 640px) { .bar, .status { padding-left: 16px; padding-right: 16px; } .wrap, .notice, .progress { margin-left: 16px; margin-right: 16px; } }
 .swmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 10px; }
 .swcard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }

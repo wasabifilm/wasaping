@@ -2,7 +2,8 @@
 // Ports that the system knows how to open, and the program it uses.
 const OPEN = {
   80: ["http", "browser"], 8000: ["http", "browser"], 8080: ["http", "browser"], 5000: ["http", "browser"], 32400: ["http", "browser"],
-  443: ["https", "browser"], 8443: ["https", "browser"],
+  443: ["https", "browser"], 8443: ["https", "browser"], 8006: ["https", "browser"], 8007: ["https", "browser"], 5001: ["https", "browser"], 9443: ["https", "browser"],
+  8123: ["http", "browser"], 8096: ["http", "browser"],
   21: ["ftp", "Finder"], 22: ["ssh", "Terminale"], 23: ["telnet", "Terminale"],
   139: ["smb", "condivisione file"], 445: ["smb", "condivisione file"], 548: ["afp", "condivisione file"],
   554: ["rtsp", "lettore video"], 5900: ["vnc", "Condivisione schermo"], 3389: ["rdp", "Desktop remoto"],
@@ -39,7 +40,7 @@ const KIND = {
 const DEPTS = {lights: "Luci", audio: "Audio", video: "Video", network: "Rete", other: "Altro"};
 const KIND_GROUP = {lightdesk: "lights", lighting: "lights", audio: "audio", speaker: "audio", video: "video", projector: "video", camera: "video", tv: "video", router: "network", switch: "network"};
 const groupOf = h => h.group || KIND_GROUP[h.kind] || "other";
-const SERVICES = {"netaudio-arc":"Dante", "netaudio-cmc":"Dante", "netaudio-dbc":"Dante", "netaudio-chan":"Dante", ndi:"NDI", blackmagic:"Blackmagic", videohub:"Videohub", qlab:"QLab", osc:"OSC", workstation:"", airplay:"AirPlay", raop:"AirPlay audio", ipp:"Stampa", ipps:"Stampa", printer:"Stampa", "pdl-datastream":"Stampa", scanner:"Scanner", uscan:"Scanner", smb:"Condivisione file", afpovertcp:"Condivisione file (AFP)", ssh:"SSH", "sftp-ssh":"SFTP", rfb:"Condivisione schermo", googlecast:"Chromecast", http:"Pagina web", https:"Pagina web", hap:"HomeKit", homekit:"HomeKit", matter:"Matter", matterc:"Matter", "companion-link":"Dispositivo Apple", "spotify-connect":"Spotify", sonos:"Sonos", "device-info":"", "sleep-proxy":"Sleep proxy", "apple-mobdev2":"Sincronizzazione Apple"};
+const SERVICES = {"netaudio-arc":"Dante", "netaudio-cmc":"Dante", "netaudio-dbc":"Dante", "netaudio-chan":"Dante", ndi:"NDI", blackmagic:"Blackmagic", videohub:"Videohub", qlab:"QLab", osc:"OSC", oca:"AES70 (OCA)", "home-assistant":"Home Assistant", workstation:"", airplay:"AirPlay", raop:"AirPlay audio", ipp:"Stampa", ipps:"Stampa", printer:"Stampa", "pdl-datastream":"Stampa", scanner:"Scanner", uscan:"Scanner", smb:"Condivisione file", afpovertcp:"Condivisione file (AFP)", ssh:"SSH", "sftp-ssh":"SFTP", rfb:"Condivisione schermo", googlecast:"Chromecast", http:"Pagina web", https:"Pagina web", hap:"HomeKit", homekit:"HomeKit", matter:"Matter", matterc:"Matter", "companion-link":"Dispositivo Apple", "spotify-connect":"Spotify", sonos:"Sonos", "device-info":"", "sleep-proxy":"Sleep proxy", "apple-mobdev2":"Sincronizzazione Apple"};
 
 let hosts = [], gone = [], es = null, sortKey = "ip", sortDir = 1, ui = "browser", showGone = true;
 try { showGone = localStorage.getItem("wasaping.showGone") !== "0"; } catch {}
@@ -630,7 +631,7 @@ function routeOf(target) {
 function markVia() {
   const r = routeOf($("target").value), el = $("viaNote");
   el.hidden = !r;
-  if (r) el.textContent = `Attraverso ${r.label}: arrivano IP, porte, ping e nomi DNS o SMB; MAC, produttori, Bonjour e protocolli show in broadcast (Art-Net, Dante) no.`;
+  if (r) el.textContent = `Attraverso ${r.label}: arrivano IP, porte, ping e nomi DNS o SMB (con il MAC dei PC Windows e di molti NAS); gli altri MAC, Bonjour e i protocolli show in broadcast (Art-Net, Dante) no.`;
 }
 
 // ---- Saved ranges: a scan target with a name ("Palco" = 10.0.0.1-50) ----

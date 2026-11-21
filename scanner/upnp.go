@@ -136,13 +136,20 @@ func deviceHTTPClient(timeout time.Duration) *http.Client {
 
 var reTitle = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 
+// webTitlePorts are the web ports whose page title we read, in order of
+// preference; httpsPorts speak HTTPS.
+var (
+	webTitlePorts = []int{80, 8080, 443, 8443, 8000, 8006, 8007, 5001, 9443, 8123, 8096}
+	httpsPorts    = map[int]bool{443: true, 8443: true, 8006: true, 8007: true, 5001: true, 9443: true}
+)
+
 // webTitle reads the <title> of a device's web page (router, switch,
 // console, NAS panel…), trying the given web ports in order.
 func webTitle(ctx context.Context, ip string, ports []int) string {
 	client := deviceHTTPClient(1500 * time.Millisecond)
 	for _, p := range ports {
 		scheme := "http"
-		if p == 443 || p == 8443 {
+		if httpsPorts[p] {
 			scheme = "https"
 		}
 		u := scheme + "://" + net.JoinHostPort(ip, itoa(p)) + "/"
@@ -180,9 +187,38 @@ func itoa(n int) string {
 	}
 }
 
+// titleProducts are words in a page title that name the product; the
+// value is a short name for it.
+var titleProducts = []struct{ word, name string }{
+	{"proxmox virtual environment", "Proxmox VE"}, {"proxmox backup server", "Proxmox Backup"}, {"proxmox mail gateway", "Proxmox Mail Gateway"},
+	{"vmware esxi", "VMware ESXi"}, {"truenas", "TrueNAS"}, {"unraid", "Unraid"},
+	{"idrac", "iDRAC"}, {"integrated dell remote access", "iDRAC"}, {"hpe ilo", "iLO"}, {"supermicro", "IPMI"}, {"ipmi", "IPMI"}, {"imm2", "IMM"}, {"xclarity", "XClarity"}, {"integrated management controller", "CIMC"},
+	{"netgear gs", "NETGEAR"}, {"netgear xs", "NETGEAR"}, {"netgear m4", "NETGEAR"},
+	{"home assistant", "Home Assistant"}, {"portainer", "Portainer"}, {"unifi", "UniFi"},
+	{"q-sys", "Q-SYS"}, {"bitfocus companion", "Companion"}, {"crestron", "Crestron"}, {"extron", "Extron"},
+}
+
+// serverTitle names the product a page title belongs to, "" if none.
+func serverTitle(lower string) string {
+	for _, p := range titleProducts {
+		if strings.Contains(lower+" ", p.word) {
+			return p.name
+		}
+	}
+	for _, w := range strings.FieldsFunc(lower, func(r rune) bool { return !isLetter(r) && (r < '0' || r > '9') }) {
+		if w == "ilo" {
+			return "iLO"
+		}
+	}
+	return ""
+}
+
 // boringTitle recognizes placeholder page titles that tell nothing.
 func boringTitle(t string) bool {
 	l := strings.ToLower(strings.Trim(t, " .…"))
+	if serverTitle(l) != "" {
+		return false // "iDRAC9 - Login" still says what it is
+	}
 	for _, w := range []string{"404", "not found", "opening", "loading", "redirect", "error", "untitled", "document", "index", "welcome", "login", "please wait", "403", "forbidden", "unauthorized"} {
 		if l == w || strings.HasPrefix(l, w) || strings.Contains(l, " "+w) && len(l) < 30 {
 			return true

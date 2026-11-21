@@ -224,7 +224,7 @@ func MACsHidden(hosts []Host) bool {
 		ip := net.ParseIP(h.IP)
 		for _, n := range nets {
 			if n.Contains(ip) {
-				if h.MAC != "" {
+				if h.MAC != "" && h.MACFrom == "" {
 					return false
 				}
 				onLAN++

@@ -19,6 +19,7 @@ type devInfo struct {
 	mdnsName   string // from mDNS (reverse lookup)
 	nbName     string // NetBIOS / SMB computer name
 	workgroup  string // NetBIOS / SMB workgroup or domain
+	nbMAC      string // MAC from the NetBIOS answer
 	friendly   string // name chosen by the owner, e.g. "iPhone di Anna", "CL5-FOH"
 	model      string // e.g. "MacBookPro18,3", "Chromecast", "HP LaserJet M110"
 	services   []string
@@ -37,7 +38,7 @@ type devInfo struct {
 // names and TXT records carry friendly names and models. Show gear first.
 var browseTypes = []string{
 	"_netaudio-arc._udp", "_netaudio-cmc._udp", "_netaudio-chan._udp", "_ndi._tcp", "_blackmagic._tcp", "_videohub._tcp",
-	"_qlab._tcp", "_qlab._udp", "_osc._udp", "_osc._tcp", "_oscjson._tcp",
+	"_qlab._tcp", "_qlab._udp", "_osc._udp", "_osc._tcp", "_oscjson._tcp", "_oca._tcp", "_home-assistant._tcp",
 	"_googlecast._tcp", "_airplay._tcp", "_companion-link._tcp", "_raop._tcp",
 	"_device-info._tcp", "_smb._tcp", "_afpovertcp._tcp", "_ipp._tcp", "_printer._tcp",
 	"_hap._tcp", "_spotify-connect._tcp", "_sonos._tcp", "_workstation._tcp", "_http._tcp",
@@ -80,8 +81,8 @@ func localNames(ctx context.Context, ips []string, wait time.Duration) map[strin
 		for m := range ch {
 			if m.nb {
 				if d := out[m.from]; d != nil {
-					if name, group := parseNetbiosStatus(m.b); name != "" {
-						d.nbName, d.workgroup = name, group
+					if name, group, mac := parseNetbiosStatusMAC(m.b); name != "" {
+						d.nbName, d.workgroup, d.nbMAC = name, group, mac
 						if d.name == "" {
 							d.name, d.src = name, "netbios"
 						}
@@ -522,12 +523,20 @@ func netbiosStatusQuery() []byte {
 // parseNetbiosStatus returns the computer name and its workgroup (or
 // domain) from a NetBIOS node status reply.
 func parseNetbiosStatus(msg []byte) (name, workgroup string) {
+	name, workgroup, _ = parseNetbiosStatusMAC(msg)
+	return name, workgroup
+}
+
+// parseNetbiosStatusMAC also returns the MAC address (the "unit ID" right
+// after the names), "" when the answer has zeros there, as Samba does.
+// It works across routers and VPNs, where ARP cannot see the MAC.
+func parseNetbiosStatusMAC(msg []byte) (name, workgroup, mac string) {
 	if len(msg) < 12 || binary.BigEndian.Uint16(msg[6:]) == 0 {
-		return "", ""
+		return "", "", ""
 	}
 	_, off, err := readName(msg, 12)
 	if err != nil || off+11 > len(msg) {
-		return "", ""
+		return "", "", ""
 	}
 	off += 10 // type, class, ttl, rdlength
 	count := int(msg[off])
@@ -543,5 +552,10 @@ func parseNetbiosStatus(msg []byte) (name, workgroup string) {
 			workgroup = n
 		}
 	}
-	return name, workgroup
+	if count > 0 && off+6 <= len(msg) {
+		if m := net.HardwareAddr(msg[off : off+6]); m[0]&1 == 0 {
+			mac = normalizeMAC(m.String())
+		}
+	}
+	return name, workgroup, mac
 }

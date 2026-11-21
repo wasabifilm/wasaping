@@ -22,7 +22,15 @@ var CommonPorts = []int{21, 22, 23, 53, 80, 139, 443, 445, 548, 554, 631, 1883, 
 	// show gear: PJLink, Videohub, HyperDeck, NDI, QLab, grandMA, Yamaha, Allen & Heath, Shure, Dante
 	4352, 9990, 9993, 5960, 53000, 30000, 49280, 51325, 2202, 4440,
 	// video: vMix, OBS, Watchout
-	8088, 4455, 3039, 3040}
+	8088, 4455, 3039, 3040,
+	// servers: Proxmox VE, Proxmox Backup Server, VMware ESXi, Docker, Portainer, Kubernetes, Synology DSM
+	8006, 8007, 902, 2375, 9443, 6443, 5001,
+	// databases: SQL Server, MySQL, PostgreSQL, Redis, MongoDB, Elasticsearch, InfluxDB
+	1433, 3306, 5432, 6379, 27017, 9200, 8086,
+	// home and network: Home Assistant, Jellyfin, MikroTik Winbox and API
+	8123, 8096, 8291, 8728,
+	// AV control: Q-SYS, Crestron, AMX
+	1710, 41794, 1319}
 
 // tcpProbe tries the ports in parallel; it returns true at the first proof of life.
 func tcpProbe(ctx context.Context, ip string, ports []int, timeout time.Duration) (bool, time.Duration) {

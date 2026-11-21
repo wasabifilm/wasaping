@@ -19,6 +19,7 @@ import (
 type Host struct {
 	IP        string      `json:"ip"`
 	MAC       string      `json:"mac,omitempty"`
+	MACFrom   string      `json:"mac_from,omitempty"` // "netbios" when not from the ARP table (across a VPN)
 	Vendor    string      `json:"vendor,omitempty"`
 	Hostname  string      `json:"hostname,omitempty"`
 	Friendly  string      `json:"friendly,omitempty"` // name the owner gave it (Bonjour, Dante, Art-Net…)
@@ -41,6 +42,8 @@ type Host struct {
 	IPv6         []string   `json:"ipv6,omitempty"`      // from the neighbour table, matched by MAC
 	Dante        *DanteInfo `json:"dante,omitempty"`
 	Kind         string     `json:"kind,omitempty"` // see GuessKind
+	VM           string     `json:"vm,omitempty"`   // virtual machine: the hypervisor, from the MAC
+	Apps         []AppInfo  `json:"apps,omitempty"` // server programs on its ports (databases, Docker…)
 	Warnings     []string   `json:"warnings,omitempty"`
 	OffSubnet    bool       `json:"off_subnet,omitempty"` // not in any network of this computer, nor reached through a route
 	Via          string     `json:"via,omitempty"`        // reached through a route (VPN, router): the interface
@@ -282,6 +285,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				host.MAC = s.artnet.MAC
 			}
 			host.Vendor = Vendor(host.MAC)
+			host.VM = VirtualMachine(host.MAC)
 			if host.MAC != "" && !host.Self {
 				host.OtherMACs = ConflictMACs(ip, host.MAC)
 				if len(host.OtherMACs) > 0 {
@@ -307,19 +311,26 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 			if containsInt(host.Ports, 4352) {
 				host.PJLink = queryPJLink(ctx, ip, opt.Timeout+time.Second)
 			}
+			appsDone := make(chan []AppInfo, 1)
+			go func() { appsDone <- probeApps(ctx, ip, host.Ports, opt.Timeout+time.Second) }()
 			if opt.ResolveDNS && !host.Self {
 				var web []int
-				for _, p := range []int{80, 8080, 443, 8443, 8000} {
+				for _, p := range webTitlePorts {
 					if containsInt(host.Ports, p) {
 						web = append(web, p)
 					}
 				}
 				host.WebTitle = webTitle(ctx, ip, web)
 			}
+			host.Apps = <-appsDone
 			names := HostNames{DNS: host.Hostname}
 			<-infoReady
 			if d := info[ip]; d != nil {
 				names.MDNS, names.NetBIOS, names.Workgroup = d.mdnsName, d.nbName, d.workgroup
+				if host.MAC == "" && d.nbMAC != "" && !host.Self {
+					host.MAC, host.MACFrom = d.nbMAC, "netbios"
+					host.Vendor, host.VM = Vendor(host.MAC), VirtualMachine(host.MAC)
+				}
 				if host.Hostname == "" {
 					host.Hostname = d.name
 				}

@@ -32,6 +32,8 @@ func GuessKind(h Host) string {
 	name := strings.ToLower(h.Hostname + " " + h.Friendly)
 	model := strings.ToLower(h.Model)
 	vendor := strings.ToLower(h.Vendor)
+	title := strings.ToLower(h.WebTitle)
+	product := serverTitle(title)
 	port := func(p ...int) bool {
 		for _, x := range p {
 			if slices.Contains(h.Ports, x) {
@@ -68,11 +70,13 @@ func GuessKind(h Host) string {
 		return KindLightDesk
 	case h.ArtNet != nil && h.ArtNet.Style == "media server", len(h.NDI) > 0,
 		svc("blackmagic", "videohub", "ndi", "millumin", "madmapper", "resolume", "touchdesigner", "isadora") || port(9990, 9993, 9910, 5960),
-		has(name, "atem", "hyperdeck", "videohub", "resolume", "millumin", "disguise", "pixera"):
+		has(name, "atem", "hyperdeck", "videohub", "resolume", "millumin", "disguise", "pixera"),
+		port(41794, 41795, 1319) || product == "Crestron" || product == "Extron" || has(vendor, "crestron", "extron", "amx"):
 		return KindVideo
 	case h.ArtNet != nil || h.SACN != nil:
 		return KindLighting
-	case svc("netaudio-arc", "netaudio-cmc", "netaudio-dbc") || port(4440, 49280, 51325, 51326, 2202) ||
+	case svc("netaudio-arc", "netaudio-cmc", "netaudio-dbc", "oca") || port(4440, 49280, 51325, 51326, 2202, 1710) || product == "Q-SYS" ||
+		has(vendor, "d&b audiotechnik", "l-acoustics", "qsc", "meyer sound", "lab.gruppen") ||
 		has(vendor, "audinate", "yamaha", "allen & heath", "digico", "shure", "sennheiser", "focusrite", "rme", "behringer", "midas"):
 		return KindAudio
 	case svc("qlab"):
@@ -101,6 +105,14 @@ func GuessKind(h Host) string {
 		return KindTV
 	case has(name, "homepod", "sonos", "echo", "speaker") || svc("sonos", "spotify-connect"):
 		return KindSpeaker
+	case port(8007) || has(name, "proxmox-backup") || product == "Proxmox Backup" || product == "TrueNAS" || product == "Unraid":
+		return KindNAS
+	case port(8006, 902) || has(name, "proxmox", "esxi") || product != "" && strings.Contains("Proxmox VE Proxmox Mail Gateway VMware ESXi iDRAC iLO IPMI IMM XClarity CIMC", product):
+		return KindComputer
+	case port(8291, 8728) || product == "UniFi" && port(8443) || product == "NETGEAR":
+		return KindSwitch
+	case port(8123) || svc("home-assistant") || product == "Home Assistant":
+		return KindIoT
 	case has(name, "nas", "diskstation", "synology", "qnap") || has(vendor, "synology", "qnap", "western digital"):
 		return KindNAS
 	case has(vendor, "cisco", "netgear", "ubiquiti", "luminex", "pathport", "mikrotik", "hirschmann", "d-link") && !port(62078):
@@ -117,7 +129,7 @@ func GuessKind(h Host) string {
 		return KindIoT
 	case port(53) && port(80, 443):
 		return KindRouter
-	case port(445, 139):
+	case port(445, 139), h.VM != "", len(h.Apps) > 0, port(3306, 5432, 1433, 27017, 6379, 9200, 2375, 6443, 9443):
 		return KindComputer
 	}
 	return ""

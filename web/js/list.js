@@ -12,7 +12,7 @@ function renderSoon() { if (!renderTimer) renderTimer = setTimeout(render, 150);
 function haystack(h, isGone) {
   return [h.ip, (h.ipv6 || []).join(" "), Object.values(h.names || {}).join(" "), h.name, h.role, h.note, h.friendly, h.hostname, h.mac, h.vendor, h.model, (h.protocols || []).join(" "),
     (KIND[h.kind] || KIND[""])[0], tr((KIND[h.kind] || KIND[""])[0]), (h.ports || []).join(" "),
-    h.critical ? "critico critical" : "", h.new ? "nuovo new" : "", h.self ? "tu you" : "",
+    h.critical ? "critico critical" : "", h.new ? "nuovo new" : "", h.self ? "tu you" : "", h.vm ? "vm virtuale virtual " + h.vm : "", (h.apps || []).map(a => a.name + " " + (a.version || "")).join(" "),
     (h.warnings || []).length ? "avviso avvisi warning " + h.warnings.join(" ") : "", isGone ? "non risponde offline spento" : ""].join(" ").toLowerCase();
 }
 // Every word must match (in any field): "dante critico", "artnet 10.0.0".
@@ -46,7 +46,7 @@ function render() {
     const wl = isGone ? 0 : warnLevel(h);
     return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${wl === 2 ? " bad" : wl ? " warned" : ""}${selected === h.key ? " sel" : ""}${!isGone && freshKeys.has(h.key) ? " fresh" : ""}">
     <td class="ccell"><input type="checkbox" class="mcrit" aria-label="Monitor"${h.critical ? " checked" : ""} title="${h.critical ? "Critico: il Monitor lo tiene d'occhio. Togli la spunta per smettere" : "Spunta per tenerlo d'occhio nel Monitor"}"></td>
-    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
+    <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${h.vm ? `<span class="badge vm" title="${esc(tr("Macchina virtuale") + " (" + h.vm + ")")}">VM</span>` : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
     <td class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
@@ -307,9 +307,10 @@ function openDetail(key) {
   const svcs = [...new Set((h.services || []).map(s => SERVICES[s] ?? s).filter(Boolean))];
   const rows = [
     ["IP", `<span class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</span>`],
-    ["MAC", h.mac ? `<span class="mono" data-copy="${esc(h.mac)}">${esc(h.mac)}</span>` : "—"],
+    ["MAC", h.mac ? `<span class="mono" data-copy="${esc(h.mac)}">${esc(h.mac)}</span>${h.mac_from === "netbios" ? ' <span class="muted">(da NetBIOS)</span>' : ""}` : "—"],
     ...((h.ipv6 || []).length ? [["IPv6", h.ipv6.map(a => `<span class="mono" data-copy="${esc(a)}" style="display:block;font-size:12px">${esc(a)}</span>`).join("")]] : []),
     ["Produttore", esc(h.vendor) || "—"],
+    ...(h.vm ? [["Macchina virtuale", esc(h.vm)]] : []),
     ...(h.model ? [["Modello", esc(h.model)]] : []),
     ...(h.friendly ? [["Nome del dispositivo", esc(h.friendly)]] : []),
     ...(h.web_title ? [["Pagina web", esc(h.web_title)]] : []),
@@ -318,6 +319,7 @@ function openDetail(key) {
     ...netNames(h),
     ...(h.protocols && h.protocols.length ? [["Protocolli", protoChips(h)]] : []),
     ...showFacts(h),
+    ...((h.apps || []).length ? [["Programmi", h.apps.map(a => `<span class="svc${a.no_auth ? " risky" : ""}">${esc(a.name)}${a.version ? " " + esc(a.version) : ""} <span class="muted">· ${a.port}</span>${a.no_auth ? ' · <span>senza password</span>' : ""}</span>`).join("")]] : []),
     ["Servizi", svcs.length ? svcs.map(s => `<span class="svc">${esc(s)}</span>`).join("") : "—"],
     ["Porte aperte", isGone ? "—" : portLinks(h) || "nessuna tra quelle controllate"],
     ["Risposta", isGone ? "—" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? NOPING_TIP : "—"],

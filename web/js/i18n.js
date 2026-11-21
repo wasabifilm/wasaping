@@ -440,7 +440,7 @@ for (const [k, v] of Object.entries({
 EN.set("Avvisi: clic sulla riga per leggerli", "Warnings: click the row to read them");
 EN.set("Trascina per allargare · doppio clic: larghezze iniziali", "Drag to resize · double-click: default widths");
 for (const [k, v] of Object.entries({
-  "Spunta i dispositivi critici: il Monitor li tiene d'occhio e suona se spariscono": "Tick the critical devices: the Monitor watches them and sounds if they disappear",
+  "Monitor: spunta i dispositivi critici, il Monitor li tiene d'occhio e suona se spariscono": "Monitor: tick the critical devices, the Monitor watches them and sounds if they disappear",
   "Critico: il Monitor lo tiene d'occhio. Togli la spunta per smettere": "Critical: the Monitor watches it. Untick to stop",
   "Spunta per tenerlo d'occhio nel Monitor": "Tick to watch it in the Monitor",
 })) EN.set(k, v);

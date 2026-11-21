@@ -78,6 +78,15 @@ function protoChips(h) {
     return `<span class="proto" title="${esc(p + extra)}">${esc(p + extra)}</span>`;
   }).join("");
 }
+// Server programs (databases, Docker, Proxmox…): name and version; red
+// when it answers without a password.
+function appChips(h) {
+  return (h.apps || []).map(a => {
+    const t = a.name + (a.version ? " " + a.version : "");
+    const tip = t + (a.port ? " · porta " + a.port : "") + (a.no_auth ? " · senza password" : "");
+    return `<span class="proto${a.no_auth ? " risky" : ""}" title="${esc(tip)}">${esc(t)}</span>`;
+  }).join("");
+}
 const when = t => {
   if (!t || t.startsWith("0001")) return "";
   const d = new Date(t), now = new Date();
@@ -206,7 +215,7 @@ $("clearBtn").onclick = () => {
   hosts = []; gone = []; freshKeys = new Set(); issues = []; network = null; networks = []; activeNet = "";
   closeDetail(); showNetwork();
   $("extra").innerHTML = ""; $("status").textContent = "Pronto."; $("prog").style.width = "0";
-  $("rows").innerHTML = `<tr><td colspan="9" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr>`;
+  $("rows").innerHTML = `<tr><td colspan="10" class="empty">Premi <b>Scansiona</b> per vedere chi c'è sulla tua rete.</td></tr>`;
   shownKeys = []; $("fcount").textContent = ""; pageTitle(); refreshGroupPage();
 };
 
@@ -588,6 +597,7 @@ const warnLevel = h => !(h.warnings || []).length ? 0 : h.warnings.some(w => /^(
 function sortValue(h, k) {
   switch (k) {
     case "protocols": return (h.protocols || []).join(" ").toLowerCase();
+    case "apps": return (h.apps || []).map(a => a.name).join(" ").toLowerCase();
     case "model": return (h.model || h.vendor || "").toLowerCase();
     case "ip": return ipNum(h.ip);
     case "ports": return (h.ports || []).length;

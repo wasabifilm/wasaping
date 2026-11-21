@@ -253,3 +253,15 @@ func TestAppKindsAndWarnings(t *testing.T) {
 		t.Errorf("protocols %v", p)
 	}
 }
+
+func TestWithTitleApp(t *testing.T) {
+	if a := withTitleApp(nil, "pve - Proxmox Virtual Environment"); len(a) != 1 || a[0].Name != "Proxmox VE" {
+		t.Errorf("proxmox: %+v", a)
+	}
+	if a := withTitleApp(nil, "NETGEAR GS724T"); len(a) != 0 {
+		t.Errorf("a switch model is not a program: %+v", a)
+	}
+	if a := withTitleApp([]AppInfo{{Port: 6379, Name: "Redis"}}, "My page"); len(a) != 1 {
+		t.Errorf("no product: %+v", a)
+	}
+}

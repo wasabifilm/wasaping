@@ -322,7 +322,7 @@ func Scan(ctx context.Context, opt Options, onHost func(Host), onProgress func(P
 				}
 				host.WebTitle = webTitle(ctx, ip, web)
 			}
-			host.Apps = <-appsDone
+			host.Apps = withTitleApp(<-appsDone, host.WebTitle)
 			names := HostNames{DNS: host.Hostname}
 			<-infoReady
 			if d := info[ip]; d != nil {

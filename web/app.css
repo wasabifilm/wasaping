@@ -100,6 +100,7 @@ th:hover .colgrip::after, .colgrip:active::after { background: var(--wasabi); wi
 #listWrap .namecell > div { min-width: 0; overflow: hidden; }
 #listWrap .namecell .sub, #listWrap td .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 th.ccol, td.ccell { text-align: center; width: 1%; padding-left: 10px; padding-right: 6px; }
+th.ccol .mico { width: 16px; height: 16px; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 td.ccell input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--wasabi); margin: 0; vertical-align: middle; }
 th.wcol, td.wcell { text-align: center; white-space: nowrap; width: 1%; }
 .wico { font-size: 12px; font-weight: 600; color: #b35f12; cursor: help; }
@@ -150,7 +151,8 @@ a.port:hover { text-decoration: underline; }
 @media (max-width: 640px) { .set { grid-template-columns: 1fr; } .set > b { padding-top: 0; } }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; }
 #toast.show { opacity: 1; }
-.proto { display: inline-block; font-size: 11px; padding: 1px 6px; margin: 1px 2px 1px 0; border-radius: 4px; border: 1px solid var(--wasabi-text); color: var(--wasabi-text); white-space: nowrap; }
+.proto { display: inline-block; font-size: 11px; padding: 1px 6px; margin: 1px 2px 1px 0; border-radius: 4px; border: 1px solid var(--wasabi-text); color: var(--wasabi-text); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: top; box-sizing: border-box; }
+.proto.risky { border-color: var(--warn); color: var(--warn); }
 .badge.warn { background: #f2994a; color: #171717; font-weight: 600; cursor: help; }
 .badge.crit { border: 1px solid var(--warn); color: var(--warn); }
 .status .netbar { padding: 0; margin-left: auto; color: var(--ink); }

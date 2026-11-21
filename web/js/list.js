@@ -36,7 +36,7 @@ function render() {
   $("fcount").textContent = words.length && all ? `${list.length + off.length} di ${all}` : "";
   shownKeys = list.concat(off).map(h => h.key);
   if (!list.length && !off.length) {
-    $("rows").innerHTML = `<tr><td colspan="9" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
+    $("rows").innerHTML = `<tr><td colspan="10" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
     return;
   }
   const row = (h, isGone) => {
@@ -51,6 +51,7 @@ function render() {
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
     <td class="protos">${isGone ? "" : protoChips(h)}</td>
+    <td class="protos">${isGone ? "" : appChips(h)}</td>
     <td class="ports">${isGone ? "" : portLinks(h)}</td>
     <td class="muted">${isGone ? "" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? `<span class="noping" title="${esc(NOPING_TIP)}">nessun ping</span>` : ""}</td>
     <td class="wcell">${warns && !isGone ? `<span class="wico" title="${esc(h.warnings.map(tr).join("\n"))}">⚠ ${warns}</span>` : ""}</td>
@@ -196,9 +197,9 @@ document.querySelectorAll("th").forEach(th => th.onclick = () => {
 // sideways). Dragging the edge of a text column moves width between it and
 // the next text column; double-click goes back to the default.
 // Remembered in wasaping.colpct.
-const COL_FIXED = {critical: 84, ip: 130, mac: 158, rtt_ms: 96, warn: 46};
-const COL_PCT = {label: 34, model: 28, protocols: 17, ports: 21};
-const COL_MIN = {label: 130, model: 100, protocols: 86, ports: 90};
+const COL_FIXED = {critical: 44, ip: 130, mac: 158, rtt_ms: 96, warn: 46};
+const COL_PCT = {label: 30, model: 24, protocols: 15, apps: 14, ports: 17};
+const COL_MIN = {label: 130, model: 100, protocols: 86, apps: 86, ports: 90};
 (() => {
   const wrap = $("listWrap"), table = wrap.querySelector("table");
   const all = [...table.querySelectorAll("thead th")];

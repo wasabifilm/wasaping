@@ -74,6 +74,21 @@ func probeApps(ctx context.Context, ip string, ports []int, timeout time.Duratio
 	return out
 }
 
+// withTitleApp adds the product the web page names (Proxmox VE, iDRAC,
+// TrueNAS…) to the programs, unless it is just a device model.
+func withTitleApp(apps []AppInfo, title string) []AppInfo {
+	p := serverTitle(strings.ToLower(title))
+	if p == "" || p == "NETGEAR" {
+		return apps
+	}
+	for _, a := range apps {
+		if strings.HasPrefix(a.Name, p) {
+			return apps
+		}
+	}
+	return append(apps, AppInfo{Name: p})
+}
+
 func dialApp(ctx context.Context, ip string, port int, t time.Duration) (net.Conn, error) {
 	d := net.Dialer{Timeout: t}
 	c, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))

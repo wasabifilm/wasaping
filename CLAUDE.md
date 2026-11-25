@@ -127,6 +127,8 @@ Il proprietario parla italiano: messaggi all'utente, README e testi dell'interfa
   - **MAC via VPN:** `parseNetbiosStatusMAC` legge l'unit ID dopo i nomi (Samba manda zeri: scartati) → `devInfo.nbMAC`; in scan.go se manca il MAC dall'ARP `Host.MAC` + `MACFrom: "netbios"` (pannello «da NetBIOS»); `MACsHidden` ignora quelli.
 - v0.9.3:
   - **Colonna Programmi** (`data-k="apps"`, `appChips` in app.js, rosso `.proto.risky` se senza password) dopo Protocolli; `withTitleApp` aggiunge a `Host.Apps` il prodotto del titolo (Proxmox VE, iDRAC, TrueNAS…, non i modelli NETGEAR). `COL_PCT`/`COL_MIN` con `apps` (le larghezze salvate prima tornano quelle iniziali). La colonna Monitor ha un'icona (`.mico`) al posto della scritta: 44 px. `.proto` taglia con i puntini.
+- v0.9.4 (in corso):
+  - **IP prima di tutto:** ordine Monitor | IP | Dispositivo | MAC | …; `th.ipcol`/`td.ipcell` (grassetto) e la colonna Monitor sono `position: sticky` a sinistra (left 0 e 44 px) quando l'elenco scorre di lato, con sfondo opaco e la tinta della riga (`tr.warned`/`tr.bad`) ridisegnata con un gradiente. IP largo 148 px (a 130 «192.168.100.200» veniva tagliato e sembrava attaccato al MAC).
 
 ## Stato e prossimi passi
 - Pubblicate fino alla v0.9.3 (release su GitHub con file Mac/Windows/Linux; nella CI il titolo della release viene dal tag: rinominarla «wasaping X.Y.Z» con `gh release edit`). Provato su Mac reale (macOS 27, arm64) con la rete di casa e il simulatore show. Da provare su hardware reale: Windows su un PC, attrezzatura show (Dante, NDI, ATEM, PJLink, PTP, RDM), switch gestiti, Raspberry Pi.

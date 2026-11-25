@@ -46,8 +46,8 @@ function render() {
     const wl = isGone ? 0 : warnLevel(h);
     return `<tr data-key="${esc(h.key)}" class="${isGone ? "gone" : ""}${wl === 2 ? " bad" : wl ? " warned" : ""}${selected === h.key ? " sel" : ""}${!isGone && freshKeys.has(h.key) ? " fresh" : ""}">
     <td class="ccell"><input type="checkbox" class="mcrit" aria-label="Monitor"${h.critical ? " checked" : ""} title="${h.critical ? "Critico: il Monitor lo tiene d'occhio. Togli la spunta per smettere" : "Spunta per tenerlo d'occhio nel Monitor"}"></td>
+    <td class="mono ipcell" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${h.vm ? `<span class="badge vm" title="${esc(tr("Macchina virtuale") + " (" + h.vm + ")")}">VM</span>` : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
-    <td class="mono" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
     <td class="protos">${isGone ? "" : protoChips(h)}</td>
@@ -197,7 +197,7 @@ document.querySelectorAll("th").forEach(th => th.onclick = () => {
 // sideways). Dragging the edge of a text column moves width between it and
 // the next text column; double-click goes back to the default.
 // Remembered in wasaping.colpct.
-const COL_FIXED = {critical: 44, ip: 130, mac: 158, rtt_ms: 96, warn: 46};
+const COL_FIXED = {critical: 44, ip: 148, mac: 158, rtt_ms: 96, warn: 46};
 const COL_PCT = {label: 30, model: 24, protocols: 15, apps: 14, ports: 17};
 const COL_MIN = {label: 130, model: 100, protocols: 86, apps: 86, ports: 90};
 (() => {

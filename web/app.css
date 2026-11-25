@@ -87,6 +87,16 @@ tbody tr.warned.sel, tbody tr.bad.sel { outline: 2px solid var(--wasabi); outlin
    the box, the bar above stays in view. --listTop is set by list.js. */
 #listWrap { overflow: auto; max-height: max(320px, calc(100vh - var(--listTop, 220px) - 32px)); }
 #listWrap thead th { top: 0; z-index: 5; }
+/* Monitor and IP stay in view when the list scrolls sideways: opaque
+   cells, with the row tint drawn on top. */
+#listWrap th.ccol, #listWrap td.ccell { position: sticky; left: 0; }
+#listWrap th.ipcol, #listWrap td.ipcell { position: sticky; left: 44px; box-shadow: inset -1px 0 0 var(--line); }
+#listWrap td.ccell, #listWrap td.ipcell { z-index: 2; background: var(--panel); }
+#listWrap th.ccol, #listWrap th.ipcol { z-index: 6; }
+#listWrap td.ipcell { font-weight: 600; }
+tbody tr:hover td.ccell, tbody tr:hover td.ipcell, tbody tr.sel td.ccell, tbody tr.sel td.ipcell { background: var(--wasabi-soft); }
+tbody tr.warned td.ccell, tbody tr.warned td.ipcell { background: linear-gradient(rgba(242, 153, 74, .12), rgba(242, 153, 74, .12)), var(--panel); }
+tbody tr.bad td.ccell, tbody tr.bad td.ipcell { background: linear-gradient(rgba(214, 63, 63, .12), rgba(214, 63, 63, .12)), var(--panel); }
 .colgrip { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
 .colgrip::after { content: ""; position: absolute; left: 4px; top: 25%; height: 50%; width: 1px; background: var(--line); }
 th:hover .colgrip::after, .colgrip:active::after { background: var(--wasabi); width: 2px; }

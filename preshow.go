@@ -222,7 +222,7 @@ func runPreshow(ctx context.Context, net, lang string) (*Report, error) {
 	unis := devices().CriticalUniverses()
 	sec = ReportSection{Title: L(lang, "Universi critici", "Critical universes"), Rows: []ReportRow{}}
 	if len(unis) == 0 {
-		sec.Note = L(lang, "Nessun universo segnato come critico (Show → Universi DMX).", "No universe marked as critical (Show → DMX universes).")
+		sec.Note = L(lang, "Nessun universo segnato come critico (DMX → Universi, casella «universo critico»).", "No universe marked as critical (DMX → Universes, «critical universe» box).")
 	} else {
 		heard := map[string]scanner.Universe{}
 		lctx, cancel := context.WithTimeout(ctx, 3500*time.Millisecond)

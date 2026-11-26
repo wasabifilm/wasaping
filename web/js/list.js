@@ -35,6 +35,7 @@ function render() {
   const all = hosts.filter(inNet).length + (hideGone ? 0 : gone.filter(inNet).length);
   $("fcount").textContent = words.length && all ? `${list.length + off.length} di ${all}` : "";
   shownKeys = list.concat(off).map(h => h.key);
+  hideEmptyCols(hosts.filter(inNet).concat(off));
   if (!list.length && !off.length) {
     $("rows").innerHTML = `<tr><td colspan="10" class="empty">${es ? "Cerco dispositivi…" : (hosts.length ? "Nessun risultato per il filtro." : "Nessun dispositivo trovato.")}</td></tr>`;
     return;
@@ -48,11 +49,11 @@ function render() {
     <td class="ccell"><input type="checkbox" class="mcrit" aria-label="Monitor"${h.critical ? " checked" : ""} title="${h.critical ? "Critico: il Monitor lo tiene d'occhio. Togli la spunta per smettere" : "Spunta per tenerlo d'occhio nel Monitor"}"></td>
     <td class="mono ipcell" data-copy="${esc(h.ip)}">${esc(h.ip)}</td>
     <td class="name"><div class="namecell">${kindIcon(h.kind)}<div>${main ? `<span class="nt ${h.name ? "label" : ""}">${esc(main)}</span>` : '<span class="muted">—</span>'}${h.self ? '<span class="badge me">tu</span>' : ""}${h.new ? '<span class="badge new">nuovo</span>' : ""}${h.vm ? `<span class="badge vm" title="${esc(tr("Macchina virtuale") + " (" + h.vm + ")")}">VM</span>` : ""}${isGone ? '<span class="badge off">non risponde</span>' : ""}${sub ? `<span class="sub nt">${esc(sub)}</span>` : ""}${isGone ? `<span class="sub">visto ${esc(when(h.last_seen))}</span>` : ""}</div></div></td>
-    <td class="mono" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
+    <td class="mono c-mac" data-copy="${esc(h.mac || "")}">${h.mac ? esc(h.mac) : '<span class="muted">—</span>'}</td>
     <td>${h.model ? `${esc(h.model)}${h.vendor && !h.vendor.startsWith("(") ? `<span class="sub">${esc(h.vendor)}</span>` : ""}` : h.vendor ? esc(h.vendor) : '<span class="muted">—</span>'}</td>
-    <td class="protos">${isGone ? "" : protoChips(h)}</td>
-    <td class="protos">${isGone ? "" : appChips(h)}</td>
-    <td class="ports">${isGone ? "" : portLinks(h)}</td>
+    <td class="protos c-protocols">${isGone ? "" : protoChips(h, 2)}</td>
+    <td class="protos c-apps">${isGone ? "" : appChips(h)}</td>
+    <td class="ports">${isGone ? "" : listPorts(h)}</td>
     <td class="muted">${isGone ? "" : h.rtt_ms ? h.rtt_ms + " ms" : h.method === "arp" ? `<span class="noping" title="${esc(NOPING_TIP)}">nessun ping</span>` : ""}</td>
     <td class="wcell">${warns && !isGone ? `<span class="wico" title="${esc(h.warnings.map(tr).join("\n"))}">⚠ ${warns}</span>` : ""}</td>
   </tr>`;
@@ -60,6 +61,14 @@ function render() {
   $("rows").innerHTML = list.map(h => row(h, false)).join("") + off.map(h => row(h, true)).join("");
 }
 
+// In the list: the first ports on one line, the rest as «+N» (all of
+// them are in the panel).
+const LIST_PORTS = 3;
+function listPorts(h) {
+  const p = h.ports || [];
+  if (p.length <= LIST_PORTS + 1) return portLinks(h);
+  return portLinks(h, p.slice(0, LIST_PORTS)) + `<span class="port more" title="${esc(p.slice(LIST_PORTS).join(" "))}">+${p.length - LIST_PORTS}</span>`;
+}
 function portLinks(h, ports = h.ports) {
   return (ports || []).map(p => {
     const url = portURL(h.ip, p), name = PORT_NAMES[p] ? PORT_NAMES[p] + " · " : "";
@@ -197,17 +206,32 @@ document.querySelectorAll("th").forEach(th => th.onclick = () => {
 // sideways). Dragging the edge of a text column moves width between it and
 // the next text column; double-click goes back to the default.
 // Remembered in wasaping.colpct.
-const COL_FIXED = {critical: 44, ip: 148, mac: 158, rtt_ms: 96, warn: 46};
-const COL_PCT = {label: 30, model: 24, protocols: 15, apps: 14, ports: 17};
+const COL_FIXED = {critical: 40, ip: 136, mac: 150, rtt_ms: 88, warn: 40};
+// Columns with nothing to show on this list are hidden (no MAC across a
+// VPN, no show protocols at home, no server programs on a show network).
+const HIDE_EMPTY = {mac: h => h.mac, protocols: h => (h.protocols || []).length, apps: h => (h.apps || []).length};
+let colsApply = () => {};
+function hideEmptyCols(list) {
+  const t = $("listWrap").querySelector("table");
+  let changed = false;
+  for (const [k, has] of Object.entries(HIDE_EMPTY)) {
+    const hide = list.length > 0 && !list.some(has);
+    if (t.classList.contains("no-" + k) !== hide) { t.classList.toggle("no-" + k, hide); changed = true; }
+  }
+  if (changed) colsApply();
+}
+const COL_PCT = {label: 34, model: 21, protocols: 14, apps: 14, ports: 17};
 const COL_MIN = {label: 130, model: 100, protocols: 86, apps: 86, ports: 90};
 (() => {
   const wrap = $("listWrap"), table = wrap.querySelector("table");
-  const all = [...table.querySelectorAll("thead th")];
-  const flex = all.filter(t => COL_PCT[t.dataset.k]);
+  const every = [...table.querySelectorAll("thead th")];
+  const allFlex = every.filter(t => COL_PCT[t.dataset.k]);
+  const shown = t => !table.classList.contains("no-" + t.dataset.k);
+  let all = every, flex = allFlex;
   let pct = {...COL_PCT};
-  try { const v = JSON.parse(localStorage.getItem("wasaping.colpct") || "null"); if (v && flex.every(t => v[t.dataset.k] > 0)) pct = v; } catch {}
-  const fixedPx = all.reduce((a, t) => a + (COL_FIXED[t.dataset.k] || 0), 0);
-  const room = () => Math.max(wrap.clientWidth - fixedPx, 0);
+  try { const v = JSON.parse(localStorage.getItem("wasaping.colpct") || "null"); if (v && allFlex.every(t => v[t.dataset.k] > 0)) pct = v; } catch {}
+  const fixedPx = () => all.reduce((a, t) => a + (COL_FIXED[t.dataset.k] || 0), 0);
+  const room = () => Math.max(wrap.clientWidth - fixedPx(), 0);
   // Share the room by weight; a column held at its minimum takes its
   // share from the others (still above theirs).
   const widths = () => {
@@ -224,8 +248,9 @@ const COL_MIN = {label: 130, model: 100, protocols: 86, apps: 86, ports: 90};
     return w;
   };
   const apply = () => {
+    all = every.filter(shown); flex = allFlex.filter(shown);
     const w = widths();
-    let total = fixedPx;
+    let total = fixedPx();
     all.forEach(t => {
       const k = t.dataset.k, px = COL_FIXED[k] || w[k];
       t.style.width = px + "px"; total += COL_FIXED[k] ? 0 : px;
@@ -234,13 +259,15 @@ const COL_MIN = {label: 130, model: 100, protocols: 86, apps: 86, ports: 90};
   };
   new ResizeObserver(apply).observe(wrap);
   apply();
-  flex.slice(0, -1).forEach((th, i) => {
-    const next = flex[i + 1];
+  colsApply = apply;
+  allFlex.slice(0, -1).forEach(th => {
     const g = document.createElement("span"); g.className = "colgrip"; g.title = "Trascina per allargare · doppio clic: larghezze iniziali"; th.append(g);
     g.onclick = e => e.stopPropagation();
     g.ondblclick = e => { e.stopPropagation(); pct = {...COL_PCT}; apply(); try { localStorage.removeItem("wasaping.colpct"); } catch {} };
     g.onpointerdown = e => {
       e.preventDefault(); e.stopPropagation(); g.setPointerCapture(e.pointerId);
+      const next = flex[flex.indexOf(th) + 1]; // the next column on screen
+      if (!next) return;
       const k = th.dataset.k, n = next.dataset.k, a0 = pct[k], b0 = pct[n], x0 = e.clientX;
       const perPx = flex.reduce((a, t) => a + pct[t.dataset.k], 0) / Math.max(room(), 1);
       g.onpointermove = m => {
@@ -406,6 +433,8 @@ $("dSave").onclick = async () => {
     openDetail(h.key);
   } catch (e) { $("dMsg").textContent = "Non salvato: " + e.message; }
 };
+// The Monitor box saves at once, like the one in the list.
+$("dCrit").onchange = () => { const h = findHost(selected); if (h) setCritical(h, $("dCrit").checked); };
 for (const id of ["dName", "dRole"]) $(id).onkeydown = e => { if (e.key === "Enter") $("dSave").click(); };
 
 $("dWol").onclick = async () => {

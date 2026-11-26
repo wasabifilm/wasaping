@@ -69,14 +69,17 @@ const ranges = a => {
   }
   return out.join(", ");
 };
-function protoChips(h) {
-  return (h.protocols || []).map(p => {
+// max: in the list, the first ones and «+N» (all of them in the panel).
+function protoChips(h, max = 0) {
+  const all = h.protocols || [];
+  const shown = max && all.length > max + 1 ? all.slice(0, max) : all;
+  return shown.map(p => {
     let extra = "";
     if (p === "Art-Net" && h.artnet) { const u = [...(h.artnet.out || []), ...(h.artnet.in || [])]; if (u.length) extra = " " + ranges(u); }
     if (p === "sACN" && h.sacn && (h.sacn.universes || []).length) extra = " " + ranges(h.sacn.universes);
     if (p === "PTP master" && h.ptp) extra = " " + h.ptp.replace("PTPv", "v").replace(" dominio ", " d");
     return `<span class="proto" title="${esc(p + extra)}">${esc(p + extra)}</span>`;
-  }).join("");
+  }).join("") + (shown.length < all.length ? `<span class="proto more" title="${esc(all.slice(shown.length).join(", "))}">+${all.length - shown.length}</span>` : "");
 }
 // Server programs (databases, Docker, Proxmox…): name and version; red
 // when it answers without a password.
@@ -580,6 +583,10 @@ function placeNet() {
   const where = $("sheet").classList.contains("open") ? $("shNet") : $("monitor").classList.contains("open") ? $("mNet") : null;
   if (where) where.append($("netbar"), $("issues"));
   else { $("statusRow").append($("netbar")); $("oui").before($("issues")); } // the list: network on the status row
+  // tool pages keep the network line; its warnings are on the list, in the
+  // Monitor and in the pre-show report
+  $("issues").classList.toggle("dup", where === $("shNet"));
+  $("shNet").hidden = currentTool === "settings"; // nothing about the network there
 }
 let currentTool = "";
 function pickFile(accept, then) {

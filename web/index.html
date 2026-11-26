@@ -72,26 +72,9 @@
   <button class="close" id="dClose" title="Chiudi">×</button>
   <h2 id="dTitle"></h2>
   <div class="sub" id="dSub"></div>
-  <label for="dName">Nome personalizzato</label>
-  <input id="dName" maxlength="200" placeholder="es. Console FOH">
-  <label for="dRole">Ruolo</label>
-  <input id="dRole" maxlength="200" placeholder="es. luci palco SX, universi 1–4">
-  <label for="dNote">Note</label>
-  <textarea id="dNote" maxlength="2000" placeholder="es. patch su switch 2 porta 14"></textarea>
-  <label class="check"><input type="checkbox" id="dCrit"> Critico: tienilo d'occhio nel Monitor</label>
-  <label for="dKind">Tipo</label>
-  <select id="dKind" title="Se wasaping l'ha riconosciuto male, correggilo: la correzione resta e finisce nella diagnostica"></select>
-  <div class="sub" id="dKindAuto"></div>
-  <label for="dGroup">Reparto</label>
-  <select id="dGroup" title="Nel Monitor i dispositivi critici sono divisi per reparto (luci, audio, video, rete), ognuno con il suo stato e il suo «Silenzia»"></select>
-  <div class="actions"><button class="primary" id="dSave">Salva</button></div>
+  <label class="check dcrit"><input type="checkbox" id="dCrit"> Critico: tienilo d'occhio nel Monitor</label>
   <ul class="warnlist" id="dWarn"></ul>
   <dl id="dInfo"></dl>
-  <div id="dHist" hidden></div>
-  <div class="actions">
-    <button id="dWol" title="Accende il dispositivo, se la sua scheda di rete lo supporta">Sveglia (Wake-on-LAN)</button>
-    <button id="dForget" class="danger" title="Toglie il dispositivo dall'elenco dei conosciuti">Dimentica</button>
-  </div>
   <div class="row pscan">
     <select id="dPortMode" title="Quali porte controllare su questo dispositivo">
       <option value="common">Porte comuni (circa 1200)</option><option value="all">Tutte le porte (65.535)</option><option value="list">Elenco…</option>
@@ -100,6 +83,26 @@
     <button id="dPorts" title="Controlla le porte di questo dispositivo">Controlla porte</button>
   </div>
   <div class="pbar" id="dPortBar" hidden><i></i></div>
+  <h3 class="dsec">Nome, ruolo e note</h3>
+  <label for="dName">Nome personalizzato</label>
+  <input id="dName" maxlength="200" placeholder="es. Console FOH">
+  <label for="dRole">Ruolo</label>
+  <input id="dRole" maxlength="200" placeholder="es. luci palco SX, universi 1–4">
+  <label for="dNote">Note</label>
+  <textarea id="dNote" maxlength="2000" placeholder="es. patch su switch 2 porta 14"></textarea>
+  <div class="dpair">
+    <div><label for="dKind">Tipo</label>
+    <select id="dKind" title="Se wasaping l'ha riconosciuto male, correggilo: la correzione resta e finisce nella diagnostica"></select>
+    <div class="sub" id="dKindAuto"></div></div>
+    <div><label for="dGroup">Reparto</label>
+    <select id="dGroup" title="Nel Monitor i dispositivi critici sono divisi per reparto (luci, audio, video, rete), ognuno con il suo stato e il suo «Silenzia»"></select></div>
+  </div>
+  <div class="actions"><button class="primary" id="dSave">Salva</button></div>
+  <div id="dHist" hidden></div>
+  <div class="actions">
+    <button id="dWol" title="Accende il dispositivo, se la sua scheda di rete lo supporta">Sveglia (Wake-on-LAN)</button>
+    <button id="dForget" class="danger" title="Toglie il dispositivo dall'elenco dei conosciuti">Dimentica</button>
+  </div>
   <div class="msg" id="dMsg"></div>
   <details class="ntool" id="dTools">
     <summary>Strumenti di rete</summary>

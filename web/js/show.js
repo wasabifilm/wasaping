@@ -189,7 +189,7 @@ function drawDMXDetail(sel, snap) {
     const clash = new Set(at.filter(a => a.length > 1).flat());
     box.innerHTML = `<div class="dmxh">${esc(sel.protocol)} universo ${sel.number}${sel.protocol === "Art-Net" ? ` <span class="muted mono">${artAddr(sel.number)} · ${artHex(sel.number)}</span>` : ""}</div>
       ${fx.length ? `<div class="dmxlegend">${fx.map((f, k) => `<span class="${clash.has(k) ? "fxc" : k % 2 ? "fxb" : "fxa"}"><b class="nt">${esc(f.label || f.model || f.uid)}</b> ${f.address}–${f.address + Math.max(f.footprint, 1) - 1}</span>`).join("")}</div>`
-        : sel.protocol === "Art-Net" ? `<p class="muted" style="margin:4px 0 0">Per vedere gli apparecchi sopra i canali, fai una ricerca in Show → RDM.</p>` : ""}
+        : sel.protocol === "Art-Net" ? `<p class="muted" style="margin:4px 0 0">Per vedere gli apparecchi sopra i canali, fai una ricerca nella pagina RDM.</p>` : ""}
       <div class="dmxgrid ${dmxMode === "color" ? "" : dmxMode === "fader" ? "num fader" : "num"}">${Array.from({length: 512}, (_, i) => { const a = at[i];
         const cls = a.length > 1 ? "fxc" : a.length ? (a[0] % 2 ? "fxb" : "fxa") : "";
         const first = a.some(k => fx[k].address === i + 1) ? " fs" : "";
@@ -308,7 +308,7 @@ function chanChart(h, span = 10) {
 function rdmView() {
   const nodes = hosts.filter(h => h.artnet).length;
   openSheet("RDM", `<p>wasaping chiede ai nodi Art-Net quali apparecchi RDM hanno collegati e a ognuno chi è: produttore, modello, etichetta, indirizzo DMX, canali e modalità. La ricerca non cambia niente sugli apparecchi; per cambiare indirizzo, modalità o etichetta c'è «Modifica», che chiede conferma.</p>
-    <div class="row"><button class="primary" id="rdmGo" ${nodes ? "" : "disabled"}>Cerca apparecchi</button><span class="muted">${nodes ? `${nodes} nodi Art-Net nell'ultima scansione.` : "Nessun nodo Art-Net: fai prima una scansione."}</span></div>
+    <div class="row"><button class="primary" id="rdmGo" ${nodes ? "" : "disabled"}>Cerca apparecchi</button><span class="muted">${nodes ? (nodes === 1 ? "1 nodo Art-Net nell'ultima scansione." : `${nodes} nodi Art-Net nell'ultima scansione.`) : "Nessun nodo Art-Net: fai prima una scansione."}</span></div>
     <div id="rdmOut"></div>`);
   let fx = [], chHTML = "";
   const overlaps = (a, b) => a !== b && a.universe === b.universe && a.address && b.address &&
@@ -401,7 +401,7 @@ function danteView() {
     ${danteIssues.length ? `<ul class="warnlist">${danteIssues.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}
     <h3>Collegamenti (routing)</h3>
     <p class="muted">wasaping chiede a ogni dispositivo i suoi canali e a cosa è collegato ogni canale in ricezione, con il protocollo di Dante Controller. Solo lettura: non cambia niente. Il protocollo non è pubblico: se un dispositivo non risponde o i dati sembrano strani, fai fede a Dante Controller e mandaci una diagnostica.</p>
-    <div class="row"><button class="primary" id="dnGo">Leggi il routing</button><input id="dnIP" placeholder="un altro IP (facoltativo)" style="width:190px" class="mono" spellcheck="false"></div>
+    <div class="row"><button class="primary" id="dnGo">Leggi il routing</button><input id="dnIP" placeholder="un altro IP (facoltativo)" style="width:230px" class="mono" spellcheck="false"></div>
     <div id="dnOut"></div>`);
   $("dnGo").onclick = async () => {
     $("dnGo").disabled = true; $("dnOut").innerHTML = "<p>Chiedo ai dispositivi…</p>";
@@ -441,7 +441,7 @@ function routeChanges(d) {
 // Video: Blackmagic, vMix, Resolume… asked now; projectors, NDI, PTPv2 from the scan.
 function videoView() {
   openSheet("Video", `<p class="muted">wasaping chiede lo stato ai dispositivi video trovati nell'ultima scansione: ATEM, HyperDeck, Videohub, vMix, Resolume. Solo lettura. Alcuni accettano pochi collegamenti di controllo: wasaping si collega un attimo e si stacca.</p>
-    <div class="row"><button class="primary" id="vdGo">Leggi lo stato</button><input id="vdIP" placeholder="un altro IP (facoltativo)" style="width:190px" class="mono" spellcheck="false">
+    <div class="row"><button class="primary" id="vdGo">Leggi lo stato</button><input id="vdIP" placeholder="un altro IP (facoltativo)" style="width:230px" class="mono" spellcheck="false">
       <select id="vdKind">${["ATEM", "HyperDeck", "Videohub", "vMix", "Resolume"].map(k => `<option>${k}</option>`).join("")}</select></div>
     <div id="vdOut"></div>`);
   const go = async () => {

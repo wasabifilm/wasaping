@@ -148,14 +148,14 @@ function drawTiles(st) {
     const status = !d.known ? "controllo…" : d.alive ? (d.rtt_ms ? d.rtt_ms + " ms" : "ok") + (d.slow ? " · lento" : "") : "NON RISPONDE";
     const since = d.known && d.since ? `da ${new Date(d.since).toLocaleTimeString("it")}` : "";
     const key = d.key.split("#")[0];
-    return `<div class="tile${isDown ? " down" : d.slow ? " slow" : ""}"${findHost(key) ? ` data-key="${esc(key)}" title="Apri il dispositivo e il suo storico"` : ""}><div class="t nt">${kindIcon(d.kind)}${esc(d.name)}</div>
+    return `<div class="tile${isDown ? " down" : d.slow ? " slow" : ""}"${findHost(key) ? ` data-key="${esc(key)}" title="Apri il dispositivo e il suo storico"` : ""}><div class="t nt" title="${esc(d.name)}">${kindIcon(d.kind)}<span>${esc(d.name)}</span></div>
       <div class="r nt">${esc([d.role, d.ip].filter(Boolean).join(" · "))}</div>
       <div class="s"><b>${esc(status)}</b><span class="muted">${esc(since)}</span></div>${spark(d.rtts)}</div>`;
   };
   const uniTile = u => {
     const isDown = u.known && !u.alive;
     const status = !u.known ? "controllo…" : u.alive ? `${Math.round(u.fps)} frame/s` : "NON ARRIVA";
-    return `<div class="tile${isDown ? " down" : ""}"><div class="t">${kindIcon("lighting")}${esc(u.name)}</div>
+    return `<div class="tile${isDown ? " down" : ""}"><div class="t" title="${esc(u.name)}">${kindIcon("lighting")}<span>${esc(u.name)}</span></div>
       <div class="r nt">${esc((u.sources || []).join(", "))}</div>
       <div class="s"><b>${esc(status)}</b><span class="muted">${u.known && u.since ? esc((LANG === "en" ? "since " : "da ") + new Date(u.since).toLocaleTimeString("it")) : ""}</span></div></div>`;
   };
